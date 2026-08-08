@@ -1,6 +1,6 @@
 # Vozzera — Frontend MVP
 
-Chat em tempo real (texto) sobre o backend Go descrito no contrato: login por cookie HttpOnly, lista de salas, histórico REST e mensagens ao vivo por WebSocket.
+Um Discord/TeamSpeak pessoal, pra você e um grupo pequeno de amigos (entrada por invite code). O MVP entrega só a parte de texto sobre o backend Go do contrato: login por cookie HttpOnly, lista de salas, histórico REST e mensagens ao vivo por WebSocket — com o layout já desenhado pra receber voz depois.
 
 ## Escopo do MVP
 
@@ -36,11 +36,11 @@ enviar
 - Mensagem: `trim`, bloquear vazia, limitar a 2000 chars.
 - Eventos WS: `switch` por `type`; campos zerados (`ZERO_UUID`, `0001-01-01...`) são ignorados.
 - Sem otimismo na UI: a mensagem aparece quando o eco chega (sem `client_msg_id` para deduplicar).
-- Nenhuma UI que sugira privacidade — qualquer logado lê e escreve em qualquer sala.
+- Nenhuma UI que sugira privacidade por sala — qualquer logado lê e escreve em qualquer sala (o invite code é a única barreira).
 
 ## Design
 
-Interface escura tipo console de comunicação: sidebar estreita de salas, coluna central de mensagens agrupadas por autor, timestamps discretos, acento em um único tom vivo. Sem gradiente roxo genérico; tokens semânticos no `src/styles.css` (nada de `text-white`/`bg-black` hardcoded).
+Escuro, denso e funcional como um TeamSpeak moderno: sidebar estreita com as salas separadas em "Texto" e "Voz" (voz desabilitada, marcada "em breve"), coluna central de mensagens agrupadas por autor, timestamps discretos, um único tom de acento vivo. Cara de servidor privado de amigos, não de produto SaaS — nada de gradiente roxo genérico. Tokens semânticos no `src/styles.css` (nada de `text-white`/`bg-black` hardcoded).
 
 ## Detalhes técnicos
 
