@@ -1,6 +1,6 @@
 # Vozzera — Frontend MVP
 
-Chat em tempo real (texto) sobre o backend Go descrito no contrato: login por cookie HttpOnly, lista de salas, histórico REST e mensagens ao vivo por WebSocket.
+Um Discord/TeamSpeak pessoal, pra você e um grupo pequeno de amigos (entrada por invite code). O MVP entrega só a parte de texto sobre o backend Go do contrato: login por cookie HttpOnly, lista de salas, histórico REST e mensagens ao vivo por WebSocket — com o layout já desenhado pra receber voz depois.
 
 ## Escopo do MVP
 
