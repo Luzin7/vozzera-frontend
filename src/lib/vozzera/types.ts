@@ -44,6 +44,14 @@ export type OutboundEvent = {
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
+/** Resposta de POST /api/voice/token */
+export type VoiceTokenResponse = {
+  token: string; // JWT do LiveKit
+  url: string; // wss://<projeto>.livekit.cloud
+  room_name: string; // só pra exibir; a sala real é o UUID, já dentro do token
+};
+
+
 /** Shape unificado (histórico REST + eventos WS) usado no estado do front. */
 export type ChatMessage = {
   id: string;
