@@ -11,6 +11,8 @@ import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
+import { useVoice } from "@/lib/vozzera/useVoice";
+
 
 const title = "Vozzera — servidor privado de chat e voz";
 const description =
@@ -82,6 +84,13 @@ function Index() {
     onEvent: handleEvent,
   });
 
+  const voice = useVoice();
+
+  useEffect(() => {
+    if (voice.error) setBanner(voice.error);
+  }, [voice.error]);
+
+
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.type !== "text") return;
@@ -120,6 +129,8 @@ function Index() {
   };
 
   const handleLogout = () => {
+    void voice.disconnect();
+
     clearUsername();
     setAuthed(false);
     setRooms([]);
@@ -160,7 +171,19 @@ function Index() {
         onLogout={handleLogout}
         username={username}
         status={status}
+        onSelectVoiceRoom={(room) => {
+          setBanner(null);
+          if (voice.activeRoomId === room.id) void voice.disconnect();
+          else void voice.connect(room.id);
+        }}
+        voiceStatus={voice.status}
+        voiceRoomId={voice.activeRoomId}
+        voiceParticipants={voice.participants}
+        micEnabled={voice.micEnabled}
+        onToggleMic={() => void voice.setMicEnabled(!voice.micEnabled)}
+        onLeaveVoice={() => void voice.disconnect()}
       />
+
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
