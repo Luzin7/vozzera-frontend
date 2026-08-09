@@ -84,6 +84,13 @@ function Index() {
     onEvent: handleEvent,
   });
 
+  const voice = useVoice();
+
+  useEffect(() => {
+    if (voice.error) setBanner(voice.error);
+  }, [voice.error]);
+
+
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.type !== "text") return;
