@@ -11,6 +11,8 @@ import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
+import { useVoice } from "@/lib/vozzera/useVoice";
+
 
 const title = "Vozzera — servidor privado de chat e voz";
 const description =
