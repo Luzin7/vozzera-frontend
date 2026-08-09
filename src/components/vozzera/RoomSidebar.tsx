@@ -1,4 +1,4 @@
-import { Hash, LogOut, Mic, MicOff, PhoneOff, Plus, Volume2 } from "lucide-react";
+import { Hash, LogOut, Mic, MicOff, PhoneOff, Plus, Volume2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { Room } from "@/lib/vozzera/types";
@@ -20,6 +20,7 @@ type Props = {
   micEnabled: boolean;
   onToggleMic: () => void;
   onLeaveVoice: () => void;
+  onDeleteRoom: (room: Room) => void;
 };
 
 const statusLabel: Record<SocketStatus, string> = {
@@ -34,6 +35,7 @@ export function RoomSidebar({
   onSelectRoom,
   onSelectVoiceRoom,
   onCreateRoom,
+  onDeleteRoom,
   onLogout,
   username,
   status,
@@ -67,18 +69,35 @@ export function RoomSidebar({
             <p className="px-2 py-1 text-xs text-muted-foreground">Nenhuma sala ainda.</p>
           )}
           {textRooms.map((room) => (
-            <button
-              key={room.id}
-              onClick={() => onSelectRoom(room)}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                room.id === activeRoomId
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-              }`}
-            >
-              <Hash className="h-4 w-4 shrink-0 opacity-70" />
-              <span className="truncate">{room.name}</span>
-            </button>
+            <div key={room.id} className="group flex items-center rounded-md">
+              <button
+                onClick={() => onSelectRoom(room)}
+                className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                  room.id === activeRoomId
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                }`}
+              >
+                <Hash className="h-4 w-4 shrink-0 opacity-70" />
+                <span className="truncate">{room.name}</span>
+              </button>
+
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+
+                  if (window.confirm(`Excluir a sala "${room.name}"?`)) {
+                    onDeleteRoom(room);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="sr-only">Excluir {room.name}</span>
+              </Button>
+            </div>
           ))}
         </section>
 

@@ -6,13 +6,12 @@ import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
-import { ApiError, createRoom, listMessages, listRooms } from "@/lib/vozzera/api";
+import { ApiError, createRoom, deleteRoom, listMessages, listRooms } from "@/lib/vozzera/api";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
 import { useVoice } from "@/lib/vozzera/useVoice";
-
 
 const title = "Vozzera — servidor privado de chat e voz";
 const description =
@@ -90,7 +89,6 @@ function Index() {
     if (voice.error) setBanner(voice.error);
   }, [voice.error]);
 
-
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.type !== "text") return;
@@ -126,6 +124,32 @@ function Index() {
     const room = await createRoom(name, type);
     setRooms((prev) => [...prev, room]);
     if (room.type === "text") void openRoom(room);
+  };
+
+  const handleDeleteRoom = async (room: Room) => {
+    try {
+      await deleteRoom(room.id);
+
+      setRooms((prev) => prev.filter((r) => r.id !== room.id));
+
+      if (activeRoom?.id === room.id) {
+        setActiveRoom(null);
+      }
+
+      setMessages((prev) => {
+        const next = { ...prev };
+        delete next[room.id];
+        return next;
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setAuthed(false);
+        return;
+      }
+
+      console.error("Erro ao excluir sala:", err);
+      setBanner("Não consegui excluir a sala.");
+    }
   };
 
   const handleLogout = () => {
@@ -169,6 +193,7 @@ function Index() {
         onSelectRoom={(room) => void openRoom(room)}
         onCreateRoom={() => setCreateOpen(true)}
         onLogout={handleLogout}
+        onDeleteRoom={handleDeleteRoom}
         username={username}
         status={status}
         onSelectVoiceRoom={(room) => {
@@ -183,7 +208,6 @@ function Index() {
         onToggleMic={() => void voice.setMicEnabled(!voice.micEnabled)}
         onLeaveVoice={() => void voice.disconnect()}
       />
-
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
