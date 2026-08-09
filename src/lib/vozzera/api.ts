@@ -56,10 +56,15 @@ export const listRooms = () => api<Room[]>("/api/rooms") as Promise<Room[]>;
 export const createRoom = (name: string, type: "text" | "voice") =>
   api<Room>("/api/rooms", jsonBody({ name, type })) as Promise<Room>;
 
+export const deleteRoom = (roomId: string) =>
+  api(`/api/rooms/${roomId}`, {
+    method: "DELETE",
+  });
+
 export const listMessages = (roomId: string, limit = 50) =>
-  api<HistoryMessage[]>(
-    `/api/rooms/${roomId}/messages?limit=${limit}`,
-  ) as Promise<HistoryMessage[]>;
+  api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`) as Promise<
+    HistoryMessage[]
+  >;
 
 /** URL do WebSocket derivada da base da API. */
 export function wsUrl(): string {
