@@ -129,6 +129,8 @@ function Index() {
   };
 
   const handleLogout = () => {
+    void voice.disconnect();
+
     clearUsername();
     setAuthed(false);
     setRooms([]);
