@@ -57,6 +57,21 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 { "id": "string", "name": "string", "type": "text" | "voice", "created_at": "string" }
 ```
 
+### `DELETE /api/rooms/{id}`
+
+Remove uma sala. O front trata qualquer 2xx como sucesso (204 esperado) e limpa a sala do estado local.
+
+### `POST /api/voice/token`
+
+```jsonc
+// request
+{ "room_id": "string" }
+// response 200
+{ "token": "string", "url": "string", "room_name": "string" }
+```
+
+- `token` é o JWT do LiveKit; `url` é o `wss://` do projeto; `room_name` só pra exibir (a sala real é o UUID, já embutido no token).
+
 ### `GET /api/rooms/{id}/messages?limit=50`
 
 ```jsonc

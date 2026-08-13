@@ -45,6 +45,15 @@ describe("api", () => {
       message: "Usuário ou senha incorretos.",
     });
   });
+
+  it("returns undefined on 204", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+
+    await expect(api("/api/rooms/1", { method: "DELETE" })).resolves.toBeUndefined();
+  });
 });
 
 describe("wsUrl", () => {

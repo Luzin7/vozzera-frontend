@@ -40,6 +40,12 @@ export type OutboundEvent = {
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
+export type VoiceTokenResponse = {
+  token: string;
+  url: string;
+  room_name: string;
+};
+
 export type ChatMessage = {
   id: string;
   roomId: string;

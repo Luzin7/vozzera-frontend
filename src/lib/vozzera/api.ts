@@ -23,6 +23,7 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
     throw new ApiError(res.status, text.trim());
   }
 
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -44,6 +45,11 @@ export const listRooms = () => api<Room[]>("/api/rooms");
 
 export const createRoom = (name: string, type: "text" | "voice") =>
   api<Room>("/api/rooms", jsonBody({ name, type }));
+
+export const deleteRoom = (roomId: string) =>
+  api(`/api/rooms/${roomId}`, {
+    method: "DELETE",
+  });
 
 export const listMessages = (roomId: string, limit = 50) =>
   api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`);

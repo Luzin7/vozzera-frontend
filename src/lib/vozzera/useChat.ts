@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, createRoom as createRoomApi, listMessages, listRooms } from "./api";
+import {
+  ApiError,
+  createRoom as createRoomApi,
+  deleteRoom as deleteRoomApi,
+  listMessages,
+  listRooms,
+} from "./api";
 import { appendMessage, firstTextRoom } from "./chat";
 import { fromEvent, fromHistory, ZERO_UUID } from "./types";
 import type { ChatMessage, OutboundEvent, Room } from "./types";
@@ -86,6 +92,28 @@ export function useChat() {
     [openRoom],
   );
 
+  const deleteRoom = useCallback(
+    async (room: Room) => {
+      try {
+        await deleteRoomApi(room.id);
+        setRooms((prev) => prev.filter((r) => r.id !== room.id));
+        if (activeRoom?.id === room.id) setActiveRoom(null);
+        setMessages((prev) => {
+          const next = { ...prev };
+          delete next[room.id];
+          return next;
+        });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          setAuthed(false);
+          return;
+        }
+        setBanner("Não consegui excluir a sala.");
+      }
+    },
+    [activeRoom],
+  );
+
   const authenticate = useCallback(
     (name: string) => {
       setUsername(name);
@@ -106,6 +134,8 @@ export function useChat() {
 
   const dismissBanner = useCallback(() => setBanner(null), []);
 
+  const showBanner = useCallback((message: string) => setBanner(message), []);
+
   return {
     username,
     authed,
@@ -117,9 +147,11 @@ export function useChat() {
     socketStatus: status,
     openRoom,
     createRoom,
+    deleteRoom,
     logout,
     authenticate,
     dismissBanner,
+    showBanner,
     sendMessage,
   };
 }

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
@@ -7,6 +7,7 @@ import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
 import { useChat } from "@/lib/vozzera/useChat";
+import { useVoice } from "@/lib/vozzera/useVoice";
 
 const title = "Vozzera — servidor privado de chat e voz";
 const description =
@@ -38,12 +39,19 @@ function Index() {
     socketStatus,
     openRoom,
     createRoom,
+    deleteRoom,
     logout,
     authenticate,
     dismissBanner,
+    showBanner,
     sendMessage,
   } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
+  const voice = useVoice();
+
+  useEffect(() => {
+    if (voice.error) showBanner(voice.error);
+  }, [voice.error, showBanner]);
 
   if (authed === null) {
     return (
@@ -65,10 +73,25 @@ function Index() {
         rooms={rooms}
         activeRoomId={activeRoom?.id ?? null}
         onSelectRoom={(room) => void openRoom(room)}
+        onSelectVoiceRoom={(room) => {
+          dismissBanner();
+          if (voice.activeRoomId === room.id) void voice.disconnect();
+          else void voice.connect(room.id);
+        }}
         onCreateRoom={() => setCreateOpen(true)}
-        onLogout={logout}
+        onLogout={() => {
+          void voice.disconnect();
+          logout();
+        }}
+        onDeleteRoom={(room) => void deleteRoom(room)}
         username={username}
         status={socketStatus}
+        voiceStatus={voice.status}
+        voiceRoomId={voice.activeRoomId}
+        voiceParticipants={voice.participants}
+        micEnabled={voice.micEnabled}
+        onToggleMic={() => void voice.setMicEnabled(!voice.micEnabled)}
+        onLeaveVoice={() => void voice.disconnect()}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
