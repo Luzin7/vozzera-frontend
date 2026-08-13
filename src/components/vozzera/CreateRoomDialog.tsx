@@ -84,7 +84,7 @@ export function CreateRoomDialog({
 
           <div className="space-y-2">
             <Label htmlFor="room-type">Tipo</Label>
-            <Select value={type} onValueChange={(v) => setType(v as "text" | "voice")}>
+            <Select value={type} onValueChange={(v) => setType(v === "voice" ? "voice" : "text")}>
               <SelectTrigger id="room-type">
                 <SelectValue />
               </SelectTrigger>

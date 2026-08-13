@@ -2,37 +2,46 @@ import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_KEY = "vozzera:username";
 
-/**
- * Não existe GET /api/me: a identidade só chega no login.
- * Guardamos o username no localStorage apenas para exibição
- * (não é credencial — a sessão real é o cookie HttpOnly).
- */
+function readStoredUsername(): string | null {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredUsername(name: string): boolean {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, name);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearStoredUsername(): boolean {
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function useAuth() {
   const [username, setUsernameState] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      setUsernameState(window.localStorage.getItem(STORAGE_KEY));
-    } catch {
-      /* storage indisponível */
-    }
+    setUsernameState(readStoredUsername());
   }, []);
 
   const setUsername = useCallback((name: string) => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, name);
-    } catch {
-      /* ignore */
-    }
+    writeStoredUsername(name);
     setUsernameState(name);
   }, []);
 
   const clearUsername = useCallback(() => {
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
+    clearStoredUsername();
     setUsernameState(null);
   }, []);
 

@@ -20,6 +20,12 @@ const statusLabel: Record<SocketStatus, string> = {
   closed: "offline",
 };
 
+const statusColor: Record<SocketStatus, string> = {
+  open: "bg-primary",
+  connecting: "bg-muted-foreground",
+  closed: "bg-destructive",
+};
+
 export function RoomSidebar({
   rooms,
   activeRoomId,
@@ -93,15 +99,7 @@ export function RoomSidebar({
               {username ?? "você"}
             </p>
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${
-                  status === "open"
-                    ? "bg-primary"
-                    : status === "connecting"
-                      ? "bg-muted-foreground"
-                      : "bg-destructive"
-                }`}
-              />
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${statusColor[status]}`} />
               {statusLabel[status]}
             </p>
           </div>
