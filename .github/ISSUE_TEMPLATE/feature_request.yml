@@ -1,0 +1,60 @@
+name: ✨ Feature request
+description: Sugestão de nova funcionalidade ou mudança
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado pela sugestão. Tente deixar o "por quê" mais claro que o "o quê" — pode ser que a solução de menor esforço ao problema real seja diferente da que você imaginou.
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema que resolve
+      description: Que situação concreta você não consegue resolver hoje?
+    validations:
+      required: true
+  - type: textarea
+    id: solucao
+    attributes:
+      label: Solução proposta
+      description: O que você imagina que deveria existir (tela, componente, hook, chamada de API, etc).
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Outras formas de resolver que você descartou — e por quê.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área afetada
+      options:
+        - Autenticação (login/registro)
+        - Salas (lista/criação)
+        - Mensagens (histórico/envio)
+        - WebSocket (conexão/reconexão)
+        - Layout/visual
+        - Infra/build/CI
+        - Outra
+    validations:
+      required: true
+  - type: dropdown
+    id: impacto
+    attributes:
+      label: Exige mudança no backend?
+      options:
+        - Não — dá pra fazer só no front
+        - Sim — novo endpoint/evento/campo no contrato
+        - Não sei dizer
+    validations:
+      required: true
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto extra
+      description: Mocks, exemplos de outras ferramentas, links — qualquer coisa que ajude a visualizar.
+    validations:
+      required: false
