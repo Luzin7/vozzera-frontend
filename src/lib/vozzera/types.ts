@@ -1,5 +1,3 @@
-// Tipos do contrato do backend Vozzera (Go).
-
 export type Room = {
   id: string;
   name: string;
@@ -13,7 +11,6 @@ export type HistoryMessage = {
   created_at: string;
   user_id: string;
   username: string;
-  // atenção: NÃO tem room_id
 };
 
 export type LoginResponse = {
@@ -28,15 +25,14 @@ export type RegisterResponse = {
 };
 
 export type InboundEvent =
-  | { type: "join"; room_id: string }
-  | { type: "message"; room_id: string; content: string };
+  { type: "join"; room_id: string } | { type: "message"; room_id: string; content: string };
 
 export type OutboundEvent = {
   type: "message" | "presence" | "error";
-  id: string; // sempre presente; zeros quando não se aplica
-  room_id: string; // idem
-  user_id: string; // idem
-  created_at: string; // idem ("0001-01-01T00:00:00Z")
+  id: string;
+  room_id: string;
+  user_id: string;
+  created_at: string;
   username?: string;
   content?: string;
   error?: string;
@@ -44,15 +40,12 @@ export type OutboundEvent = {
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
-/** Resposta de POST /api/voice/token */
 export type VoiceTokenResponse = {
-  token: string; // JWT do LiveKit
-  url: string; // wss://<projeto>.livekit.cloud
-  room_name: string; // só pra exibir; a sala real é o UUID, já dentro do token
+  token: string;
+  url: string;
+  room_name: string;
 };
 
-
-/** Shape unificado (histórico REST + eventos WS) usado no estado do front. */
 export type ChatMessage = {
   id: string;
   roomId: string;

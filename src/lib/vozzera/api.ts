@@ -1,12 +1,5 @@
-// Cliente REST do backend Go.
-// Erros do backend são text/plain — nunca use res.json() em respostas não-2xx.
-
 import type { HistoryMessage, LoginResponse, RegisterResponse, Room } from "./types";
 
-/**
- * Base da API. Vazio = mesma origem (build servido pelo próprio Go).
- * Em dev, aponte para o servidor Go (default http://localhost:8080).
- */
 export const API_BASE: string =
   (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8080";
 
@@ -19,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T | null> {
+export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
     ...opts,
@@ -30,7 +23,7 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
     throw new ApiError(res.status, text.trim());
   }
 
-  if (res.status === 204) return null;
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -43,18 +36,15 @@ function jsonBody(data: unknown): RequestInit {
 }
 
 export const login = (username: string, password: string) =>
-  api<LoginResponse>("/api/login", jsonBody({ username, password })) as Promise<LoginResponse>;
+  api<LoginResponse>("/api/login", jsonBody({ username, password }));
 
 export const register = (username: string, password: string, inviteCode: string) =>
-  api<RegisterResponse>(
-    "/api/register",
-    jsonBody({ username, password, invite_code: inviteCode }),
-  ) as Promise<RegisterResponse>;
+  api<RegisterResponse>("/api/register", jsonBody({ username, password, invite_code: inviteCode }));
 
-export const listRooms = () => api<Room[]>("/api/rooms") as Promise<Room[]>;
+export const listRooms = () => api<Room[]>("/api/rooms");
 
 export const createRoom = (name: string, type: "text" | "voice") =>
-  api<Room>("/api/rooms", jsonBody({ name, type })) as Promise<Room>;
+  api<Room>("/api/rooms", jsonBody({ name, type }));
 
 export const deleteRoom = (roomId: string) =>
   api(`/api/rooms/${roomId}`, {
@@ -62,11 +52,8 @@ export const deleteRoom = (roomId: string) =>
   });
 
 export const listMessages = (roomId: string, limit = 50) =>
-  api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`) as Promise<
-    HistoryMessage[]
-  >;
+  api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`);
 
-/** URL do WebSocket derivada da base da API. */
 export function wsUrl(): string {
   if (typeof window === "undefined") return "";
   const base = API_BASE || window.location.origin;

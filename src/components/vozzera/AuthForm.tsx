@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, login, register } from "@/lib/vozzera/api";
+import { login, register } from "@/lib/vozzera/api";
+import { authErrorMessageFor } from "@/lib/vozzera/auth-errors";
 import { MAX_USERNAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/vozzera/types";
 
 type Mode = "login" | "register";
@@ -43,18 +44,10 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
       if (mode === "register") {
         await register(name, password, inviteCode.trim());
       }
-      // register não loga: sempre faz login em seguida
       const session = await login(name, password);
       onAuthenticated(session.username);
     } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 403) setError("Código de convite inválido.");
-        else if (err.status === 409) setError("Esse nome de usuário já está em uso.");
-        else if (err.status === 401) setError("Usuário ou senha incorretos.");
-        else setError(err.message || "Não foi possível concluir.");
-      } else {
-        setError("Servidor indisponível. Ele está rodando?");
-      }
+      setError(authErrorMessageFor(err));
     } finally {
       setBusy(false);
     }

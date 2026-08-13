@@ -1,0 +1,82 @@
+name: 🐛 Bug report
+description: Algo não está se comportando como esperado
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por reportar. Antes de preencher, verifique se já existe uma issue igual aberta.
+  - type: textarea
+    id: descricao
+    attributes:
+      label: Descrição
+      description: O que está acontecendo, em uma ou duas frases.
+    validations:
+      required: true
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos pra reproduzir
+      description: Lista numerada, do jeito mais concreto possível.
+      placeholder: |
+        1. Abri a home e loguei com um usuário válido
+        2. Cliquei na sala `geral`
+        3. Enviei uma mensagem com `2000` caracteres
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Comportamento esperado
+      description: O que você achava que ia acontecer.
+    validations:
+      required: true
+  - type: textarea
+    id: atual
+    attributes:
+      label: Comportamento atual
+      description: O que aconteceu de fato.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Navegador
+      description: Nome e versão.
+      placeholder: "Chrome 126 / Firefox 127 / Safari 17"
+    validations:
+      required: true
+  - type: dropdown
+    id: ambiente
+    attributes:
+      label: Ambiente
+      options:
+        - Dev local (`npm run dev` + backend Go)
+        - Produção (build servido pelo Go)
+        - Preview em nuvem
+        - Outro
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área afetada
+      options:
+        - Autenticação (login/registro)
+        - Salas (lista/criação)
+        - Mensagens (histórico/envio)
+        - WebSocket (conexão/reconexão)
+        - Layout/visual
+        - Build/SSR
+        - Outra
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / console
+      description: Erros do console do browser ou da saída do `npm run dev`. Se aplicável, inclua o `VITE_API_URL` usado.
+      render: shell
+    validations:
+      required: false

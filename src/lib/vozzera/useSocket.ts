@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { wsUrl } from "./api";
+import { backoffDelay, parseFrame } from "./chat";
 import type { InboundEvent, OutboundEvent } from "./types";
 
 export type SocketStatus = "connecting" | "open" | "closed";
@@ -10,11 +11,6 @@ type Options = {
   onEvent: (event: OutboundEvent) => void;
 };
 
-/**
- * WebSocket com reconexão em backoff.
- * O servidor esquece as salas a cada conexão, então o hook reenvia
- * o `join` de todas as salas conhecidas no onopen.
- */
 export function useSocket({ enabled, onEvent }: Options) {
   const [status, setStatus] = useState<SocketStatus>("closed");
   const socketRef = useRef<WebSocket | null>(null);
@@ -28,11 +24,11 @@ export function useSocket({ enabled, onEvent }: Options) {
 
   const rawSend = useCallback((event: InboundEvent) => {
     const socket = socketRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) {
+    if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(event));
-    } else {
-      queue.current.push(event);
+      return;
     }
+    queue.current.push(event);
   }, []);
 
   useEffect(() => {
@@ -48,7 +44,6 @@ export function useSocket({ enabled, onEvent }: Options) {
       socket.onopen = () => {
         attempt.current = 0;
         setStatus("open");
-        // reenvia join de tudo que já estava aberto
         for (const roomId of joinedRooms.current) {
           socket.send(JSON.stringify({ type: "join", room_id: roomId }));
         }
@@ -58,21 +53,16 @@ export function useSocket({ enabled, onEvent }: Options) {
       };
 
       socket.onmessage = (raw) => {
-        try {
-          const event = JSON.parse(raw.data as string) as OutboundEvent;
-          onEventRef.current(event);
-        } catch {
-          /* frame inválido: ignora */
-        }
+        const event = parseFrame(raw);
+        if (event) onEventRef.current(event);
       };
 
       socket.onclose = () => {
         setStatus("closed");
         socketRef.current = null;
         if (closedByUs.current) return;
-        const delay = Math.min(1000 * 2 ** attempt.current, 15000);
+        retryTimer.current = setTimeout(connect, backoffDelay(attempt.current));
         attempt.current += 1;
-        retryTimer.current = setTimeout(connect, delay);
       };
 
       socket.onerror = () => {

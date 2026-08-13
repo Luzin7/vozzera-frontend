@@ -17,9 +17,7 @@ export function useVoice() {
   const roomRef = useRef<LiveKitRoom | null>(null);
 
   const syncParticipants = useCallback((room: LiveKitRoom) => {
-    const remotes = Array.from(room.remoteParticipants.values()).map(
-      (p) => p.name || p.identity,
-    );
+    const remotes = Array.from(room.remoteParticipants.values()).map((p) => p.name || p.identity);
     const me = room.localParticipant.name || room.localParticipant.identity;
     setParticipants([me, ...remotes]);
   }, []);
@@ -44,11 +42,11 @@ export function useVoice() {
         // import dinâmico: livekit-client é browser-only e o app faz SSR
         const { Room, RoomEvent, Track } = await import("livekit-client");
 
-        const { token, url } = (await api<VoiceTokenResponse>("/api/voice/token", {
+        const { token, url } = await api<VoiceTokenResponse>("/api/voice/token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ room_id: roomId }),
-        })) as VoiceTokenResponse;
+        });
 
         const room = new Room();
         roomRef.current = room;
@@ -57,7 +55,7 @@ export function useVoice() {
           if (track.kind !== Track.Kind.Audio) return;
           const el = track.attach();
           el.style.display = "none";
-          document.body.appendChild(el); // precisa estar no DOM pra tocar
+          document.body.appendChild(el);
         });
 
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
@@ -74,14 +72,14 @@ export function useVoice() {
         });
 
         await room.connect(url, token);
-        await room.localParticipant.setMicrophoneEnabled(true); // pede o microfone
+        await room.localParticipant.setMicrophoneEnabled(true);
 
         setMicEnabledState(true);
         setStatus("connected");
         setActiveRoomId(roomId);
         syncParticipants(room);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Não consegui entrar no canal");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Não consegui entrar no canal");
         setStatus("idle");
         setActiveRoomId(null);
         setParticipants([]);
@@ -96,7 +94,6 @@ export function useVoice() {
     setMicEnabledState(enabled);
   }, []);
 
-  // desconecta ao desmontar
   useEffect(() => {
     return () => {
       void roomRef.current?.disconnect();

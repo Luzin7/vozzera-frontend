@@ -1,16 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
-import { ApiError, createRoom, deleteRoom, listMessages, listRooms } from "@/lib/vozzera/api";
-import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
-import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
-import { useAuth } from "@/lib/vozzera/useAuth";
-import { useSocket } from "@/lib/vozzera/useSocket";
+import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
 const title = "Vozzera — servidor privado de chat e voz";
@@ -32,136 +28,30 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { username, setUsername, clearUsername } = useAuth();
-  const [authed, setAuthed] = useState<boolean | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [activeRoom, setActiveRoom] = useState<Room | null>(null);
-  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const {
+    username,
+    authed,
+    rooms,
+    activeRoom,
+    messages,
+    banner,
+    loadingHistory,
+    socketStatus,
+    openRoom,
+    createRoom,
+    deleteRoom,
+    logout,
+    authenticate,
+    dismissBanner,
+    showBanner,
+    sendMessage,
+  } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
-  const [banner, setBanner] = useState<string | null>(null);
-
-  const loadRooms = useCallback(async () => {
-    try {
-      const data = await listRooms();
-      setRooms(data);
-      setAuthed(true);
-      return data;
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setAuthed(false);
-      } else {
-        setAuthed(false);
-        setBanner("Não consegui falar com o servidor.");
-      }
-      return [];
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadRooms();
-  }, [loadRooms]);
-
-  const handleEvent = useCallback((event: OutboundEvent) => {
-    if (event.type === "error") {
-      setBanner(event.error ?? "Erro no servidor.");
-      return;
-    }
-    if (event.type !== "message") return;
-    if (event.room_id === ZERO_UUID) return;
-
-    const message = fromEvent(event);
-    setMessages((prev) => {
-      const current = prev[message.roomId] ?? [];
-      if (current.some((m) => m.id === message.id)) return prev;
-      return { ...prev, [message.roomId]: [...current, message] };
-    });
-  }, []);
-
-  const { status, joinRoom, sendMessage } = useSocket({
-    enabled: authed === true,
-    onEvent: handleEvent,
-  });
-
   const voice = useVoice();
 
   useEffect(() => {
-    if (voice.error) setBanner(voice.error);
-  }, [voice.error]);
-
-  const openRoom = useCallback(
-    async (room: Room) => {
-      if (room.type !== "text") return;
-      setActiveRoom(room);
-      joinRoom(room.id);
-
-      if (messages[room.id]) return;
-      setLoadingHistory(true);
-      try {
-        const history = await listMessages(room.id, 50);
-        setMessages((prev) => ({
-          ...prev,
-          [room.id]: history.map((m) => fromHistory(m, room.id)),
-        }));
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) setAuthed(false);
-        else setBanner("Não consegui carregar o histórico.");
-      } finally {
-        setLoadingHistory(false);
-      }
-    },
-    [joinRoom, messages],
-  );
-
-  // seleciona a primeira sala de texto automaticamente
-  useEffect(() => {
-    if (activeRoom || rooms.length === 0) return;
-    const first = rooms.find((r) => r.type === "text");
-    if (first) void openRoom(first);
-  }, [rooms, activeRoom, openRoom]);
-
-  const handleCreateRoom = async (name: string, type: "text" | "voice") => {
-    const room = await createRoom(name, type);
-    setRooms((prev) => [...prev, room]);
-    if (room.type === "text") void openRoom(room);
-  };
-
-  const handleDeleteRoom = async (room: Room) => {
-    try {
-      await deleteRoom(room.id);
-
-      setRooms((prev) => prev.filter((r) => r.id !== room.id));
-
-      if (activeRoom?.id === room.id) {
-        setActiveRoom(null);
-      }
-
-      setMessages((prev) => {
-        const next = { ...prev };
-        delete next[room.id];
-        return next;
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setAuthed(false);
-        return;
-      }
-
-      console.error("Erro ao excluir sala:", err);
-      setBanner("Não consegui excluir a sala.");
-    }
-  };
-
-  const handleLogout = () => {
-    void voice.disconnect();
-
-    clearUsername();
-    setAuthed(false);
-    setRooms([]);
-    setActiveRoom(null);
-    setMessages({});
-    setBanner("Estado local limpo. O servidor ainda não tem rota de logout.");
-  };
+    if (voice.error) showBanner(voice.error);
+  }, [voice.error, showBanner]);
 
   if (authed === null) {
     return (
@@ -172,15 +62,7 @@ function Index() {
   }
 
   if (!authed) {
-    return (
-      <AuthForm
-        onAuthenticated={(name) => {
-          setUsername(name);
-          setBanner(null);
-          void loadRooms();
-        }}
-      />
-    );
+    return <AuthForm onAuthenticated={authenticate} />;
   }
 
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
@@ -191,16 +73,19 @@ function Index() {
         rooms={rooms}
         activeRoomId={activeRoom?.id ?? null}
         onSelectRoom={(room) => void openRoom(room)}
-        onCreateRoom={() => setCreateOpen(true)}
-        onLogout={handleLogout}
-        onDeleteRoom={handleDeleteRoom}
-        username={username}
-        status={status}
         onSelectVoiceRoom={(room) => {
-          setBanner(null);
+          dismissBanner();
           if (voice.activeRoomId === room.id) void voice.disconnect();
           else void voice.connect(room.id);
         }}
+        onCreateRoom={() => setCreateOpen(true)}
+        onLogout={() => {
+          void voice.disconnect();
+          logout();
+        }}
+        onDeleteRoom={(room) => void deleteRoom(room)}
+        username={username}
+        status={socketStatus}
         voiceStatus={voice.status}
         voiceRoomId={voice.activeRoomId}
         voiceParticipants={voice.participants}
@@ -222,7 +107,7 @@ function Index() {
         {banner && (
           <div className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground">
             <span>{banner}</span>
-            <button onClick={() => setBanner(null)} className="underline">
+            <button onClick={dismissBanner} className="underline">
               ok
             </button>
           </div>
@@ -237,7 +122,7 @@ function Index() {
             />
             <MessageComposer
               roomName={activeRoom.name}
-              disabled={status !== "open"}
+              disabled={socketStatus !== "open"}
               onSend={(content) => sendMessage(activeRoom.id, content)}
             />
           </>
@@ -257,7 +142,7 @@ function Index() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         existingRooms={rooms}
-        onCreate={handleCreateRoom}
+        onCreate={createRoom}
       />
     </div>
   );
