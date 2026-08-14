@@ -39,7 +39,6 @@ function Index() {
     socketStatus,
     openRoom,
     createRoom,
-    deleteRoom,
     logout,
     authenticate,
     dismissBanner,
@@ -83,7 +82,6 @@ function Index() {
           void voice.disconnect();
           logout();
         }}
-        onDeleteRoom={(room) => void deleteRoom(room)}
         username={username}
         status={socketStatus}
         voiceStatus={voice.status}
@@ -118,6 +116,7 @@ function Index() {
             <MessageList
               messages={activeMessages}
               loading={loadingHistory && activeMessages.length === 0}
+              roomId={activeRoom.id}
               roomName={activeRoom.name}
             />
             <MessageComposer

@@ -9,6 +9,7 @@ export type HistoryMessage = {
   id: string;
   content: string;
   created_at: string;
+  updated_at?: string;
   user_id: string;
   username: string;
 };
@@ -24,19 +25,50 @@ export type RegisterResponse = {
   id: string;
 };
 
-export type InboundEvent =
-  { type: "join"; room_id: string } | { type: "message"; room_id: string; content: string };
+export type MessageAction = "created" | "updated" | "deleted";
 
-export type OutboundEvent = {
-  type: "message" | "presence" | "error";
-  id: string;
-  room_id: string;
-  user_id: string;
-  created_at: string;
-  username?: string;
-  content?: string;
-  error?: string;
-};
+export type InboundEvent =
+  | {
+      type: "join";
+      room_id: string;
+    }
+  | {
+      type: "message";
+      room_id: string;
+      content: string;
+    };
+
+export type OutboundEvent =
+  | {
+      type: "message";
+      action: "created" | "updated";
+      id: string;
+      room_id: string;
+      user_id: string;
+      username: string;
+      content: string;
+      created_at: string;
+      updated_at?: string;
+    }
+  | {
+      type: "message";
+      action: "deleted";
+      id: string;
+      room_id: string;
+      user_id: string;
+      updated_at?: string;
+    }
+  | {
+      type: "presence";
+      id: string;
+      room_id: string;
+      user_id: string;
+      username: string;
+    }
+  | {
+      type: "error";
+      error: string;
+    };
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
@@ -53,6 +85,7 @@ export type ChatMessage = {
   username: string;
   content: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 export const fromHistory = (m: HistoryMessage, roomId: string): ChatMessage => ({
@@ -62,15 +95,19 @@ export const fromHistory = (m: HistoryMessage, roomId: string): ChatMessage => (
   username: m.username,
   content: m.content,
   createdAt: m.created_at,
+  updatedAt: m.updated_at ?? "",
 });
 
-export const fromEvent = (e: OutboundEvent): ChatMessage => ({
+export const fromEvent = (
+  e: Extract<OutboundEvent, { type: "message"; action: "created" | "updated" }>,
+): ChatMessage => ({
   id: e.id,
   roomId: e.room_id,
   userId: e.user_id,
-  username: e.username ?? "?",
-  content: e.content ?? "",
+  username: e.username,
+  content: e.content,
   createdAt: e.created_at,
+  updatedAt: e.updated_at ?? "",
 });
 
 export const MAX_MESSAGE_LENGTH = 2000;

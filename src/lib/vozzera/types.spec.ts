@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fromEvent, fromHistory } from "./types";
-import type { HistoryMessage, OutboundEvent } from "./types";
+import type { HistoryMessage } from "./types";
 
 describe("fromHistory", () => {
   const history: HistoryMessage = {
@@ -20,31 +20,32 @@ describe("fromHistory", () => {
       username: "luan",
       content: "oi",
       createdAt: "2026-08-13T00:00:00Z",
+      updatedAt: "",
     });
   });
 });
 
 describe("fromEvent", () => {
-  const base: OutboundEvent = {
-    type: "message",
+  const base = {
+    type: "message" as const,
+    action: "created" as const,
     id: "m1",
     room_id: "r1",
     user_id: "u1",
+    username: "luan",
+    content: "oi",
     created_at: "2026-08-13T00:00:00Z",
   };
 
   it("maps the envelope into a ChatMessage", () => {
-    expect(fromEvent({ ...base, username: "luan", content: "oi" })).toEqual({
+    expect(fromEvent(base)).toEqual({
       id: "m1",
       roomId: "r1",
       userId: "u1",
       username: "luan",
       content: "oi",
       createdAt: "2026-08-13T00:00:00Z",
+      updatedAt: "",
     });
-  });
-
-  it("defaults missing username and content", () => {
-    expect(fromEvent(base)).toMatchObject({ username: "?", content: "" });
   });
 });

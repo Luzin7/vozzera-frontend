@@ -8,8 +8,8 @@ import {
   listRooms,
 } from "./api";
 import { appendMessage, firstTextRoom } from "./chat";
-import { fromEvent, fromHistory, ZERO_UUID } from "./types";
 import type { ChatMessage, OutboundEvent, Room } from "./types";
+import { fromEvent, fromHistory, ZERO_UUID } from "./types";
 import { useAuth } from "./useAuth";
 import { useSocket } from "./useSocket";
 
@@ -28,7 +28,9 @@ export function useChat() {
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
+
       if (err instanceof ApiError && err.status === 401) return;
+
       setBanner("Não consegui falar com o servidor.");
     }
   }, []);
@@ -42,8 +44,38 @@ export function useChat() {
       setBanner(event.error ?? "Erro no servidor.");
       return;
     }
-    if (event.type !== "message" || event.room_id === ZERO_UUID) return;
-    setMessages((prev) => appendMessage(prev, fromEvent(event)));
+
+    if (event.type !== "message" || event.room_id === ZERO_UUID) {
+      return;
+    }
+
+    if (event.action === "deleted") {
+      setMessages((prev) => ({
+        ...prev,
+        [event.room_id]: (prev[event.room_id] ?? []).filter((message) => message.id !== event.id),
+      }));
+      return;
+    }
+
+    if (event.action === "created") {
+      setMessages((prev) => appendMessage(prev, fromEvent(event)));
+      return;
+    }
+
+    if (event.action === "updated") {
+      setMessages((prev) => ({
+        ...prev,
+        [event.room_id]: (prev[event.room_id] ?? []).map((message) =>
+          message.id === event.id
+            ? {
+                ...message,
+                content: event.content,
+                updatedAt: event.updated_at ? event.updated_at : message.updatedAt,
+              }
+            : message,
+        ),
+      }));
+    }
   }, []);
 
   const { status, joinRoom, sendMessage } = useSocket({
@@ -54,12 +86,17 @@ export function useChat() {
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.type !== "text") return;
+
       setActiveRoom(room);
       joinRoom(room.id);
+
       if (messages[room.id]) return;
+
       setLoadingHistory(true);
+
       try {
         const history = await listMessages(room.id, 50);
+
         setMessages((prev) => ({
           ...prev,
           [room.id]: history.map((m) => fromHistory(m, room.id)),
@@ -69,6 +106,7 @@ export function useChat() {
           setAuthed(false);
           return;
         }
+
         setBanner("Não consegui carregar o histórico.");
       } finally {
         setLoadingHistory(false);
@@ -79,15 +117,23 @@ export function useChat() {
 
   useEffect(() => {
     if (activeRoom || rooms.length === 0) return;
+
     const first = firstTextRoom(rooms);
-    if (first) void openRoom(first);
+
+    if (first) {
+      void openRoom(first);
+    }
   }, [rooms, activeRoom, openRoom]);
 
   const createRoom = useCallback(
     async (name: string, type: "text" | "voice") => {
       const room = await createRoomApi(name, type);
+
       setRooms((prev) => [...prev, room]);
-      if (room.type === "text") void openRoom(room);
+
+      if (room.type === "text") {
+        void openRoom(room);
+      }
     },
     [openRoom],
   );
@@ -96,8 +142,13 @@ export function useChat() {
     async (room: Room) => {
       try {
         await deleteRoomApi(room.id);
+
         setRooms((prev) => prev.filter((r) => r.id !== room.id));
-        if (activeRoom?.id === room.id) setActiveRoom(null);
+
+        if (activeRoom?.id === room.id) {
+          setActiveRoom(null);
+        }
+
         setMessages((prev) => {
           const next = { ...prev };
           delete next[room.id];
@@ -108,6 +159,7 @@ export function useChat() {
           setAuthed(false);
           return;
         }
+
         setBanner("Não consegui excluir a sala.");
       }
     },

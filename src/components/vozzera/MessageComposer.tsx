@@ -9,11 +9,11 @@ export function MessageComposer({
   roomName,
   disabled,
   onSend,
-}: {
+}: Readonly<{
   roomName: string;
   disabled: boolean;
   onSend: (content: string) => void;
-}) {
+}>) {
   const [value, setValue] = useState("");
   const trimmed = value.trim();
   const canSend = !disabled && trimmed.length > 0 && trimmed.length <= MAX_MESSAGE_LENGTH;
