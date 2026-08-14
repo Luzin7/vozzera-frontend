@@ -46,13 +46,17 @@ export const listRooms = () => api<Room[]>("/api/rooms");
 export const createRoom = (name: string, type: "text" | "voice") =>
   api<Room>("/api/rooms", jsonBody({ name, type }));
 
-export const deleteRoom = (roomId: string) =>
-  api(`/api/rooms/${roomId}`, {
-    method: "DELETE",
-  });
-
 export const listMessages = (roomId: string, limit = 50) =>
   api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`);
+
+export const updateMessage = (roomId: string, messageId: string, content: string) =>
+  api<HistoryMessage>(`/api/rooms/${roomId}/messages/${messageId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content }),
+  });
 
 export function wsUrl(): string {
   if (typeof window === "undefined") return "";

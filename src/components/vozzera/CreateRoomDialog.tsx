@@ -25,12 +25,12 @@ export function CreateRoomDialog({
   onOpenChange,
   existingRooms,
   onCreate,
-}: {
+}: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingRooms: Room[];
   onCreate: (name: string, type: "text" | "voice") => Promise<void>;
-}) {
+}>) {
   const [name, setName] = useState("");
   const [type, setType] = useState<"text" | "voice">("text");
   const [error, setError] = useState<string | null>(null);
