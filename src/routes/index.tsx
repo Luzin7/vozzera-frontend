@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Bell, BellOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
@@ -6,6 +7,7 @@ import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { ScreenShareStage } from "@/components/vozzera/ScreenShareStage";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
@@ -36,21 +38,31 @@ function Index() {
     messages,
     banner,
     loadingHistory,
+    unread,
     socketStatus,
     openRoom,
     createRoom,
+    deleteMessage,
     logout,
     authenticate,
     dismissBanner,
     showBanner,
+    requestNotificationPermission,
     sendMessage,
   } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const voice = useVoice();
 
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") return;
+
+    setNotificationsEnabled(Notification.permission === "granted");
+  }, []);
 
   if (authed === null) {
     return (
@@ -80,7 +92,7 @@ function Index() {
         onCreateRoom={() => setCreateOpen(true)}
         onLogout={() => {
           void voice.disconnect();
-          logout();
+          void logout();
         }}
         username={username}
         status={socketStatus}
@@ -90,6 +102,12 @@ function Index() {
         micEnabled={voice.micEnabled}
         onToggleMic={() => void voice.setMicEnabled(!voice.micEnabled)}
         onLeaveVoice={() => void voice.disconnect()}
+        unread={unread}
+        volumes={voice.volumes}
+        onSetVolume={voice.setParticipantVolume}
+        screenShareEnabled={voice.screenShareEnabled}
+        onToggleScreenShare={() => void voice.toggleScreenShare()}
+        screenShares={voice.screenShares}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -100,10 +118,37 @@ function Index() {
           <span className="text-xs text-muted-foreground">
             · todos os membros do servidor leem esta sala
           </span>
+          {activeRoom && (
+            <button
+              className="ml-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => {
+                void requestNotificationPermission().then(() =>
+                  setNotificationsEnabled(
+                    typeof Notification !== "undefined" && Notification.permission === "granted",
+                  ),
+                );
+              }}
+              aria-label={
+                notificationsEnabled
+                  ? "Notificações de desktop ativadas"
+                  : "Ativar notificações de desktop"
+              }
+            >
+              {notificationsEnabled ? (
+                <Bell className="h-4 w-4" />
+              ) : (
+                <BellOff className="h-4 w-4" />
+              )}
+            </button>
+          )}
         </header>
 
         {banner && (
-          <div className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground"
+          >
             <span>{banner}</span>
             <button onClick={dismissBanner} className="underline">
               ok
@@ -113,13 +158,16 @@ function Index() {
 
         {activeRoom ? (
           <>
+            <ScreenShareStage shares={voice.screenShares} />
             <MessageList
               messages={activeMessages}
               loading={loadingHistory && activeMessages.length === 0}
               roomId={activeRoom.id}
               roomName={activeRoom.name}
+              onDelete={(message) => void deleteMessage(message.id)}
             />
             <MessageComposer
+              roomId={activeRoom.id}
               roomName={activeRoom.name}
               disabled={socketStatus !== "open"}
               onSend={(content) => sendMessage(activeRoom.id, content)}
