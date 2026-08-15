@@ -10,6 +10,12 @@ import {
   setUnauthorizedHandler,
 } from "./api";
 import { appendMessage, clearUnread, firstTextRoom, incrementUnread, totalUnread } from "./chat";
+import {
+  canNotify,
+  initialNotificationsEnabled,
+  notificationPermissionGranted,
+  writeNotificationsEnabled,
+} from "./notifications";
 import type { ChatMessage, OutboundEvent, Room } from "./types";
 import { fromEvent, fromHistory, ZERO_UUID } from "./types";
 import { useAuth } from "./useAuth";
@@ -24,11 +30,17 @@ export function useChat() {
   const [banner, setBanner] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    if (typeof localStorage === "undefined") return false;
+    return initialNotificationsEnabled(localStorage);
+  });
   const activeRoomRef = useRef(activeRoom);
   const roomsRef = useRef(rooms);
+  const notificationsEnabledRef = useRef(notificationsEnabled);
 
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
+  notificationsEnabledRef.current = notificationsEnabled;
 
   const endSession = useCallback(() => {
     clearUsername();
@@ -87,8 +99,7 @@ export function useChat() {
 
         if (
           typeof document !== "undefined" &&
-          document.hidden &&
-          Notification.permission === "granted"
+          canNotify(notificationsEnabledRef.current, document.hidden)
         ) {
           const room = roomsRef.current.find((r) => r.id === event.room_id);
 
@@ -231,11 +242,30 @@ export function useChat() {
 
   const showBanner = useCallback((message: string) => setBanner(message), []);
 
-  const requestNotificationPermission = useCallback(async () => {
+  const toggleNotifications = useCallback(async () => {
     if (typeof Notification === "undefined") return;
+
+    const next = !notificationsEnabledRef.current;
+
+    if (!next) {
+      writeNotificationsEnabled(typeof localStorage === "undefined" ? null : localStorage, false);
+      setNotificationsEnabled(false);
+      return;
+    }
+
     if (Notification.permission === "default") {
       await Notification.requestPermission();
     }
+
+    if (!notificationPermissionGranted()) {
+      setBanner(
+        "Notificações bloqueadas no navegador. Libere nas configurações do navegador e tente de novo.",
+      );
+      return;
+    }
+
+    writeNotificationsEnabled(typeof localStorage === "undefined" ? null : localStorage, true);
+    setNotificationsEnabled(true);
   }, []);
 
   const baseTitle = "Vozzera — servidor privado de chat e voz";
@@ -276,7 +306,8 @@ export function useChat() {
     authenticate,
     dismissBanner,
     showBanner,
-    requestNotificationPermission,
+    notificationsEnabled,
+    toggleNotifications,
     sendMessage,
   };
 }

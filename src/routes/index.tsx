@@ -48,23 +48,17 @@ function Index() {
     authenticate,
     dismissBanner,
     showBanner,
-    requestNotificationPermission,
+    notificationsEnabled,
+    toggleNotifications,
     sendMessage,
   } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const voice = useVoice();
 
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
-
-  useEffect(() => {
-    if (typeof Notification === "undefined") return;
-
-    setNotificationsEnabled(Notification.permission === "granted");
-  }, []);
 
   if (authed === null) {
     return (
@@ -129,16 +123,10 @@ function Index() {
           {activeRoom && (
             <button
               className="ml-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => {
-                void requestNotificationPermission().then(() =>
-                  setNotificationsEnabled(
-                    typeof Notification !== "undefined" && Notification.permission === "granted",
-                  ),
-                );
-              }}
+              onClick={() => void toggleNotifications()}
               aria-label={
                 notificationsEnabled
-                  ? "Notificações de desktop ativadas"
+                  ? "Desativar notificações de desktop"
                   : "Ativar notificações de desktop"
               }
             >
