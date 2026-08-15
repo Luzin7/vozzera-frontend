@@ -12,11 +12,21 @@ export class ApiError extends Error {
   }
 }
 
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
     ...opts,
   });
+
+  if (res.status === 401) {
+    onUnauthorized?.();
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -41,6 +51,8 @@ export const login = (username: string, password: string) =>
 export const register = (username: string, password: string, inviteCode: string) =>
   api<RegisterResponse>("/api/register", jsonBody({ username, password, invite_code: inviteCode }));
 
+export const logout = () => api<void>("/api/logout", { method: "POST" });
+
 export const listRooms = () => api<Room[]>("/api/rooms");
 
 export const createRoom = (name: string, type: "text" | "voice") =>
@@ -56,6 +68,11 @@ export const updateMessage = (roomId: string, messageId: string, content: string
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ content }),
+  });
+
+export const deleteMessage = (roomId: string, messageId: string) =>
+  api(`/api/rooms/${roomId}/messages/${messageId}`, {
+    method: "DELETE",
   });
 
 export function wsUrl(): string {
