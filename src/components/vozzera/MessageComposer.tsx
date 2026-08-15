@@ -1,11 +1,11 @@
 import { SendHorizonal } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MAX_MESSAGE_LENGTH } from "@/lib/vozzera/types";
 
-export function MessageComposer({
+export const MessageComposer = memo(function MessageComposer({
   roomId,
   roomName,
   disabled,
@@ -60,4 +60,4 @@ export function MessageComposer({
       </p>
     </div>
   );
-}
+});
