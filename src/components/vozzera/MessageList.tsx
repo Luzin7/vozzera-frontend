@@ -3,9 +3,20 @@ import { useAuth } from "@/lib/vozzera/useAuth";
 import { useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/vozzera/types";
-import { Check, Pen, X } from "lucide-react";
+import { Check, Pen, Trash2, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Markdown } from "./Markdown";
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
@@ -26,14 +37,17 @@ export function MessageList({
   loading,
   roomId,
   roomName,
+  onDelete,
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
   roomId: string;
   roomName: string;
+  onDelete: (message: ChatMessage) => void;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const username = useAuth().username;
@@ -95,7 +109,10 @@ export function MessageList({
           const isEditing = editingMessageId === message.id;
 
           return (
-            <li key={message.id} className={grouped ? "" : "pt-3"}>
+            <li
+              key={message.id}
+              className={`${grouped ? "" : "pt-3"} [content-visibility:auto] [contain-intrinsic-size:auto_4rem]`}
+            >
               <div className="flex gap-3 rounded-md px-2 py-0.5 hover:bg-muted/40">
                 <div className="w-9 shrink-0">
                   {!grouped && (
@@ -119,13 +136,24 @@ export function MessageList({
                   )}
 
                   {username === message.username && !isEditing && (
-                    <Button
-                      variant="secondary"
-                      className="absolute right-0 top-0 h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-foreground"
-                      onClick={() => startEditing(message)}
-                    >
-                      <Pen />
-                    </Button>
+                    <div className="absolute right-0 top-0 flex gap-1">
+                      <Button
+                        variant="secondary"
+                        className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-foreground"
+                        onClick={() => startEditing(message)}
+                      >
+                        <Pen className="h-3.5 w-3.5" />
+                        <span className="sr-only">Editar mensagem</span>
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-destructive"
+                        onClick={() => setDeleteTarget(message)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span className="sr-only">Excluir mensagem</span>
+                      </Button>
+                    </div>
                   )}
 
                   {isEditing ? (
@@ -166,9 +194,9 @@ export function MessageList({
                       </Button>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
-                      {message.content}
-                    </p>
+                    <div className="text-sm leading-relaxed text-foreground/90">
+                      <Markdown content={message.content} />
+                    </div>
                   )}
                 </div>
               </div>
@@ -178,6 +206,26 @@ export function MessageList({
       </ol>
 
       <div ref={bottomRef} />
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir mensagem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação não pode ser desfeita. A mensagem some para todos na sala.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTarget && onDelete(deleteTarget)}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -9,9 +9,10 @@ export type SocketStatus = "connecting" | "open" | "closed";
 type Options = {
   enabled: boolean;
   onEvent: (event: OutboundEvent) => void;
+  onSessionExpired?: () => void;
 };
 
-export function useSocket({ enabled, onEvent }: Options) {
+export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
   const [status, setStatus] = useState<SocketStatus>("closed");
   const socketRef = useRef<WebSocket | null>(null);
   const joinedRooms = useRef<Set<string>>(new Set());
@@ -20,8 +21,10 @@ export function useSocket({ enabled, onEvent }: Options) {
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedByUs = useRef(false);
   const onEventRef = useRef(onEvent);
+  const onSessionExpiredRef = useRef(onSessionExpired);
 
   onEventRef.current = onEvent;
+  onSessionExpiredRef.current = onSessionExpired;
 
   const rawSend = useCallback((event: InboundEvent) => {
     const socket = socketRef.current;
@@ -74,11 +77,16 @@ export function useSocket({ enabled, onEvent }: Options) {
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setStatus("closed");
         socketRef.current = null;
 
         if (closedByUs.current) return;
+
+        if (event.code === 1005) {
+          onSessionExpiredRef.current?.();
+          return;
+        }
 
         retryTimer.current = setTimeout(connect, backoffDelay(attempt.current));
 
