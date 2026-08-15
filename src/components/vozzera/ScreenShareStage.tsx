@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ScreenShare } from "@/lib/vozzera/useVoice";
 
-function ScreenShareVideo({ share }: { share: ScreenShare }) {
+function ScreenShareVideo({ share, isTabHidden }: { share: ScreenShare; isTabHidden: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -12,12 +12,17 @@ function ScreenShareVideo({ share }: { share: ScreenShare }) {
     const video = videoRef.current;
     if (!video) return;
 
+    if (isTabHidden) {
+      share.track.detach();
+      return;
+    }
+
     share.track.attach(video);
 
     return () => {
       share.track.detach();
     };
-  }, [share]);
+  }, [share, isTabHidden]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -64,17 +69,21 @@ function ScreenShareVideo({ share }: { share: ScreenShare }) {
 export function ScreenShareStage({
   shares,
   localPreview,
+  isTabHidden,
 }: Readonly<{
   shares: ScreenShare[];
   localPreview: ScreenShare | null;
+  isTabHidden: boolean;
 }>) {
   if (shares.length === 0 && !localPreview) return null;
 
   return (
     <div className="flex h-48 shrink-0 gap-2 border-b border-border bg-muted/30 px-4 py-2">
-      {localPreview && <ScreenShareVideo key="local" share={localPreview} />}
+      {localPreview && (
+        <ScreenShareVideo key="local" share={localPreview} isTabHidden={isTabHidden} />
+      )}
       {shares.map((share) => (
-        <ScreenShareVideo key={share.id} share={share} />
+        <ScreenShareVideo key={share.id} share={share} isTabHidden={isTabHidden} />
       ))}
     </div>
   );

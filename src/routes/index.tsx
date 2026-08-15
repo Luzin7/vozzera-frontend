@@ -166,7 +166,11 @@ function Index() {
 
         {activeRoom ? (
           <>
-            <ScreenShareStage shares={voice.screenShares} localPreview={voice.localPreview} />
+            <ScreenShareStage
+              shares={voice.screenShares}
+              localPreview={voice.localPreview}
+              isTabHidden={voice.isTabHidden}
+            />
             <MessageList
               messages={activeMessages}
               loading={loadingHistory && activeMessages.length === 0}

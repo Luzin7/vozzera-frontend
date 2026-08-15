@@ -112,7 +112,7 @@ export function useVoice() {
 
       try {
         // import dinâmico: livekit-client é browser-only e o app faz SSR
-        const { Room, RoomEvent, Track } = await import("livekit-client");
+        const { Room, RoomEvent, Track, VideoQuality } = await import("livekit-client");
 
         const { token, url } = await api<VoiceTokenResponse>("/api/voice/token", {
           method: "POST",
@@ -120,7 +120,10 @@ export function useVoice() {
           body: JSON.stringify({ room_id: roomId }),
         });
 
-        const room = new Room();
+        const room = new Room({
+          adaptiveStream: true,
+          dynacast: true,
+        });
         roomRef.current = room;
 
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -132,6 +135,8 @@ export function useVoice() {
           }
 
           if (track.source === Track.Source.ScreenShare) {
+            publication.setVideoQuality(VideoQuality.HIGH);
+
             const name = participant.name || participant.identity;
             setScreenShares((prev) => [
               ...prev.filter((share) => share.track !== track),
@@ -195,6 +200,19 @@ export function useVoice() {
     };
   }, []);
 
+  const [isTabHidden, setIsTabHidden] = useState(false);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabHidden(document.hidden);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    handleVisibilityChange();
+
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   return {
     status,
     activeRoomId,
@@ -204,6 +222,7 @@ export function useVoice() {
     screenShareEnabled,
     screenShares,
     localPreview,
+    isTabHidden,
     error,
     clearError: useCallback(() => setError(null), []),
     connect,
