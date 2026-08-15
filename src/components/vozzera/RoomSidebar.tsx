@@ -1,7 +1,21 @@
-import { Hash, LogOut, Mic, MicOff, PhoneOff, Plus, Volume2 } from "lucide-react";
+import {
+  Hash,
+  LogOut,
+  Mic,
+  MicOff,
+  MonitorUp,
+  MonitorX,
+  PhoneOff,
+  Plus,
+  Volume2,
+} from "lucide-react";
+import type { KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { nextRoomIndex } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
+import type { ScreenShare } from "@/lib/vozzera/useVoice";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
 import type { VoiceStatus } from "@/lib/vozzera/useVoice";
 
@@ -20,6 +34,12 @@ type Props = {
   micEnabled: boolean;
   onToggleMic: () => void;
   onLeaveVoice: () => void;
+  unread: Record<string, number>;
+  volumes: Record<string, number>;
+  onSetVolume: (name: string, volume: number) => void;
+  screenShareEnabled: boolean;
+  onToggleScreenShare: () => void;
+  screenShares: ScreenShare[];
 };
 
 const statusLabel: Record<SocketStatus, string> = {
@@ -49,10 +69,29 @@ export function RoomSidebar({
   micEnabled,
   onToggleMic,
   onLeaveVoice,
+  unread,
+  volumes,
+  onSetVolume,
+  screenShareEnabled,
+  onToggleScreenShare,
+  screenShares,
 }: Readonly<Props>) {
   const textRooms = rooms.filter((r) => r.type === "text");
   const voiceRooms = rooms.filter((r) => r.type === "voice");
   const currentVoiceRoom = voiceRooms.find((r) => r.id === voiceRoomId) ?? null;
+
+  const focusRoom = (event: KeyboardEvent<HTMLButtonElement>, group: string) => {
+    const buttons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(`[data-room-nav="${group}"]`),
+    );
+    const currentIndex = buttons.indexOf(event.currentTarget);
+    const nextIndex = nextRoomIndex(event.key, currentIndex, buttons.length);
+
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    buttons[nextIndex]?.focus();
+  };
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-sidebar">
@@ -76,7 +115,9 @@ export function RoomSidebar({
             <div key={room.id} className="group flex items-center rounded-md py-0.5">
               <Button
                 variant="ghost"
+                data-room-nav="text"
                 onClick={() => onSelectRoom(room)}
+                onKeyDown={(event) => focusRoom(event, "text")}
                 className={`flex justify-start min-w-0 flex-1 gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
                   room.id === activeRoomId
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -85,6 +126,11 @@ export function RoomSidebar({
               >
                 <Hash className="h-4 w-4 shrink-0 opacity-70" />
                 <span className="truncate">{room.name}</span>
+                {unread[room.id] ? (
+                  <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
+                    {unread[room.id]}
+                  </span>
+                ) : null}
               </Button>
             </div>
           ))}
@@ -103,7 +149,9 @@ export function RoomSidebar({
               <div key={room.id} className="group flex items-center rounded-md py-0.5">
                 <Button
                   variant="ghost"
+                  data-room-nav="voice"
                   onClick={() => onSelectVoiceRoom(room)}
+                  onKeyDown={(event) => focusRoom(event, "voice")}
                   className={`flex justify-start min-w-0 flex-1 gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -119,14 +167,45 @@ export function RoomSidebar({
                   )}
                 </Button>
                 {isActive && voiceStatus === "connected" && voiceParticipants.length > 0 && (
-                  <ul className="mb-1 ml-8 space-y-0.5">
+                  <ul className="mb-1 ml-8 space-y-1">
                     {voiceParticipants.map((name) => (
+                      <li key={name} className="text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1.5 truncate">
+                          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                          <span className="truncate">{name}</span>
+                        </span>
+                        {name !== username && (
+                          <div className="flex items-center gap-2 pl-3">
+                            <Slider
+                              value={[volumes[name] ?? 1]}
+                              min={0}
+                              max={1}
+                              step={0.05}
+                              className="h-3 w-24"
+                              aria-label={`Volume de ${name}`}
+                              onValueChange={([volume]) => {
+                                if (volume !== undefined) onSetVolume(name, volume);
+                              }}
+                            />
+                            <span className="text-[10px] tabular-nums">
+                              {Math.round((volumes[name] ?? 1) * 100)}%
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {isActive && voiceStatus === "connected" && screenShares.length > 0 && (
+                  <ul className="mb-1 ml-8 space-y-0.5">
+                    {screenShares.map((share) => (
                       <li
-                        key={name}
+                        key={share.id}
                         className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"
                       >
-                        <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                        {name}
+                        <MonitorUp className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span className="truncate">{share.name} está compartilhando</span>
                       </li>
                     ))}
                   </ul>
@@ -147,6 +226,22 @@ export function RoomSidebar({
               <p className="truncate text-xs text-muted-foreground">{currentVoiceRoom.name}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={onToggleScreenShare}
+                disabled={voiceStatus !== "connected"}
+              >
+                {screenShareEnabled ? (
+                  <MonitorX className="h-4 w-4" />
+                ) : (
+                  <MonitorUp className="h-4 w-4" />
+                )}
+                <span className="sr-only">
+                  {screenShareEnabled ? "Parar de compartilhar tela" : "Compartilhar tela"}
+                </span>
+              </Button>
               <Button
                 size="icon"
                 variant="ghost"
