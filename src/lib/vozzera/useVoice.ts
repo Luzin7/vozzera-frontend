@@ -6,12 +6,22 @@ import type { VoiceTokenResponse } from "./types";
 export type VoiceStatus = "idle" | "connecting" | "connected";
 
 type LiveKitRoom = import("livekit-client").Room;
+type LocalVideoTrack = import("livekit-client").LocalVideoTrack;
 type RemoteVideoTrack = import("livekit-client").RemoteVideoTrack;
+type ScreenShareCaptureOptions = import("livekit-client").ScreenShareCaptureOptions;
+
+export type ScreenShareTrack = LocalVideoTrack | RemoteVideoTrack;
 
 export type ScreenShare = {
   id: string;
   name: string;
-  track: RemoteVideoTrack;
+  track: ScreenShareTrack;
+};
+
+export type ScreenShareQuality = {
+  width: number;
+  height: number;
+  frameRate: number;
 };
 
 export function useVoice() {
@@ -22,6 +32,7 @@ export function useVoice() {
   const [volumes, setVolumes] = useState<Record<string, number>>({});
   const [screenShareEnabled, setScreenShareEnabledState] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShare[]>([]);
+  const [localPreview, setLocalPreview] = useState<ScreenShare | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
@@ -59,15 +70,36 @@ export function useVoice() {
     setParticipants([]);
     setScreenShareEnabledState(false);
     setScreenShares([]);
+    setLocalPreview(null);
   }, []);
 
-  const toggleScreenShare = useCallback(async () => {
+  const setScreenShare = useCallback(async (enabled: boolean, quality?: ScreenShareQuality) => {
     const room = roomRef.current;
     if (!room) return;
 
-    const next = !room.localParticipant.isScreenShareEnabled;
-    await room.localParticipant.setScreenShareEnabled(next);
-    setScreenShareEnabledState(next);
+    if (!enabled) {
+      await room.localParticipant.setScreenShareEnabled(false);
+      setScreenShareEnabledState(false);
+      setLocalPreview(null);
+      return;
+    }
+
+    const options: ScreenShareCaptureOptions | undefined = quality
+      ? {
+          resolution: {
+            width: quality.width,
+            height: quality.height,
+            frameRate: quality.frameRate,
+          },
+        }
+      : undefined;
+
+    const publication = await room.localParticipant.setScreenShareEnabled(true, options);
+    const track = publication?.videoTrack;
+    const name = room.localParticipant.name || room.localParticipant.identity;
+
+    setScreenShareEnabledState(true);
+    setLocalPreview(track ? { id: "local", name, track } : null);
   }, []);
 
   const connect = useCallback(
@@ -114,6 +146,13 @@ export function useVoice() {
           setScreenShares((prev) => prev.filter((share) => share.track !== track));
         });
 
+        room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
+          if (publication.track?.source !== Track.Source.ScreenShare) return;
+
+          setScreenShareEnabledState(false);
+          setLocalPreview(null);
+        });
+
         room.on(RoomEvent.ParticipantConnected, () => syncParticipants(room));
         room.on(RoomEvent.ParticipantDisconnected, () => syncParticipants(room));
         room.on(RoomEvent.Disconnected, () => {
@@ -123,6 +162,7 @@ export function useVoice() {
           setParticipants([]);
           setScreenShareEnabledState(false);
           setScreenShares([]);
+          setLocalPreview(null);
         });
 
         await room.connect(url, token);
@@ -163,12 +203,13 @@ export function useVoice() {
     volumes,
     screenShareEnabled,
     screenShares,
+    localPreview,
     error,
     clearError: useCallback(() => setError(null), []),
     connect,
     disconnect,
     setMicEnabled,
     setParticipantVolume,
-    toggleScreenShare,
+    setScreenShare,
   };
 }
