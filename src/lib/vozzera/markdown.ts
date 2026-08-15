@@ -7,6 +7,7 @@ export type Inline =
 
 export type Block =
   | { kind: "paragraph"; children: Inline[] }
+  | { kind: "heading"; level: number; children: Inline[] }
   | { kind: "code"; text: string }
   | { kind: "quote"; children: Inline[] }
   | { kind: "list"; ordered: boolean; items: Inline[][] };
@@ -139,6 +140,18 @@ export function parseBlocks(input: string): Block[] {
       continue;
     }
 
+    const headingMatch = /^(#{1,6})\s+(.*)$/.exec(line);
+
+    if (headingMatch?.[1] !== undefined && headingMatch?.[2] !== undefined) {
+      blocks.push({
+        kind: "heading",
+        level: headingMatch[1].length,
+        children: parseInline(headingMatch[2]),
+      });
+      i += 1;
+      continue;
+    }
+
     if (line.startsWith(">")) {
       const quote: string[] = [];
 
@@ -186,6 +199,7 @@ export function parseBlocks(input: string): Block[] {
         current.trim() === "" ||
         current.startsWith(">") ||
         current.trimStart().startsWith("```") ||
+        /^#{1,6}\s+/.test(current) ||
         /^[-*]\s+/.test(current) ||
         /^\d+\.\s+/.test(current)
       ) {

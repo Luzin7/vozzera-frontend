@@ -53,6 +53,41 @@ describe("parseBlocks", () => {
     ]);
   });
 
+  it("parses a heading", () => {
+    expect(parseBlocks("# Titulo")).toEqual([
+      { kind: "heading", level: 1, children: [{ kind: "text", text: "Titulo" }] },
+    ]);
+  });
+
+  it("parses all heading levels", () => {
+    expect(parseBlocks("###### Titulo")).toEqual([
+      { kind: "heading", level: 6, children: [{ kind: "text", text: "Titulo" }] },
+    ]);
+  });
+
+  it("parses heading with inline formatting", () => {
+    expect(parseBlocks("## **Titulo**")).toEqual([
+      {
+        kind: "heading",
+        level: 2,
+        children: [{ kind: "bold", children: [{ kind: "text", text: "Titulo" }] }],
+      },
+    ]);
+  });
+
+  it("keeps hashes without space as plain text", () => {
+    expect(parseBlocks("#semespaco")).toEqual([
+      { kind: "paragraph", children: [{ kind: "text", text: "#semespaco" }] },
+    ]);
+  });
+
+  it("splits paragraph before a heading", () => {
+    expect(parseBlocks("um\n# Titulo")).toEqual([
+      { kind: "paragraph", children: [{ kind: "text", text: "um" }] },
+      { kind: "heading", level: 1, children: [{ kind: "text", text: "Titulo" }] },
+    ]);
+  });
+
   it("parses a fenced code block", () => {
     expect(parseBlocks("```\nconst a = 1\n```")).toEqual([{ kind: "code", text: "const a = 1" }]);
   });
