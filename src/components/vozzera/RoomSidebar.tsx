@@ -23,6 +23,7 @@ import type { VoiceStatus } from "@/lib/vozzera/useVoice";
 type Props = {
   rooms: Room[];
   activeRoomId: string | null;
+  visibleVoiceRoomId: string | null;
   onSelectRoom: (room: Room) => void;
   onSelectVoiceRoom: (room: Room) => void;
   onCreateRoom: () => void;
@@ -60,6 +61,7 @@ const statusColor: Record<SocketStatus, string> = {
 export const RoomSidebar = memo(function RoomSidebar({
   rooms,
   activeRoomId,
+  visibleVoiceRoomId,
   onSelectRoom,
   onSelectVoiceRoom,
   onCreateRoom,
@@ -149,7 +151,8 @@ export const RoomSidebar = memo(function RoomSidebar({
             <p className="px-2 py-1 text-xs text-muted-foreground">Nenhum canal de voz.</p>
           )}
           {voiceRooms.map((room) => {
-            const isActive = room.id === voiceRoomId;
+            const isConnected = room.id === voiceRoomId;
+            const isSelected = room.id === visibleVoiceRoomId;
             return (
               <div key={room.id} className="group flex flex-col rounded-md py-0.5">
                 <Button
@@ -158,21 +161,21 @@ export const RoomSidebar = memo(function RoomSidebar({
                   onClick={() => onSelectVoiceRoom(room)}
                   onKeyDown={(event) => focusRoom(event, "voice")}
                   className={`flex w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                    isActive
+                    isSelected
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                   }`}
                 >
                   <Volume2 className="h-4 w-4 shrink-0 opacity-70" />
                   <span className="truncate">{room.name}</span>
-                  {isActive && voiceStatus === "connecting" && (
+                  {isConnected && voiceStatus === "connecting" && (
                     <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                       conectando…
                     </span>
                   )}
                 </Button>
 
-                {isActive && voiceStatus === "connected" && voiceParticipants.length > 0 && (
+                {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 && (
                   <ul className="mb-1 ml-8 space-y-1">
                     {voiceParticipants.map((name) => {
                       const isSpeaking = speakingNames.includes(name);
@@ -223,7 +226,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                   </ul>
                 )}
 
-                {isActive && voiceStatus === "connected" && screenShares.length > 0 && (
+                {isConnected && voiceStatus === "connected" && screenShares.length > 0 && (
                   <ul className="mb-1 ml-8 space-y-0.5">
                     {screenShares.map((share) => {
                       const shareMuted =
