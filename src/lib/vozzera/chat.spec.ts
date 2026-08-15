@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { appendMessage, backoffDelay, firstTextRoom, parseFrame } from "./chat";
+import { appendMessage, backoffDelay, firstTextRoom, nextRoomIndex, parseFrame } from "./chat";
 import type { ChatMessage, Room } from "./types";
+import { MAX_FRAME_BYTES } from "./ws-schema";
 
 function message(id: string, roomId = "r1"): ChatMessage {
   return {
@@ -58,14 +59,49 @@ describe("firstTextRoom", () => {
   });
 });
 
+describe("nextRoomIndex", () => {
+  it("moves down and wraps to the first", () => {
+    expect(nextRoomIndex("ArrowDown", 0, 3)).toBe(1);
+    expect(nextRoomIndex("ArrowDown", 2, 3)).toBe(0);
+  });
+
+  it("moves up and wraps to the last", () => {
+    expect(nextRoomIndex("ArrowUp", 2, 3)).toBe(1);
+    expect(nextRoomIndex("ArrowUp", 0, 3)).toBe(2);
+  });
+
+  it("returns null for other keys", () => {
+    expect(nextRoomIndex("Enter", 0, 3)).toBeNull();
+  });
+});
+
 describe("parseFrame", () => {
   it("parses a valid json frame", () => {
-    const raw = { data: '{"type":"message","id":"m1"}' } as MessageEvent;
+    const raw = {
+      data: '{"type":"message","action":"created","id":"m1","room_id":"r1","user_id":"u1","username":"luan","content":"oi","created_at":"2026-08-13T00:00:00Z"}',
+    } as MessageEvent;
     expect(parseFrame(raw)?.type).toBe("message");
   });
 
   it("returns null for invalid json", () => {
     const raw = { data: "nope" } as MessageEvent;
+    expect(parseFrame(raw)).toBeNull();
+  });
+
+  it("returns null for an unknown frame type", () => {
+    const raw = { data: '{"type":"bogus"}' } as MessageEvent;
+    expect(parseFrame(raw)).toBeNull();
+  });
+
+  it("returns null for a frame with wrong shape", () => {
+    const raw = { data: '{"type":"message","id":42}' } as MessageEvent;
+    expect(parseFrame(raw)).toBeNull();
+  });
+
+  it("returns null for a frame larger than the limit", () => {
+    const raw = {
+      data: `{"type":"error","error":"${"x".repeat(MAX_FRAME_BYTES)}"}`,
+    } as MessageEvent;
     expect(parseFrame(raw)).toBeNull();
   });
 });
