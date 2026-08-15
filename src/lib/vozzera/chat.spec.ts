@@ -83,6 +83,15 @@ describe("parseFrame", () => {
     expect(parseFrame(raw)?.type).toBe("message");
   });
 
+  it("parses an updated frame without username and created_at", () => {
+    const raw = {
+      data: '{"type":"message","action":"updated","id":"m1","room_id":"r1","user_id":"u1","content":"oi editado","updated_at":"2026-08-13T00:00:00Z"}',
+    } as MessageEvent;
+    const event = parseFrame(raw);
+    expect(event).not.toBeNull();
+    expect(event).toMatchObject({ action: "updated", content: "oi editado" });
+  });
+
   it("returns null for invalid json", () => {
     const raw = { data: "nope" } as MessageEvent;
     expect(parseFrame(raw)).toBeNull();

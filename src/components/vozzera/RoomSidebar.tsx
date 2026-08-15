@@ -1,18 +1,19 @@
 import {
   Hash,
-  LogOut,
   Mic,
   MicOff,
   MonitorUp,
   MonitorX,
   PhoneOff,
   Plus,
+  Settings2,
   Volume2,
 } from "lucide-react";
-import type { KeyboardEvent } from "react";
+import { memo, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
 import type { ScreenShare } from "@/lib/vozzera/useVoice";
@@ -25,7 +26,7 @@ type Props = {
   onSelectRoom: (room: Room) => void;
   onSelectVoiceRoom: (room: Room) => void;
   onCreateRoom: () => void;
-  onLogout: () => void;
+  onOpenSettings: () => void;
   username: string | null;
   status: SocketStatus;
   voiceStatus: VoiceStatus;
@@ -40,6 +41,8 @@ type Props = {
   screenShareEnabled: boolean;
   onToggleScreenShare: () => void;
   screenShares: ScreenShare[];
+  mutedParticipants: Record<string, boolean>;
+  speakingNames: string[];
 };
 
 const statusLabel: Record<SocketStatus, string> = {
@@ -54,13 +57,13 @@ const statusColor: Record<SocketStatus, string> = {
   closed: "bg-destructive",
 };
 
-export function RoomSidebar({
+export const RoomSidebar = memo(function RoomSidebar({
   rooms,
   activeRoomId,
   onSelectRoom,
   onSelectVoiceRoom,
   onCreateRoom,
-  onLogout,
+  onOpenSettings,
   username,
   status,
   voiceStatus,
@@ -75,11 +78,12 @@ export function RoomSidebar({
   screenShareEnabled,
   onToggleScreenShare,
   screenShares,
+  mutedParticipants,
+  speakingNames,
 }: Readonly<Props>) {
   const textRooms = rooms.filter((r) => r.type === "text");
   const voiceRooms = rooms.filter((r) => r.type === "voice");
   const currentVoiceRoom = voiceRooms.find((r) => r.id === voiceRoomId) ?? null;
-  const sharingNames = new Set(screenShares.map((share) => share.name));
 
   const focusRoom = (event: KeyboardEvent<HTMLButtonElement>, group: string) => {
     const buttons = Array.from(
@@ -147,7 +151,7 @@ export function RoomSidebar({
           {voiceRooms.map((room) => {
             const isActive = room.id === voiceRoomId;
             return (
-              <div key={room.id} className="flex flex-col rounded-md py-0.5">
+              <div key={room.id} className="group flex flex-col rounded-md py-0.5">
                 <Button
                   variant="ghost"
                   data-room-nav="voice"
@@ -169,36 +173,75 @@ export function RoomSidebar({
                 </Button>
 
                 {isActive && voiceStatus === "connected" && voiceParticipants.length > 0 && (
-                  <ul className="mb-2 mt-1 min-w-0 space-y-2 pl-8 pr-2">
-                    {voiceParticipants.map((name) => (
-                      <li key={name} className="min-w-0 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-2">
-                          <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-primary" />
-                          <span className="truncate">{name}</span>
-                          {sharingNames.has(name) && (
-                            <MonitorUp className="h-3.5 w-3.5 shrink-0 text-primary" />
-                          )}
-                        </span>
-                        {name !== username && (
-                          <div className="mt-1 flex items-center gap-2 pl-4">
-                            <Slider
-                              value={[volumes[name] ?? 1]}
-                              min={0}
-                              max={1}
-                              step={0.05}
-                              className="h-3 w-24"
-                              aria-label={`Volume de ${name}`}
-                              onValueChange={([volume]) => {
-                                if (volume !== undefined) onSetVolume(name, volume);
-                              }}
-                            />
-                            <span className="text-xs tabular-nums">
-                              {Math.round((volumes[name] ?? 1) * 100)}%
+                  <ul className="mb-1 ml-8 space-y-1">
+                    {voiceParticipants.map((name) => {
+                      const isSpeaking = speakingNames.includes(name);
+                      const isMuted =
+                        name === username ? !micEnabled : mutedParticipants[name] === true;
+                      const isStreaming =
+                        name === username
+                          ? screenShareEnabled
+                          : screenShares.some((share) => share.name === name);
+
+                      return (
+                        <li key={name} className="text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <span
+                              className={`inline-flex shrink-0 rounded-full p-0.5 ${
+                                isSpeaking ? "bg-primary" : "bg-transparent"
+                              }`}
+                            >
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
+                                {initials(name)}
+                              </span>
                             </span>
-                          </div>
-                        )}
-                      </li>
-                    ))}
+                            <span className="truncate">{name}</span>
+                            {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
+                            {isStreaming && <MonitorUp className="h-3 w-3 shrink-0 text-primary" />}
+                          </span>
+                          {name !== username && (
+                            <div className="flex items-center gap-2 pl-3">
+                              <Slider
+                                value={[volumes[name] ?? 1]}
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                className="h-3 w-24"
+                                aria-label={`Volume de ${name}`}
+                                onValueChange={([volume]) => {
+                                  if (volume !== undefined) onSetVolume(name, volume);
+                                }}
+                              />
+                              <span className="text-[10px] tabular-nums">
+                                {Math.round((volumes[name] ?? 1) * 100)}%
+                              </span>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                {isActive && voiceStatus === "connected" && screenShares.length > 0 && (
+                  <ul className="mb-1 ml-8 space-y-0.5">
+                    {screenShares.map((share) => {
+                      const shareMuted =
+                        share.name === username
+                          ? !micEnabled
+                          : mutedParticipants[share.name] === true;
+
+                      return (
+                        <li
+                          key={share.id}
+                          className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"
+                        >
+                          <MonitorUp className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="truncate">{share.name} está compartilhando</span>
+                          {shareMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -263,12 +306,12 @@ export function RoomSidebar({
               {statusLabel[status]}
             </p>
           </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onLogout}>
-            <LogOut className="h-4 w-4" />
-            <span className="sr-only">Sair</span>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onOpenSettings}>
+            <Settings2 className="h-4 w-4" />
+            <span className="sr-only">Configurações</span>
           </Button>
         </div>
       </div>
     </aside>
   );
-}
+});

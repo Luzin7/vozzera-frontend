@@ -41,13 +41,22 @@ export type InboundEvent =
 export type OutboundEvent =
   | {
       type: "message";
-      action: "created" | "updated";
+      action: "created";
       id: string;
       room_id: string;
       user_id: string;
       username: string;
       content: string;
       created_at: string;
+      updated_at?: string;
+    }
+  | {
+      type: "message";
+      action: "updated";
+      id: string;
+      room_id: string;
+      user_id: string;
+      content: string;
       updated_at?: string;
     }
   | {
@@ -99,7 +108,7 @@ export const fromHistory = (m: HistoryMessage, roomId: string): ChatMessage => (
 });
 
 export const fromEvent = (
-  e: Extract<OutboundEvent, { type: "message"; action: "created" | "updated" }>,
+  e: Extract<OutboundEvent, { type: "message"; action: "created" }>,
 ): ChatMessage => ({
   id: e.id,
   roomId: e.room_id,

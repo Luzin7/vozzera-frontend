@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, BellOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
@@ -9,6 +9,8 @@ import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
 import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
 import { ScreenShareStage } from "@/components/vozzera/ScreenShareStage";
+import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
+import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
@@ -53,8 +55,60 @@ function Index() {
     sendMessage,
   } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
   const voice = useVoice();
+  const {
+    micEnabled,
+    screenShareEnabled,
+    activeRoomId: voiceActiveRoomId,
+    connect,
+    disconnect,
+    setMicEnabled,
+    setScreenShare,
+  } = voice;
+
+  const handleDeleteMessage = useCallback(
+    (message: ChatMessage) => void deleteMessage(message.id),
+    [deleteMessage],
+  );
+
+  const handleSendMessage = useCallback(
+    (content: string) => {
+      if (!activeRoom) return;
+      sendMessage(activeRoom.id, content);
+    },
+    [activeRoom, sendMessage],
+  );
+
+  const handleSelectRoom = useCallback((room: Room) => void openRoom(room), [openRoom]);
+
+  const handleSelectVoiceRoom = useCallback(
+    (room: Room) => {
+      dismissBanner();
+      if (voiceActiveRoomId === room.id) {
+        void disconnect();
+        return;
+      }
+      void connect(room.id);
+    },
+    [dismissBanner, voiceActiveRoomId, connect, disconnect],
+  );
+
+  const handleToggleMic = useCallback(
+    () => void setMicEnabled(!micEnabled),
+    [micEnabled, setMicEnabled],
+  );
+
+  const handleLeaveVoice = useCallback(() => void disconnect(), [disconnect]);
+
+  const handleToggleScreenShare = useCallback(() => {
+    if (screenShareEnabled) {
+      void setScreenShare(false);
+      return;
+    }
+    setScreenShareOpen(true);
+  }, [screenShareEnabled, setScreenShare]);
 
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
@@ -79,37 +133,26 @@ function Index() {
       <RoomSidebar
         rooms={rooms}
         activeRoomId={activeRoom?.id ?? null}
-        onSelectRoom={(room) => void openRoom(room)}
-        onSelectVoiceRoom={(room) => {
-          dismissBanner();
-          if (voice.activeRoomId === room.id) return;
-          void voice.connect(room.id);
-        }}
+        onSelectRoom={handleSelectRoom}
+        onSelectVoiceRoom={handleSelectVoiceRoom}
         onCreateRoom={() => setCreateOpen(true)}
-        onLogout={() => {
-          void voice.disconnect();
-          void logout();
-        }}
+        onOpenSettings={() => setSettingsOpen(true)}
         username={username}
         status={socketStatus}
         voiceStatus={voice.status}
         voiceRoomId={voice.activeRoomId}
         voiceParticipants={voice.participants}
         micEnabled={voice.micEnabled}
-        onToggleMic={() => void voice.setMicEnabled(!voice.micEnabled)}
-        onLeaveVoice={() => void voice.disconnect()}
+        onToggleMic={handleToggleMic}
+        onLeaveVoice={handleLeaveVoice}
         unread={unread}
         volumes={voice.volumes}
         onSetVolume={voice.setParticipantVolume}
         screenShareEnabled={voice.screenShareEnabled}
-        onToggleScreenShare={() => {
-          if (voice.screenShareEnabled) {
-            void voice.setScreenShare(false);
-          } else {
-            setScreenShareOpen(true);
-          }
-        }}
+        onToggleScreenShare={handleToggleScreenShare}
         screenShares={voice.screenShares}
+        mutedParticipants={voice.mutedParticipants}
+        speakingNames={voice.speakingNames}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -164,13 +207,13 @@ function Index() {
               loading={loadingHistory && activeMessages.length === 0}
               roomId={activeRoom.id}
               roomName={activeRoom.name}
-              onDelete={(message) => void deleteMessage(message.id)}
+              onDelete={handleDeleteMessage}
             />
             <MessageComposer
               roomId={activeRoom.id}
               roomName={activeRoom.name}
               disabled={socketStatus !== "open"}
-              onSend={(content) => sendMessage(activeRoom.id, content)}
+              onSend={handleSendMessage}
             />
           </>
         ) : (
@@ -196,6 +239,23 @@ function Index() {
         open={screenShareOpen}
         onOpenChange={setScreenShareOpen}
         onStart={(quality) => void voice.setScreenShare(true, quality)}
+      />
+
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        username={username}
+        micDevices={voice.micDevices}
+        selectedDeviceId={voice.selectedDeviceId}
+        noiseFilter={voice.noiseFilter}
+        selfMonitor={voice.selfMonitor}
+        onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
+        onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
+        onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
+        onLogout={() => {
+          void voice.disconnect();
+          void logout();
+        }}
       />
     </div>
   );
