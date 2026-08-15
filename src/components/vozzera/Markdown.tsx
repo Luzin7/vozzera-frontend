@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 
 import { parseBlocks } from "@/lib/vozzera/markdown";
 import type { Block, Inline } from "@/lib/vozzera/markdown";
@@ -89,7 +89,7 @@ function BlockNodes({ blocks }: { blocks: Block[] }) {
   });
 }
 
-export function Markdown({ content }: { content: string }) {
+export const Markdown = memo(function Markdown({ content }: { content: string }) {
   const blocks = parseBlocks(content);
 
   if (blocks.length === 0) {
@@ -97,4 +97,4 @@ export function Markdown({ content }: { content: string }) {
   }
 
   return <BlockNodes blocks={blocks} />;
-}
+});

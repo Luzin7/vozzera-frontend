@@ -1,6 +1,7 @@
 import { updateMessage } from "@/lib/vozzera/api";
+import { initials } from "@/lib/vozzera/avatar";
 import { useAuth } from "@/lib/vozzera/useAuth";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/vozzera/types";
 import { Check, Pen, Trash2, X } from "lucide-react";
@@ -18,10 +19,6 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Markdown } from "./Markdown";
 
-function initials(name: string) {
-  return name.slice(0, 2).toUpperCase();
-}
-
 function time(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -32,7 +29,7 @@ function time(iso: string) {
   });
 }
 
-export function MessageList({
+export const MessageList = memo(function MessageList({
   messages,
   loading,
   roomId,
@@ -228,4 +225,4 @@ export function MessageList({
       </AlertDialog>
     </div>
   );
-}
+});
