@@ -1,22 +1,29 @@
 import { SendHorizonal } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MAX_MESSAGE_LENGTH } from "@/lib/vozzera/types";
 
 export function MessageComposer({
+  roomId,
   roomName,
   disabled,
   onSend,
-}: {
+}: Readonly<{
+  roomId: string;
   roomName: string;
   disabled: boolean;
   onSend: (content: string) => void;
-}) {
+}>) {
   const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const trimmed = value.trim();
   const canSend = !disabled && trimmed.length > 0 && trimmed.length <= MAX_MESSAGE_LENGTH;
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [roomId]);
 
   const submit = () => {
     if (!canSend) return;
@@ -28,6 +35,7 @@ export function MessageComposer({
     <div className="border-t border-border bg-background px-4 py-3">
       <div className="flex items-end gap-2 rounded-lg border border-input bg-card px-3 py-2">
         <Textarea
+          ref={inputRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {

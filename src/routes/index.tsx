@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Bell, BellOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
@@ -6,6 +7,8 @@ import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
+import { ScreenShareStage } from "@/components/vozzera/ScreenShareStage";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
@@ -36,17 +39,21 @@ function Index() {
     messages,
     banner,
     loadingHistory,
+    unread,
     socketStatus,
     openRoom,
     createRoom,
-    deleteRoom,
+    deleteMessage,
     logout,
     authenticate,
     dismissBanner,
     showBanner,
+    notificationsEnabled,
+    toggleNotifications,
     sendMessage,
   } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
+  const [screenShareOpen, setScreenShareOpen] = useState(false);
   const voice = useVoice();
 
   useEffect(() => {
@@ -75,15 +82,14 @@ function Index() {
         onSelectRoom={(room) => void openRoom(room)}
         onSelectVoiceRoom={(room) => {
           dismissBanner();
-          if (voice.activeRoomId === room.id) void voice.disconnect();
-          else void voice.connect(room.id);
+          if (voice.activeRoomId === room.id) return;
+          void voice.connect(room.id);
         }}
         onCreateRoom={() => setCreateOpen(true)}
         onLogout={() => {
           void voice.disconnect();
-          logout();
+          void logout();
         }}
-        onDeleteRoom={(room) => void deleteRoom(room)}
         username={username}
         status={socketStatus}
         voiceStatus={voice.status}
@@ -92,6 +98,18 @@ function Index() {
         micEnabled={voice.micEnabled}
         onToggleMic={() => void voice.setMicEnabled(!voice.micEnabled)}
         onLeaveVoice={() => void voice.disconnect()}
+        unread={unread}
+        volumes={voice.volumes}
+        onSetVolume={voice.setParticipantVolume}
+        screenShareEnabled={voice.screenShareEnabled}
+        onToggleScreenShare={() => {
+          if (voice.screenShareEnabled) {
+            void voice.setScreenShare(false);
+          } else {
+            setScreenShareOpen(true);
+          }
+        }}
+        screenShares={voice.screenShares}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -102,10 +120,31 @@ function Index() {
           <span className="text-xs text-muted-foreground">
             · todos os membros do servidor leem esta sala
           </span>
+          {activeRoom && (
+            <button
+              className="ml-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => void toggleNotifications()}
+              aria-label={
+                notificationsEnabled
+                  ? "Desativar notificações de desktop"
+                  : "Ativar notificações de desktop"
+              }
+            >
+              {notificationsEnabled ? (
+                <Bell className="h-4 w-4" />
+              ) : (
+                <BellOff className="h-4 w-4" />
+              )}
+            </button>
+          )}
         </header>
 
         {banner && (
-          <div className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground"
+          >
             <span>{banner}</span>
             <button onClick={dismissBanner} className="underline">
               ok
@@ -115,12 +154,20 @@ function Index() {
 
         {activeRoom ? (
           <>
+            <ScreenShareStage
+              shares={voice.screenShares}
+              localPreview={voice.localPreview}
+              isTabHidden={voice.isTabHidden}
+            />
             <MessageList
               messages={activeMessages}
               loading={loadingHistory && activeMessages.length === 0}
+              roomId={activeRoom.id}
               roomName={activeRoom.name}
+              onDelete={(message) => void deleteMessage(message.id)}
             />
             <MessageComposer
+              roomId={activeRoom.id}
               roomName={activeRoom.name}
               disabled={socketStatus !== "open"}
               onSend={(content) => sendMessage(activeRoom.id, content)}
@@ -143,6 +190,12 @@ function Index() {
         onOpenChange={setCreateOpen}
         existingRooms={rooms}
         onCreate={createRoom}
+      />
+
+      <ScreenShareDialog
+        open={screenShareOpen}
+        onOpenChange={setScreenShareOpen}
+        onStart={(quality) => void voice.setScreenShare(true, quality)}
       />
     </div>
   );

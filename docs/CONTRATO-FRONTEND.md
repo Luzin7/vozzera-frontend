@@ -8,7 +8,8 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 - Erros HTTP são `text/plain` — ler com `res.text()`, **nunca** `res.json()`.
 - Identidade nunca é enviada pelo front; vem do servidor nas respostas.
 - Não existe `GET /api/me`: a identidade só chega no login. O front guarda só o `username` em `localStorage`, pra exibição (não é credencial).
-- Não existe rota de logout — o botão "Sair" apenas limpa o estado local.
+- `POST /api/logout` encerra a sessão no servidor (204). Best-effort: o front limpa o estado local mesmo se a rota falhar.
+- **Sessão morreu** = qualquer `401` em rota autenticada ou o servidor fechar o WebSocket com `code 1005` (revogação/expiração). O front desloga sozinho e volta pro login — sem retry infinito do WS.
 - Base da API: `VITE_API_URL` (default `http://localhost:8080`). Em produção o build é servido pelo Go na mesma origem — deixar vazio. WebSocket deriva da mesma base.
 
 ## REST
@@ -118,6 +119,7 @@ Regras:
 - Campos zerados (`ZERO_UUID = 00000000-0000-0000-0000-000000000000` e `created_at` zero) são ignorados.
 - O servidor **esquece as salas a cada conexão** — o front re-envia `join` de todas as salas conhecidas no `open`, e refaz isso a cada reconexão.
 - Sem otimismo na UI: a mensagem aparece quando o eco volta (não há `client_msg_id` pra deduplicar).
+- **Revogação/expiração de sessão**: o servidor fecha o WS com `CloseMessage` vazio → no browser `CloseEvent.code === 1005`. O front trata como "sessão morta" (desloga e para de reconectar), distinto de queda de rede/crash (`1006`), que tem retry com backoff.
 
 ## Limitações conhecidas
 

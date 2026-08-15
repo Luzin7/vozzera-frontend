@@ -9,9 +9,10 @@ export type SocketStatus = "connecting" | "open" | "closed";
 type Options = {
   enabled: boolean;
   onEvent: (event: OutboundEvent) => void;
+  onSessionExpired?: () => void;
 };
 
-export function useSocket({ enabled, onEvent }: Options) {
+export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
   const [status, setStatus] = useState<SocketStatus>("closed");
   const socketRef = useRef<WebSocket | null>(null);
   const joinedRooms = useRef<Set<string>>(new Set());
@@ -20,14 +21,19 @@ export function useSocket({ enabled, onEvent }: Options) {
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedByUs = useRef(false);
   const onEventRef = useRef(onEvent);
+  const onSessionExpiredRef = useRef(onSessionExpired);
+
   onEventRef.current = onEvent;
+  onSessionExpiredRef.current = onSessionExpired;
 
   const rawSend = useCallback((event: InboundEvent) => {
     const socket = socketRef.current;
+
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(event));
       return;
     }
+
     queue.current.push(event);
   }, []);
 
@@ -38,30 +44,52 @@ export function useSocket({ enabled, onEvent }: Options) {
 
     const connect = () => {
       setStatus("connecting");
+
       const socket = new WebSocket(wsUrl());
       socketRef.current = socket;
 
       socket.onopen = () => {
         attempt.current = 0;
         setStatus("open");
+
         for (const roomId of joinedRooms.current) {
-          socket.send(JSON.stringify({ type: "join", room_id: roomId }));
+          socket.send(
+            JSON.stringify({
+              type: "join",
+              room_id: roomId,
+            }),
+          );
         }
+
         const pending = queue.current;
         queue.current = [];
-        for (const event of pending) socket.send(JSON.stringify(event));
+
+        for (const event of pending) {
+          socket.send(JSON.stringify(event));
+        }
       };
 
       socket.onmessage = (raw) => {
         const event = parseFrame(raw);
-        if (event) onEventRef.current(event);
+
+        if (event) {
+          onEventRef.current(event);
+        }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setStatus("closed");
         socketRef.current = null;
+
         if (closedByUs.current) return;
+
+        if (event.code === 1005) {
+          onSessionExpiredRef.current?.();
+          return;
+        }
+
         retryTimer.current = setTimeout(connect, backoffDelay(attempt.current));
+
         attempt.current += 1;
       };
 
@@ -74,7 +102,11 @@ export function useSocket({ enabled, onEvent }: Options) {
 
     return () => {
       closedByUs.current = true;
-      if (retryTimer.current) clearTimeout(retryTimer.current);
+
+      if (retryTimer.current) {
+        clearTimeout(retryTimer.current);
+      }
+
       socketRef.current?.close();
       socketRef.current = null;
       setStatus("closed");
@@ -84,18 +116,31 @@ export function useSocket({ enabled, onEvent }: Options) {
   const joinRoom = useCallback(
     (roomId: string) => {
       if (joinedRooms.current.has(roomId)) return;
+
       joinedRooms.current.add(roomId);
-      rawSend({ type: "join", room_id: roomId });
+
+      rawSend({
+        type: "join",
+        room_id: roomId,
+      });
     },
     [rawSend],
   );
 
   const sendMessage = useCallback(
     (roomId: string, content: string) => {
-      rawSend({ type: "message", room_id: roomId, content });
+      rawSend({
+        type: "message",
+        room_id: roomId,
+        content,
+      });
     },
     [rawSend],
   );
 
-  return { status, joinRoom, sendMessage };
+  return {
+    status,
+    joinRoom,
+    sendMessage,
+  };
 }
