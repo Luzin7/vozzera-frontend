@@ -7,6 +7,7 @@ import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
 import { ScreenShareStage } from "@/components/vozzera/ScreenShareStage";
 import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
@@ -49,20 +50,22 @@ function Index() {
     authenticate,
     dismissBanner,
     showBanner,
-    requestNotificationPermission,
+    notificationsEnabled,
+    toggleNotifications,
     sendMessage,
   } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [screenShareOpen, setScreenShareOpen] = useState(false);
   const voice = useVoice();
   const {
     micEnabled,
+    screenShareEnabled,
     activeRoomId: voiceActiveRoomId,
     connect,
     disconnect,
     setMicEnabled,
-    toggleScreenShare,
+    setScreenShare,
   } = voice;
 
   const handleDeleteMessage = useCallback(
@@ -99,17 +102,17 @@ function Index() {
 
   const handleLeaveVoice = useCallback(() => void disconnect(), [disconnect]);
 
-  const handleToggleScreenShare = useCallback(() => void toggleScreenShare(), [toggleScreenShare]);
+  const handleToggleScreenShare = useCallback(() => {
+    if (screenShareEnabled) {
+      void setScreenShare(false);
+      return;
+    }
+    setScreenShareOpen(true);
+  }, [screenShareEnabled, setScreenShare]);
 
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
-
-  useEffect(() => {
-    if (typeof Notification === "undefined") return;
-
-    setNotificationsEnabled(Notification.permission === "granted");
-  }, []);
 
   if (authed === null) {
     return (
@@ -163,16 +166,10 @@ function Index() {
           {activeRoom && (
             <button
               className="ml-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => {
-                void requestNotificationPermission().then(() =>
-                  setNotificationsEnabled(
-                    typeof Notification !== "undefined" && Notification.permission === "granted",
-                  ),
-                );
-              }}
+              onClick={() => void toggleNotifications()}
               aria-label={
                 notificationsEnabled
-                  ? "Notificações de desktop ativadas"
+                  ? "Desativar notificações de desktop"
                   : "Ativar notificações de desktop"
               }
             >
@@ -200,7 +197,11 @@ function Index() {
 
         {activeRoom ? (
           <>
-            <ScreenShareStage shares={voice.screenShares} />
+            <ScreenShareStage
+              shares={voice.screenShares}
+              localPreview={voice.localPreview}
+              isTabHidden={voice.isTabHidden}
+            />
             <MessageList
               messages={activeMessages}
               loading={loadingHistory && activeMessages.length === 0}
@@ -232,6 +233,12 @@ function Index() {
         onOpenChange={setCreateOpen}
         existingRooms={rooms}
         onCreate={createRoom}
+      />
+
+      <ScreenShareDialog
+        open={screenShareOpen}
+        onOpenChange={setScreenShareOpen}
+        onStart={(quality) => void voice.setScreenShare(true, quality)}
       />
 
       <SettingsDialog

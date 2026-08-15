@@ -46,6 +46,15 @@ function InlineNodes({ nodes }: { nodes: Inline[] }): ReactNode {
 
 function BlockNodes({ blocks }: { blocks: Block[] }) {
   return blocks.map((block, index) => {
+    if (block.kind === "heading") {
+      const Tag = `h${block.level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+      return (
+        <Tag key={index} className="mt-2 font-semibold leading-snug text-foreground first:mt-0">
+          <InlineNodes nodes={block.children} />
+        </Tag>
+      );
+    }
+
     if (block.kind === "code") {
       return (
         <pre

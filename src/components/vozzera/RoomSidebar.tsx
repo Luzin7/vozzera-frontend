@@ -157,7 +157,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                   data-room-nav="voice"
                   onClick={() => onSelectVoiceRoom(room)}
                   onKeyDown={(event) => focusRoom(event, "voice")}
-                  className={`flex w-full justify-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                  className={`flex w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -166,11 +166,12 @@ export const RoomSidebar = memo(function RoomSidebar({
                   <Volume2 className="h-4 w-4 shrink-0 opacity-70" />
                   <span className="truncate">{room.name}</span>
                   {isActive && voiceStatus === "connecting" && (
-                    <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                       conectando…
                     </span>
                   )}
                 </Button>
+
                 {isActive && voiceStatus === "connected" && voiceParticipants.length > 0 && (
                   <ul className="mb-1 ml-8 space-y-1">
                     {voiceParticipants.map((name) => {
