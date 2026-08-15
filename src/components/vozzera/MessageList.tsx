@@ -53,7 +53,10 @@ export function MessageList({
   const username = useAuth().username;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    const container = bottomRef.current?.parentElement;
+    if (!container) return;
+
+    container.scrollTop = container.scrollHeight;
   }, [messages.length]);
 
   if (loading) {
@@ -111,7 +114,7 @@ export function MessageList({
           return (
             <li
               key={message.id}
-              className={`${grouped ? "" : "pt-3"} [content-visibility:auto] [contain-intrinsic-size:auto_4rem]`}
+              className={`${grouped ? "" : "pt-3"} ${index < messages.length - 1 ? "[content-visibility:auto] [contain-intrinsic-size:auto_4rem]" : ""}`}
             >
               <div className="group flex gap-3 rounded-md px-2 py-0.5 hover:bg-muted/40">
                 <div className="w-9 shrink-0">
