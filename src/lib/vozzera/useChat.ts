@@ -129,6 +129,7 @@ export function useChat() {
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.type !== "text") return;
+      if (room.id === activeRoomRef.current?.id) return;
 
       setActiveRoom(room);
       setUnread((prev) => clearUnread(prev, room.id));

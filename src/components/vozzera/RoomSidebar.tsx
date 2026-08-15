@@ -79,6 +79,7 @@ export function RoomSidebar({
   const textRooms = rooms.filter((r) => r.type === "text");
   const voiceRooms = rooms.filter((r) => r.type === "voice");
   const currentVoiceRoom = voiceRooms.find((r) => r.id === voiceRoomId) ?? null;
+  const sharingNames = new Set(screenShares.map((share) => share.name));
 
   const focusRoom = (event: KeyboardEvent<HTMLButtonElement>, group: string) => {
     const buttons = Array.from(
@@ -146,13 +147,13 @@ export function RoomSidebar({
           {voiceRooms.map((room) => {
             const isActive = room.id === voiceRoomId;
             return (
-              <div key={room.id} className="group flex items-center rounded-md py-0.5">
+              <div key={room.id} className="flex flex-col rounded-md py-0.5">
                 <Button
                   variant="ghost"
                   data-room-nav="voice"
                   onClick={() => onSelectVoiceRoom(room)}
                   onKeyDown={(event) => focusRoom(event, "voice")}
-                  className={`flex justify-start min-w-0 flex-1 gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                  className={`flex w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -161,21 +162,25 @@ export function RoomSidebar({
                   <Volume2 className="h-4 w-4 shrink-0 opacity-70" />
                   <span className="truncate">{room.name}</span>
                   {isActive && voiceStatus === "connecting" && (
-                    <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                       conectando…
                     </span>
                   )}
                 </Button>
+
                 {isActive && voiceStatus === "connected" && voiceParticipants.length > 0 && (
-                  <ul className="mb-1 ml-8 space-y-1">
+                  <ul className="mb-2 mt-1 min-w-0 space-y-2 pl-8 pr-2">
                     {voiceParticipants.map((name) => (
-                      <li key={name} className="text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1.5 truncate">
-                          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                      <li key={name} className="min-w-0 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-2">
+                          <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-primary" />
                           <span className="truncate">{name}</span>
+                          {sharingNames.has(name) && (
+                            <MonitorUp className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          )}
                         </span>
                         {name !== username && (
-                          <div className="flex items-center gap-2 pl-3">
+                          <div className="mt-1 flex items-center gap-2 pl-4">
                             <Slider
                               value={[volumes[name] ?? 1]}
                               min={0}
@@ -187,25 +192,11 @@ export function RoomSidebar({
                                 if (volume !== undefined) onSetVolume(name, volume);
                               }}
                             />
-                            <span className="text-[10px] tabular-nums">
+                            <span className="text-xs tabular-nums">
                               {Math.round((volumes[name] ?? 1) * 100)}%
                             </span>
                           </div>
                         )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {isActive && voiceStatus === "connected" && screenShares.length > 0 && (
-                  <ul className="mb-1 ml-8 space-y-0.5">
-                    {screenShares.map((share) => (
-                      <li
-                        key={share.id}
-                        className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"
-                      >
-                        <MonitorUp className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="truncate">{share.name} está compartilhando</span>
                       </li>
                     ))}
                   </ul>

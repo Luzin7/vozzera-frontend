@@ -7,6 +7,7 @@ import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
 import { ScreenShareStage } from "@/components/vozzera/ScreenShareStage";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
@@ -51,6 +52,7 @@ function Index() {
     sendMessage,
   } = useChat();
   const [createOpen, setCreateOpen] = useState(false);
+  const [screenShareOpen, setScreenShareOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const voice = useVoice();
 
@@ -86,8 +88,8 @@ function Index() {
         onSelectRoom={(room) => void openRoom(room)}
         onSelectVoiceRoom={(room) => {
           dismissBanner();
-          if (voice.activeRoomId === room.id) void voice.disconnect();
-          else void voice.connect(room.id);
+          if (voice.activeRoomId === room.id) return;
+          void voice.connect(room.id);
         }}
         onCreateRoom={() => setCreateOpen(true)}
         onLogout={() => {
@@ -106,7 +108,13 @@ function Index() {
         volumes={voice.volumes}
         onSetVolume={voice.setParticipantVolume}
         screenShareEnabled={voice.screenShareEnabled}
-        onToggleScreenShare={() => void voice.toggleScreenShare()}
+        onToggleScreenShare={() => {
+          if (voice.screenShareEnabled) {
+            void voice.setScreenShare(false);
+          } else {
+            setScreenShareOpen(true);
+          }
+        }}
         screenShares={voice.screenShares}
       />
 
@@ -158,7 +166,7 @@ function Index() {
 
         {activeRoom ? (
           <>
-            <ScreenShareStage shares={voice.screenShares} />
+            <ScreenShareStage shares={voice.screenShares} localPreview={voice.localPreview} />
             <MessageList
               messages={activeMessages}
               loading={loadingHistory && activeMessages.length === 0}
@@ -190,6 +198,12 @@ function Index() {
         onOpenChange={setCreateOpen}
         existingRooms={rooms}
         onCreate={createRoom}
+      />
+
+      <ScreenShareDialog
+        open={screenShareOpen}
+        onOpenChange={setScreenShareOpen}
+        onStart={(quality) => void voice.setScreenShare(true, quality)}
       />
     </div>
   );

@@ -113,7 +113,7 @@ export function MessageList({
               key={message.id}
               className={`${grouped ? "" : "pt-3"} [content-visibility:auto] [contain-intrinsic-size:auto_4rem]`}
             >
-              <div className="flex gap-3 rounded-md px-2 py-0.5 hover:bg-muted/40">
+              <div className="group flex gap-3 rounded-md px-2 py-0.5 hover:bg-muted/40">
                 <div className="w-9 shrink-0">
                   {!grouped && (
                     <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold text-foreground">
@@ -136,7 +136,7 @@ export function MessageList({
                   )}
 
                   {username === message.username && !isEditing && (
-                    <div className="absolute right-0 top-0 flex gap-1">
+                    <div className="absolute right-0 top-0 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                       <Button
                         variant="secondary"
                         className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-foreground"
