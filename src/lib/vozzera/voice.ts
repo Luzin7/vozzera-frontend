@@ -53,3 +53,22 @@ export function audioInputDevices(devices: MediaDeviceInfo[]): MicDevice[] {
       label: device.label || "Microfone padrão",
     }));
 }
+
+export function featuredShareId(
+  selectedId: string | null,
+  shares: Array<{ id: string }>,
+): string | null {
+  if (shares.length === 0) return null;
+  if (selectedId && shares.some((share) => share.id === selectedId)) return selectedId;
+  return shares[0]?.id ?? null;
+}
+
+export function muteVolume(muted: boolean, previousVolume: number | undefined): number {
+  return muted ? 0 : (previousVolume ?? 1);
+}
+
+export function participantStatusLabelFor(locallyMuted: boolean, isSpeaking: boolean): string {
+  if (locallyMuted) return "Silenciado para você";
+  if (isSpeaking) return "Falando agora";
+  return "Volume individual";
+}

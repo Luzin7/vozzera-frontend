@@ -5,6 +5,7 @@ import type { VoiceTokenResponse } from "./types";
 import {
   audioCaptureOptions,
   audioInputDevices,
+  muteVolume,
   readMicDeviceId,
   readNoiseFilter,
   writeMicDeviceId,
@@ -61,6 +62,7 @@ export function useVoice() {
 
   const roomRef = useRef<LiveKitRoom | null>(null);
   const volumesRef = useRef<Record<string, number>>({});
+  const mutedVolumesRef = useRef<Record<string, number>>({});
   const micEnabledRef = useRef(micEnabled);
   const noiseFilterRef = useRef(noiseFilter);
   const selectedDeviceIdRef = useRef(selectedDeviceId);
@@ -90,6 +92,7 @@ export function useVoice() {
       return next;
     });
     setSpeakingNames((prev) => prev.filter((speaker) => speaker !== name));
+    delete mutedVolumesRef.current[name];
   }, []);
 
   const resetRoomState = useCallback(() => {
@@ -100,6 +103,7 @@ export function useVoice() {
     setScreenShareEnabledState(false);
     setScreenShares([]);
     setLocalPreview(null);
+    mutedVolumesRef.current = {};
   }, []);
 
   const refreshMicDevices = useCallback(async () => {
@@ -130,6 +134,23 @@ export function useVoice() {
       participant.setVolume(volume);
     }
   }, []);
+
+  const setLocalMute = useCallback(
+    (name: string, muted: boolean) => {
+      const current = volumesRef.current[name];
+
+      if (muted) {
+        mutedVolumesRef.current[name] = current ?? 1;
+        setParticipantVolume(name, muteVolume(true, undefined));
+        return;
+      }
+
+      const previous = mutedVolumesRef.current[name];
+      delete mutedVolumesRef.current[name];
+      setParticipantVolume(name, muteVolume(false, previous));
+    },
+    [setParticipantVolume],
+  );
 
   const disconnect = useCallback(async () => {
     await roomRef.current?.disconnect();
@@ -423,6 +444,7 @@ export function useVoice() {
     setNoiseFilter,
     setSelfMonitor,
     setParticipantVolume,
+    setLocalMute,
     setScreenShare,
   };
 }

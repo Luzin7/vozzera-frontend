@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   audioCaptureOptions,
   audioInputDevices,
+  featuredShareId,
+  muteVolume,
+  participantStatusLabelFor,
   readMicDeviceId,
   readNoiseFilter,
   writeMicDeviceId,
@@ -83,5 +86,51 @@ describe("audioInputDevices", () => {
       { deviceId: "a", label: "USB Mic" },
       { deviceId: "b", label: "Microfone padrão" },
     ]);
+  });
+});
+
+describe("featuredShareId", () => {
+  it("returns null with no shares", () => {
+    expect(featuredShareId(null, [])).toBeNull();
+  });
+
+  it("features the first share without a selection", () => {
+    expect(featuredShareId(null, [{ id: "a" }, { id: "b" }])).toBe("a");
+  });
+
+  it("keeps the selection while it still exists", () => {
+    expect(featuredShareId("b", [{ id: "a" }, { id: "b" }])).toBe("b");
+  });
+
+  it("falls back to the first share when the selection leaves", () => {
+    expect(featuredShareId("c", [{ id: "a" }, { id: "b" }])).toBe("a");
+  });
+});
+
+describe("muteVolume", () => {
+  it("mutes to zero", () => {
+    expect(muteVolume(true, undefined)).toBe(0);
+  });
+
+  it("restores the default volume without a previous value", () => {
+    expect(muteVolume(false, undefined)).toBe(1);
+  });
+
+  it("restores the previous volume when unmuting", () => {
+    expect(muteVolume(false, 0.4)).toBe(0.4);
+  });
+});
+
+describe("participantStatusLabelFor", () => {
+  it("labels a locally muted participant", () => {
+    expect(participantStatusLabelFor(true, false)).toBe("Silenciado para você");
+  });
+
+  it("labels a speaking participant", () => {
+    expect(participantStatusLabelFor(false, true)).toBe("Falando agora");
+  });
+
+  it("labels a neutral participant", () => {
+    expect(participantStatusLabelFor(false, false)).toBe("Volume individual");
   });
 });
