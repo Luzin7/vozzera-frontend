@@ -13,14 +13,11 @@ export type MicCaptureOptions = {
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
 
-export function audioCaptureOptions(
-  noiseFilter: boolean,
-  deviceId: string | null,
-): MicCaptureOptions {
+export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions {
   return {
     ...(deviceId ? { deviceId } : {}),
     echoCancellation: true,
-    noiseSuppression: noiseFilter,
+    noiseSuppression: true,
     autoGainControl: true,
   };
 }

@@ -15,6 +15,7 @@ type Props = {
   micDevices: MicDevice[];
   selectedDeviceId: string | null;
   noiseFilter: boolean;
+  krispSupported: boolean;
   selfMonitor: boolean;
   onSelectDevice: (deviceId: string) => void;
   onToggleNoiseFilter: (enabled: boolean) => void;
@@ -34,6 +35,7 @@ export function SettingsDialog({
   micDevices,
   selectedDeviceId,
   noiseFilter,
+  krispSupported,
   selfMonitor,
   onSelectDevice,
   onToggleNoiseFilter,
@@ -73,6 +75,7 @@ export function SettingsDialog({
                 micDevices={micDevices}
                 selectedDeviceId={selectedDeviceId}
                 noiseFilter={noiseFilter}
+                krispSupported={krispSupported}
                 selfMonitor={selfMonitor}
                 onSelectDevice={onSelectDevice}
                 onToggleNoiseFilter={onToggleNoiseFilter}
