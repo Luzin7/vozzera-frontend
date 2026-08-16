@@ -283,6 +283,7 @@ function Index() {
         micDevices={voice.micDevices}
         selectedDeviceId={voice.selectedDeviceId}
         noiseFilter={voice.noiseFilter}
+        krispSupported={voice.krispSupported}
         selfMonitor={voice.selfMonitor}
         onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
         onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
