@@ -36,6 +36,8 @@ export type ScreenShareQuality = {
   frameRate: number;
 };
 
+const loadLiveKitClient = () => import("livekit-client");
+
 export function useVoice() {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -109,13 +111,8 @@ export function useVoice() {
   const refreshMicDevices = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
 
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setMicDevices(audioInputDevices(devices));
-    } catch {
-      // sem permissão de mídia: lista vazia é o esperado até entrar na sala
-      setMicDevices([]);
-    }
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    setMicDevices(audioInputDevices(devices));
   }, []);
 
   const syncLocalMicTrack = useCallback((room: LiveKitRoom) => {
@@ -205,8 +202,7 @@ export function useVoice() {
       setActiveRoomId(roomId);
 
       try {
-        // import dinâmico: livekit-client é browser-only e o app faz SSR
-        const { Room, RoomEvent, Track, VideoQuality } = await import("livekit-client");
+        const { Room, RoomEvent, Track, VideoQuality } = await loadLiveKitClient();
 
         const { token, url } = await api<VoiceTokenResponse>("/api/voice/token", {
           method: "POST",
