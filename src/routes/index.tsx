@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, BellOff } from "lucide-react";
+import { Bell, BellOff, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
@@ -8,8 +8,8 @@ import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
 import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
-import { ScreenShareStage } from "@/components/vozzera/ScreenShareStage";
 import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
+import { VoiceCallView } from "@/components/vozzera/VoiceCallView";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
@@ -57,6 +57,7 @@ function Index() {
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
+  const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
   const voice = useVoice();
   const {
     micEnabled,
@@ -81,18 +82,22 @@ function Index() {
     [activeRoom, sendMessage],
   );
 
-  const handleSelectRoom = useCallback((room: Room) => void openRoom(room), [openRoom]);
+  const handleSelectRoom = useCallback(
+    (room: Room) => {
+      setVisibleVoiceRoomId(null);
+      void openRoom(room);
+    },
+    [openRoom],
+  );
 
   const handleSelectVoiceRoom = useCallback(
     (room: Room) => {
       dismissBanner();
-      if (voiceActiveRoomId === room.id) {
-        void disconnect();
-        return;
-      }
+      setVisibleVoiceRoomId(room.id);
+      if (voiceActiveRoomId === room.id) return;
       void connect(room.id);
     },
-    [dismissBanner, voiceActiveRoomId, connect, disconnect],
+    [dismissBanner, voiceActiveRoomId, connect],
   );
 
   const handleToggleMic = useCallback(
@@ -100,7 +105,10 @@ function Index() {
     [micEnabled, setMicEnabled],
   );
 
-  const handleLeaveVoice = useCallback(() => void disconnect(), [disconnect]);
+  const handleLeaveVoice = useCallback(() => {
+    setVisibleVoiceRoomId(null);
+    void disconnect();
+  }, [disconnect]);
 
   const handleToggleScreenShare = useCallback(() => {
     if (screenShareEnabled) {
@@ -127,12 +135,15 @@ function Index() {
   }
 
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
+  const visibleVoiceRoom =
+    voice.status === "idle" ? null : (rooms.find((room) => room.id === visibleVoiceRoomId) ?? null);
 
   return (
     <div className="flex h-screen bg-background">
       <RoomSidebar
         rooms={rooms}
-        activeRoomId={activeRoom?.id ?? null}
+        activeRoomId={visibleVoiceRoom ? null : (activeRoom?.id ?? null)}
+        visibleVoiceRoomId={visibleVoiceRoom?.id ?? null}
         onSelectRoom={handleSelectRoom}
         onSelectVoiceRoom={handleSelectVoiceRoom}
         onCreateRoom={() => setCreateOpen(true)}
@@ -148,6 +159,7 @@ function Index() {
         unread={unread}
         volumes={voice.volumes}
         onSetVolume={voice.setParticipantVolume}
+        onToggleLocalMute={voice.toggleLocalMute}
         screenShareEnabled={voice.screenShareEnabled}
         onToggleScreenShare={handleToggleScreenShare}
         screenShares={voice.screenShares}
@@ -158,12 +170,23 @@ function Index() {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
           <h1 className="truncate text-sm font-semibold text-foreground">
-            {activeRoom ? `# ${activeRoom.name}` : "Nenhuma sala selecionada"}
+            {visibleVoiceRoom ? (
+              <span className="flex items-center gap-2">
+                <Volume2 className="h-4 w-4" />
+                {visibleVoiceRoom.name}
+              </span>
+            ) : activeRoom ? (
+              `# ${activeRoom.name}`
+            ) : (
+              "Nenhuma sala selecionada"
+            )}
           </h1>
-          <span className="text-xs text-muted-foreground">
-            · todos os membros do servidor leem esta sala
-          </span>
-          {activeRoom && (
+          {!visibleVoiceRoom && (
+            <span className="text-xs text-muted-foreground">
+              · todos os membros do servidor leem esta sala
+            </span>
+          )}
+          {activeRoom && !visibleVoiceRoom && (
             <button
               className="ml-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={() => void toggleNotifications()}
@@ -195,13 +218,25 @@ function Index() {
           </div>
         )}
 
-        {activeRoom ? (
+        {visibleVoiceRoom ? (
+          <VoiceCallView
+            roomName={visibleVoiceRoom.name}
+            status={voice.status}
+            participants={voice.participants}
+            username={username}
+            micEnabled={voice.micEnabled}
+            mutedParticipants={voice.mutedParticipants}
+            speakingNames={voice.speakingNames}
+            screenShareEnabled={voice.screenShareEnabled}
+            screenShares={voice.screenShares}
+            localPreview={voice.localPreview}
+            isTabHidden={voice.isTabHidden}
+            onToggleMic={handleToggleMic}
+            onToggleScreenShare={handleToggleScreenShare}
+            onLeave={handleLeaveVoice}
+          />
+        ) : activeRoom ? (
           <>
-            <ScreenShareStage
-              shares={voice.screenShares}
-              localPreview={voice.localPreview}
-              isTabHidden={voice.isTabHidden}
-            />
             <MessageList
               messages={activeMessages}
               loading={loadingHistory && activeMessages.length === 0}

@@ -8,11 +8,12 @@ import {
   Plus,
   Settings2,
   Volume2,
+  VolumeX,
 } from "lucide-react";
 import { memo, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
+import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
@@ -23,6 +24,7 @@ import type { VoiceStatus } from "@/lib/vozzera/useVoice";
 type Props = {
   rooms: Room[];
   activeRoomId: string | null;
+  visibleVoiceRoomId: string | null;
   onSelectRoom: (room: Room) => void;
   onSelectVoiceRoom: (room: Room) => void;
   onCreateRoom: () => void;
@@ -38,6 +40,7 @@ type Props = {
   unread: Record<string, number>;
   volumes: Record<string, number>;
   onSetVolume: (name: string, volume: number) => void;
+  onToggleLocalMute: (name: string) => void;
   screenShareEnabled: boolean;
   onToggleScreenShare: () => void;
   screenShares: ScreenShare[];
@@ -60,6 +63,7 @@ const statusColor: Record<SocketStatus, string> = {
 export const RoomSidebar = memo(function RoomSidebar({
   rooms,
   activeRoomId,
+  visibleVoiceRoomId,
   onSelectRoom,
   onSelectVoiceRoom,
   onCreateRoom,
@@ -75,6 +79,7 @@ export const RoomSidebar = memo(function RoomSidebar({
   unread,
   volumes,
   onSetVolume,
+  onToggleLocalMute,
   screenShareEnabled,
   onToggleScreenShare,
   screenShares,
@@ -149,7 +154,8 @@ export const RoomSidebar = memo(function RoomSidebar({
             <p className="px-2 py-1 text-xs text-muted-foreground">Nenhum canal de voz.</p>
           )}
           {voiceRooms.map((room) => {
-            const isActive = room.id === voiceRoomId;
+            const isConnected = room.id === voiceRoomId;
+            const isSelected = room.id === visibleVoiceRoomId;
             return (
               <div key={room.id} className="group flex flex-col rounded-md py-0.5">
                 <Button
@@ -158,22 +164,22 @@ export const RoomSidebar = memo(function RoomSidebar({
                   onClick={() => onSelectVoiceRoom(room)}
                   onKeyDown={(event) => focusRoom(event, "voice")}
                   className={`flex w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                    isActive
+                    isSelected
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                   }`}
                 >
                   <Volume2 className="h-4 w-4 shrink-0 opacity-70" />
                   <span className="truncate">{room.name}</span>
-                  {isActive && voiceStatus === "connecting" && (
+                  {isConnected && voiceStatus === "connecting" && (
                     <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                       conectando…
                     </span>
                   )}
                 </Button>
 
-                {isActive && voiceStatus === "connected" && voiceParticipants.length > 0 && (
-                  <ul className="mb-1 ml-8 space-y-1">
+                {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 && (
+                  <ul className="mb-1 ml-8 mt-1.5 space-y-2">
                     {voiceParticipants.map((name) => {
                       const isSpeaking = speakingNames.includes(name);
                       const isMuted =
@@ -182,63 +188,46 @@ export const RoomSidebar = memo(function RoomSidebar({
                         name === username
                           ? screenShareEnabled
                           : screenShares.some((share) => share.name === name);
+                      const isLocalMuted = name !== username && volumes[name] === 0;
+
+                      const row = (
+                        <span className="flex items-center gap-1.5 truncate">
+                          <span
+                            className={`inline-flex shrink-0 rounded-full p-0.5 ${
+                              isSpeaking ? "bg-primary" : "bg-transparent"
+                            }`}
+                          >
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
+                              {initials(name)}
+                            </span>
+                          </span>
+                          <span className="truncate">{name}</span>
+                          {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
+                          {isStreaming && <MonitorUp className="h-3 w-3 shrink-0 text-primary" />}
+                          {isLocalMuted && (
+                            <VolumeX className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          )}
+                        </span>
+                      );
 
                       return (
                         <li key={name} className="text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1.5 truncate">
-                            <span
-                              className={`inline-flex shrink-0 rounded-full p-0.5 ${
-                                isSpeaking ? "bg-primary" : "bg-transparent"
-                              }`}
+                          {name === username ? (
+                            row
+                          ) : (
+                            <ParticipantMenu
+                              name={name}
+                              volume={volumes[name] ?? 1}
+                              locallyMuted={isLocalMuted}
+                              isMuted={isMuted}
+                              isStreaming={isStreaming}
+                              isSpeaking={isSpeaking}
+                              onSetVolume={(volume) => onSetVolume(name, volume)}
+                              onToggleLocalMute={() => onToggleLocalMute(name)}
                             >
-                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
-                                {initials(name)}
-                              </span>
-                            </span>
-                            <span className="truncate">{name}</span>
-                            {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
-                            {isStreaming && <MonitorUp className="h-3 w-3 shrink-0 text-primary" />}
-                          </span>
-                          {name !== username && (
-                            <div className="flex items-center gap-2 pl-3">
-                              <Slider
-                                value={[volumes[name] ?? 1]}
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                className="h-3 w-24"
-                                aria-label={`Volume de ${name}`}
-                                onValueChange={([volume]) => {
-                                  if (volume !== undefined) onSetVolume(name, volume);
-                                }}
-                              />
-                              <span className="text-[10px] tabular-nums">
-                                {Math.round((volumes[name] ?? 1) * 100)}%
-                              </span>
-                            </div>
+                              {row}
+                            </ParticipantMenu>
                           )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-
-                {isActive && voiceStatus === "connected" && screenShares.length > 0 && (
-                  <ul className="mb-1 ml-8 space-y-0.5">
-                    {screenShares.map((share) => {
-                      const shareMuted =
-                        share.name === username
-                          ? !micEnabled
-                          : mutedParticipants[share.name] === true;
-
-                      return (
-                        <li
-                          key={share.id}
-                          className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"
-                        >
-                          <MonitorUp className="h-3.5 w-3.5 shrink-0 text-primary" />
-                          <span className="truncate">{share.name} está compartilhando</span>
-                          {shareMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
                         </li>
                       );
                     })}
