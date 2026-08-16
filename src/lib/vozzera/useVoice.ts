@@ -5,6 +5,7 @@ import type { VoiceTokenResponse } from "./types";
 import {
   audioCaptureOptions,
   audioInputDevices,
+  muteVolume,
   readMicDeviceId,
   readNoiseFilter,
   writeMicDeviceId,
@@ -35,6 +36,8 @@ export type ScreenShareQuality = {
   frameRate: number;
 };
 
+const loadLiveKitClient = () => import("livekit-client");
+
 export function useVoice() {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -61,6 +64,7 @@ export function useVoice() {
 
   const roomRef = useRef<LiveKitRoom | null>(null);
   const volumesRef = useRef<Record<string, number>>({});
+  const mutedVolumesRef = useRef<Record<string, number>>({});
   const micEnabledRef = useRef(micEnabled);
   const noiseFilterRef = useRef(noiseFilter);
   const selectedDeviceIdRef = useRef(selectedDeviceId);
@@ -90,6 +94,7 @@ export function useVoice() {
       return next;
     });
     setSpeakingNames((prev) => prev.filter((speaker) => speaker !== name));
+    delete mutedVolumesRef.current[name];
   }, []);
 
   const resetRoomState = useCallback(() => {
@@ -100,18 +105,14 @@ export function useVoice() {
     setScreenShareEnabledState(false);
     setScreenShares([]);
     setLocalPreview(null);
+    mutedVolumesRef.current = {};
   }, []);
 
   const refreshMicDevices = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
 
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setMicDevices(audioInputDevices(devices));
-    } catch {
-      // sem permissão de mídia: lista vazia é o esperado até entrar na sala
-      setMicDevices([]);
-    }
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    setMicDevices(audioInputDevices(devices));
   }, []);
 
   const syncLocalMicTrack = useCallback((room: LiveKitRoom) => {
@@ -130,6 +131,30 @@ export function useVoice() {
       participant.setVolume(volume);
     }
   }, []);
+
+  const setLocalMute = useCallback(
+    (name: string, muted: boolean) => {
+      const current = volumesRef.current[name];
+
+      if (muted) {
+        mutedVolumesRef.current[name] = current ?? 1;
+        setParticipantVolume(name, muteVolume(true, undefined));
+        return;
+      }
+
+      const previous = mutedVolumesRef.current[name];
+      delete mutedVolumesRef.current[name];
+      setParticipantVolume(name, muteVolume(false, previous));
+    },
+    [setParticipantVolume],
+  );
+
+  const toggleLocalMute = useCallback(
+    (name: string) => {
+      setLocalMute(name, volumesRef.current[name] !== 0);
+    },
+    [setLocalMute],
+  );
 
   const disconnect = useCallback(async () => {
     await roomRef.current?.disconnect();
@@ -177,8 +202,7 @@ export function useVoice() {
       setActiveRoomId(roomId);
 
       try {
-        // import dinâmico: livekit-client é browser-only e o app faz SSR
-        const { Room, RoomEvent, Track, VideoQuality } = await import("livekit-client");
+        const { Room, RoomEvent, Track, VideoQuality } = await loadLiveKitClient();
 
         const { token, url } = await api<VoiceTokenResponse>("/api/voice/token", {
           method: "POST",
@@ -423,6 +447,8 @@ export function useVoice() {
     setNoiseFilter,
     setSelfMonitor,
     setParticipantVolume,
+    setLocalMute,
+    toggleLocalMute,
     setScreenShare,
   };
 }
