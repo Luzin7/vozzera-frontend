@@ -13,21 +13,17 @@ import {
 } from "./voice";
 
 describe("audioCaptureOptions", () => {
-  it("always enables echo cancellation and auto gain", () => {
-    expect(audioCaptureOptions(true, null)).toMatchObject({
+  it("always enables echo cancellation, noise suppression and auto gain", () => {
+    expect(audioCaptureOptions(null)).toMatchObject({
       echoCancellation: true,
+      noiseSuppression: true,
       autoGainControl: true,
     });
   });
 
-  it("reflects the noise filter choice", () => {
-    expect(audioCaptureOptions(true, null).noiseSuppression).toBe(true);
-    expect(audioCaptureOptions(false, null).noiseSuppression).toBe(false);
-  });
-
   it("adds the device id only when selected", () => {
-    expect(audioCaptureOptions(true, "mic-1").deviceId).toBe("mic-1");
-    expect(audioCaptureOptions(true, null).deviceId).toBeUndefined();
+    expect(audioCaptureOptions("mic-1").deviceId).toBe("mic-1");
+    expect(audioCaptureOptions(null).deviceId).toBeUndefined();
   });
 });
 
