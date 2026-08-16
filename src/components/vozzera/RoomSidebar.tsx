@@ -13,13 +13,13 @@ import {
 import { memo, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
 import type { ScreenShare } from "@/lib/vozzera/useVoice";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
 import type { VoiceStatus } from "@/lib/vozzera/useVoice";
-import { ParticipantMenu } from "./ParticipantMenu";
 
 type Props = {
   rooms: Room[];

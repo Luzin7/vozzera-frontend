@@ -118,13 +118,6 @@ function Index() {
     setScreenShareOpen(true);
   }, [screenShareEnabled, setScreenShare]);
 
-  const handleToggleLocalMute = useCallback(
-    (name: string) => {
-      voice.setLocalMute(name, voice.volumes[name] !== 0);
-    },
-    [voice],
-  );
-
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
@@ -166,7 +159,7 @@ function Index() {
         unread={unread}
         volumes={voice.volumes}
         onSetVolume={voice.setParticipantVolume}
-        onToggleLocalMute={handleToggleLocalMute}
+        onToggleLocalMute={voice.toggleLocalMute}
         screenShareEnabled={voice.screenShareEnabled}
         onToggleScreenShare={handleToggleScreenShare}
         screenShares={voice.screenShares}

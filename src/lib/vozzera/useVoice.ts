@@ -152,6 +152,13 @@ export function useVoice() {
     [setParticipantVolume],
   );
 
+  const toggleLocalMute = useCallback(
+    (name: string) => {
+      setLocalMute(name, volumesRef.current[name] !== 0);
+    },
+    [setLocalMute],
+  );
+
   const disconnect = useCallback(async () => {
     await roomRef.current?.disconnect();
     roomRef.current = null;
@@ -445,6 +452,7 @@ export function useVoice() {
     setSelfMonitor,
     setParticipantVolume,
     setLocalMute,
+    toggleLocalMute,
     setScreenShare,
   };
 }
