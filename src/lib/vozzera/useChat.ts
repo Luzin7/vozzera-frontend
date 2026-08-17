@@ -4,27 +4,40 @@ import {
   ApiError,
   createRoom as createRoomApi,
   deleteMessage as deleteMessageApi,
+  deleteRoom as deleteRoomApi,
+  getCurrentUser,
   listMessages,
   listRooms,
   logout as logoutApi,
   setUnauthorizedHandler,
-} from "./api";
-import { appendMessage, clearUnread, firstTextRoom, incrementUnread, totalUnread } from "./chat";
+  updateRoom as updateRoomApi,
+} from "@/lib/vozzera/api";
+import {
+  appendMessage,
+  clearUnread,
+  firstTextRoom,
+  incrementUnread,
+  removeRoom,
+  totalUnread,
+  upsertRoom,
+} from "@/lib/vozzera/chat";
 import {
   canNotify,
   initialNotificationsEnabled,
   notificationPermissionGranted,
   writeNotificationsEnabled,
-} from "./notifications";
-import type { ChatMessage, OutboundEvent, Room } from "./types";
-import { fromEvent, fromHistory, ZERO_UUID } from "./types";
-import { useAuth } from "./useAuth";
-import { useSocket } from "./useSocket";
+} from "@/lib/vozzera/notifications";
+import { canManageRooms } from "@/lib/vozzera/permissions";
+import type { ChatMessage, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
+import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
+import { useAuth } from "@/lib/vozzera/useAuth";
+import { useSocket } from "@/lib/vozzera/useSocket";
 
 export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [banner, setBanner] = useState<string | null>(null);
@@ -37,6 +50,7 @@ export function useChat() {
   const activeRoomRef = useRef(activeRoom);
   const roomsRef = useRef(rooms);
   const notificationsEnabledRef = useRef(notificationsEnabled);
+  const selectedInitialRoomRef = useRef(false);
 
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
@@ -46,8 +60,10 @@ export function useChat() {
     clearUsername();
     setAuthed(false);
     setRooms([]);
+    setRole(null);
     setActiveRoom(null);
     setMessages({});
+    selectedInitialRoomRef.current = false;
   }, [clearUsername]);
 
   useEffect(() => {
@@ -56,9 +72,12 @@ export function useChat() {
     return () => setUnauthorizedHandler(null);
   }, [endSession]);
 
-  const loadRooms = useCallback(async () => {
+  const loadSession = useCallback(async () => {
     try {
-      setRooms(await listRooms());
+      const [nextRooms, currentUser] = await Promise.all([listRooms(), getCurrentUser()]);
+      setRooms(nextRooms);
+      setUsername(currentUser.username);
+      setRole(currentUser.role);
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
@@ -67,22 +86,42 @@ export function useChat() {
 
       setBanner("Não consegui falar com o servidor.");
     }
-  }, []);
+  }, [setUsername]);
 
   useEffect(() => {
-    void loadRooms();
-  }, [loadRooms]);
+    void loadSession();
+  }, [loadSession]);
 
-  const handleEvent = useCallback((event: OutboundEvent) => {
-    if (event.type === "error") {
-      setBanner(event.error ?? "Erro no servidor.");
-      return;
-    }
+  const removeRoomLocally = useCallback((roomId: string) => {
+    setRooms((prev) => prev.filter((room) => room.id !== roomId));
+    setMessages((prev) => removeRoom(prev, roomId));
+    setUnread((prev) => removeRoom(prev, roomId));
+    setActiveRoom((current) => (current?.id === roomId ? null : current));
+  }, []);
 
-    if (event.type !== "message" || event.room_id === ZERO_UUID) {
-      return;
-    }
+  const handleRoomEvent = useCallback(
+    (event: Extract<OutboundEvent, { type: "room" }>) => {
+      if (event.action === "deleted") {
+        removeRoomLocally(event.id);
+        return;
+      }
 
+      const current = roomsRef.current.find((room) => room.id === event.id);
+      const room: Room = {
+        id: event.id,
+        name: event.name,
+        type: event.room_type,
+        created_at: current?.created_at ?? "",
+        updated_at: current?.updated_at ?? null,
+      };
+
+      setRooms((prev) => upsertRoom(prev, room));
+      setActiveRoom((active) => (active?.id === room.id ? { ...active, ...room } : active));
+    },
+    [removeRoomLocally],
+  );
+
+  const handleMessageEvent = useCallback((event: Extract<OutboundEvent, { type: "message" }>) => {
     if (event.action === "deleted") {
       setMessages((prev) => ({
         ...prev,
@@ -128,6 +167,24 @@ export function useChat() {
     }
   }, []);
 
+  const handleEvent = useCallback(
+    (event: OutboundEvent) => {
+      if (event.type === "error") {
+        setBanner(event.error ?? "Erro no servidor.");
+        return;
+      }
+
+      if (event.type === "room") {
+        handleRoomEvent(event);
+        return;
+      }
+
+      if (event.type !== "message" || event.room_id === ZERO_UUID) return;
+      handleMessageEvent(event);
+    },
+    [handleMessageEvent, handleRoomEvent],
+  );
+
   const { status, joinRoom, sendMessage } = useSocket({
     enabled: authed === true,
     onEvent: handleEvent,
@@ -172,11 +229,12 @@ export function useChat() {
   );
 
   useEffect(() => {
-    if (activeRoom || rooms.length === 0) return;
+    if (selectedInitialRoomRef.current || activeRoom || rooms.length === 0) return;
 
     const first = firstTextRoom(rooms);
 
     if (first) {
+      selectedInitialRoomRef.current = true;
       void openRoom(first);
     }
   }, [rooms, activeRoom, openRoom]);
@@ -185,13 +243,27 @@ export function useChat() {
     async (name: string, type: "text" | "voice") => {
       const room = await createRoomApi(name, type);
 
-      setRooms((prev) => [...prev, room]);
+      setRooms((prev) => upsertRoom(prev, room));
 
       if (room.type === "text") {
         void openRoom(room);
       }
     },
     [openRoom],
+  );
+
+  const updateRoom = useCallback(async (roomId: string, name: string) => {
+    const room = await updateRoomApi(roomId, name);
+    setRooms((prev) => upsertRoom(prev, room));
+    setActiveRoom((current) => (current?.id === room.id ? room : current));
+  }, []);
+
+  const deleteRoom = useCallback(
+    async (roomId: string) => {
+      await deleteRoomApi(roomId);
+      removeRoomLocally(roomId);
+    },
+    [removeRoomLocally],
   );
 
   const deleteMessage = useCallback(
@@ -223,9 +295,10 @@ export function useChat() {
     (name: string) => {
       setUsername(name);
       setBanner(null);
-      void loadRooms();
+      selectedInitialRoomRef.current = false;
+      void loadSession();
     },
-    [setUsername, loadRooms],
+    [setUsername, loadSession],
   );
 
   const logout = useCallback(async () => {
@@ -293,6 +366,7 @@ export function useChat() {
     username,
     authed,
     rooms,
+    canManageRooms: canManageRooms(role),
     activeRoom,
     messages,
     banner,
@@ -301,6 +375,8 @@ export function useChat() {
     socketStatus: status,
     openRoom,
     createRoom,
+    updateRoom,
+    deleteRoom,
     deleteMessage,
     logout,
     authenticate,
