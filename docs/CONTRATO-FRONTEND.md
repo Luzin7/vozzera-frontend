@@ -29,11 +29,12 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 
 ```jsonc
 // request
-{ "username": "string", "password": "string", "invite_code": "string" }
-// response 200
+{ "username": "string", "password": "string", "email": "string", "invite_code": "string" }
+// response 201
 { "message": "string", "id": "string" }
 ```
 
+- `400` → payload ou email inválido.
 - `403` → invite code inválido.
 - `409` → username já em uso.
 - Não loga: o front sempre faz `login` em seguida.
