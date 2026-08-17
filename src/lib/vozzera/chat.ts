@@ -1,5 +1,5 @@
-import type { ChatMessage, OutboundEvent, Room } from "./types";
-import { MAX_FRAME_BYTES, outboundFrameSchema } from "./ws-schema";
+import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
+import { MAX_FRAME_BYTES, outboundFrameSchema } from "@/lib/vozzera/ws-schema";
 
 export function appendMessage(
   messages: Record<string, ChatMessage[]>,
@@ -43,6 +43,18 @@ export function totalUnread(unread: Record<string, number>): number {
 
 export function firstTextRoom(rooms: Room[]): Room | undefined {
   return rooms.find((room) => room.type === "text");
+}
+
+export function upsertRoom(rooms: Room[], room: Room): Room[] {
+  if (!rooms.some((current) => current.id === room.id)) return [...rooms, room];
+  return rooms.map((current) => (current.id === room.id ? { ...current, ...room } : current));
+}
+
+export function removeRoom<T>(state: Record<string, T>, roomId: string): Record<string, T> {
+  if (!(roomId in state)) return state;
+  const next = { ...state };
+  delete next[roomId];
+  return next;
 }
 
 export function parseFrame(raw: MessageEvent): OutboundEvent | null {

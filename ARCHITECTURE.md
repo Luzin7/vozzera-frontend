@@ -45,10 +45,11 @@ src/
 
 ## Como o estado flui
 
-1. **Auth** — `useAuth` guarda só o `username` em `localStorage` (exibição). A sessão real é o cookie HttpOnly do backend; não existe `GET /api/me`.
-2. **Bootstrap** — `useChat` chama `listRooms()`; `401` → tela de auth, `200` → abre o WebSocket.
+1. **Auth** — `useAuth` guarda só o `username` em `localStorage` (exibição). A sessão real é o cookie HttpOnly do backend; `GET /api/me` fornece a identidade e a `role` atual.
+2. **Bootstrap** — `useChat` carrega as salas e o usuário atual; `401` → tela de auth, `200` → aplica as permissões e abre o WebSocket.
 3. **Socket** — `useSocket` conecta com backoff exponencial, fila envios antes do `open` e re-envia `join` de todas as salas conhecidas a cada reconexão.
 4. **Mensagens** — chegam do histórico REST ou do WS; `appendMessage` (em `chat.ts`) faz dedup por `id`. Sem otimismo: a mensagem só aparece quando o eco volta.
+5. **Salas** — `mod` e `admin` podem criar, renomear e apagar. Eventos `room:created`, `room:updated` e `room:deleted` mantêm todos os clientes sincronizados sem encerrar o WebSocket.
 
 Nenhuma chamada roda em loader/SSR — o SSR não tem o cookie do usuário. Tudo é client-side.
 

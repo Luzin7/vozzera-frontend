@@ -37,6 +37,7 @@ function Index() {
     username,
     authed,
     rooms,
+    canManageRooms,
     activeRoom,
     messages,
     banner,
@@ -45,6 +46,8 @@ function Index() {
     socketStatus,
     openRoom,
     createRoom,
+    updateRoom,
+    deleteRoom,
     deleteMessage,
     logout,
     authenticate,
@@ -54,7 +57,8 @@ function Index() {
     toggleNotifications,
     sendMessage,
   } = useChat();
-  const [createOpen, setCreateOpen] = useState(false);
+  const [roomDialogOpen, setRoomDialogOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
@@ -100,6 +104,32 @@ function Index() {
     [dismissBanner, voiceActiveRoomId, connect],
   );
 
+  const handleCreateRoom = useCallback(() => {
+    setEditingRoom(null);
+    setRoomDialogOpen(true);
+  }, []);
+
+  const handleEditRoom = useCallback((room: Room) => {
+    setEditingRoom(room);
+    setRoomDialogOpen(true);
+  }, []);
+
+  const handleDeleteRoom = useCallback(
+    async (room: Room) => {
+      try {
+        await deleteRoom(room.id);
+      } catch {
+        showBanner("Não foi possível apagar a sala.");
+      }
+    },
+    [deleteRoom, showBanner],
+  );
+
+  const handleDeleteRoomVoid = useCallback(
+    (room: Room) => void handleDeleteRoom(room),
+    [handleDeleteRoom],
+  );
+
   const handleToggleMic = useCallback(
     () => void setMicEnabled(!micEnabled),
     [micEnabled, setMicEnabled],
@@ -121,6 +151,14 @@ function Index() {
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
+
+  useEffect(() => {
+    if (!voiceActiveRoomId) return;
+    if (rooms.some((room) => room.id === voiceActiveRoomId)) return;
+
+    setVisibleVoiceRoomId(null);
+    void disconnect();
+  }, [rooms, voiceActiveRoomId, disconnect]);
 
   if (authed === null) {
     return (
@@ -146,7 +184,10 @@ function Index() {
         visibleVoiceRoomId={visibleVoiceRoom?.id ?? null}
         onSelectRoom={handleSelectRoom}
         onSelectVoiceRoom={handleSelectVoiceRoom}
-        onCreateRoom={() => setCreateOpen(true)}
+        onCreateRoom={handleCreateRoom}
+        canManageRooms={canManageRooms}
+        onEditRoom={handleEditRoom}
+        onDeleteRoom={handleDeleteRoomVoid}
         onOpenSettings={() => setSettingsOpen(true)}
         username={username}
         status={socketStatus}
@@ -256,7 +297,9 @@ function Index() {
             <div>
               <p className="text-sm font-medium text-foreground">Nenhuma sala de texto ainda</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Crie a primeira no botão + da barra lateral.
+                {canManageRooms
+                  ? "Crie a primeira no botão + da barra lateral."
+                  : "Aguarde um moderador criar uma sala."}
               </p>
             </div>
           </div>
@@ -264,10 +307,13 @@ function Index() {
       </main>
 
       <CreateRoomDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        key={editingRoom?.id ?? "create"}
+        open={roomDialogOpen}
+        onOpenChange={setRoomDialogOpen}
         existingRooms={rooms}
+        room={editingRoom}
         onCreate={createRoom}
+        onUpdate={updateRoom}
       />
 
       <ScreenShareDialog
