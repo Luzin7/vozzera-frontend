@@ -125,6 +125,11 @@ function Index() {
     [deleteRoom, showBanner],
   );
 
+  const handleDeleteRoomVoid = useCallback(
+    (room: Room) => void handleDeleteRoom(room),
+    [handleDeleteRoom],
+  );
+
   const handleToggleMic = useCallback(
     () => void setMicEnabled(!micEnabled),
     [micEnabled, setMicEnabled],
@@ -182,7 +187,7 @@ function Index() {
         onCreateRoom={handleCreateRoom}
         canManageRooms={canManageRooms}
         onEditRoom={handleEditRoom}
-        onDeleteRoom={(room) => void handleDeleteRoom(room)}
+        onDeleteRoom={handleDeleteRoomVoid}
         onOpenSettings={() => setSettingsOpen(true)}
         username={username}
         status={socketStatus}

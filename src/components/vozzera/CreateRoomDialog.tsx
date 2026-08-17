@@ -49,6 +49,11 @@ export function CreateRoomDialog({
     onOpenChange(false);
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) return;
+    close();
+  };
+
   const submit = async () => {
     const clean = name.trim();
 
@@ -70,8 +75,7 @@ export function CreateRoomDialog({
     setError(null);
 
     try {
-      if (room) await onUpdate(room.id, clean);
-      if (!room) await onCreate(clean, type);
+      await (room ? onUpdate(room.id, clean) : onCreate(clean, type));
       close();
     } catch {
       setError("Não foi possível salvar a sala.");
@@ -81,7 +85,7 @@ export function CreateRoomDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? onOpenChange(true) : close())}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{room ? "Editar sala" : "Nova sala"}</DialogTitle>
