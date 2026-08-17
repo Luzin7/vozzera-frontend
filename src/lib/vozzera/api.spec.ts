@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, ApiError, deleteRoom, getCurrentUser, updateRoom, wsUrl } from "@/lib/vozzera/api";
+import {
+  api,
+  ApiError,
+  deleteRoom,
+  getCurrentUser,
+  register,
+  updateRoom,
+  wsUrl,
+} from "@/lib/vozzera/api";
 
 type WindowLike = { window?: { location: { origin: string } } };
 
@@ -53,6 +61,32 @@ describe("api", () => {
     );
 
     await expect(api("/api/rooms/1", { method: "DELETE" })).resolves.toBeUndefined();
+  });
+});
+
+describe("register", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends the required email in the request body", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ message: "ok", id: "u1" }), { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await register("brian", "password", "brian@example.com", "convite");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/register"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          username: "brian",
+          password: "password",
+          email: "brian@example.com",
+          invite_code: "convite",
+        }),
+      }),
+    );
   });
 });
 

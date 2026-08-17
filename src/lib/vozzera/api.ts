@@ -58,8 +58,11 @@ function jsonRequest(method: "POST" | "PATCH", data: unknown): RequestInit {
 export const login = (username: string, password: string) =>
   api<LoginResponse>("/api/login", jsonBody({ username, password }));
 
-export const register = (username: string, password: string, inviteCode: string) =>
-  api<RegisterResponse>("/api/register", jsonBody({ username, password, invite_code: inviteCode }));
+export const register = (username: string, password: string, email: string, inviteCode: string) =>
+  api<RegisterResponse>(
+    "/api/register",
+    jsonBody({ username, password, email, invite_code: inviteCode }),
+  );
 
 export const logout = () => api<void>("/api/logout", { method: "POST" });
 
