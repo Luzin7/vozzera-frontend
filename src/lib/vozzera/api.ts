@@ -1,4 +1,10 @@
-import type { HistoryMessage, LoginResponse, RegisterResponse, Room } from "./types";
+import type {
+  CurrentUser,
+  HistoryMessage,
+  LoginResponse,
+  RegisterResponse,
+  Room,
+} from "@/lib/vozzera/types";
 
 export const API_BASE: string =
   (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8080";
@@ -45,6 +51,10 @@ function jsonBody(data: unknown): RequestInit {
   };
 }
 
+function jsonRequest(method: "POST" | "PATCH", data: unknown): RequestInit {
+  return { ...jsonBody(data), method };
+}
+
 export const login = (username: string, password: string) =>
   api<LoginResponse>("/api/login", jsonBody({ username, password }));
 
@@ -55,8 +65,16 @@ export const logout = () => api<void>("/api/logout", { method: "POST" });
 
 export const listRooms = () => api<Room[]>("/api/rooms");
 
+export const getCurrentUser = () => api<CurrentUser>("/api/me");
+
 export const createRoom = (name: string, type: "text" | "voice") =>
   api<Room>("/api/rooms", jsonBody({ name, type }));
+
+export const updateRoom = (roomId: string, name: string) =>
+  api<Room>(`/api/rooms/${roomId}`, jsonRequest("PATCH", { name }));
+
+export const deleteRoom = (roomId: string) =>
+  api<void>(`/api/rooms/${roomId}`, { method: "DELETE" });
 
 export const listMessages = (roomId: string, limit = 50) =>
   api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`);

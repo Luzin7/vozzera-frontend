@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, ApiError, wsUrl } from "./api";
+import { api, ApiError, deleteRoom, getCurrentUser, updateRoom, wsUrl } from "@/lib/vozzera/api";
 
 type WindowLike = { window?: { location: { origin: string } } };
 
@@ -53,6 +53,48 @@ describe("api", () => {
     );
 
     await expect(api("/api/rooms/1", { method: "DELETE" })).resolves.toBeUndefined();
+  });
+});
+
+describe("room management", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("loads the current user role", async () => {
+    const currentUser = { id: "u1", username: "luan", role: "mod" };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(currentUser), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCurrentUser()).resolves.toEqual(currentUser);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/me"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("renames and deletes rooms with the expected methods", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "r1", name: "novo", type: "text", created_at: "" }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateRoom("r1", "novo");
+    await deleteRoom("r1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("/api/rooms/r1"),
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "novo" }) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("/api/rooms/r1"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 });
 
