@@ -6,6 +6,9 @@ import {
   deleteRoom,
   getCurrentUser,
   register,
+  requestPasswordReset,
+  resetPassword,
+  updateEmail,
   updateRoom,
   wsUrl,
 } from "@/lib/vozzera/api";
@@ -95,11 +98,49 @@ describe("register", () => {
   });
 });
 
+describe("password reset", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("requests a reset email with the given address", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ message: "ok" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestPasswordReset("brian@example.com");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/forgot-password"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "brian@example.com" }),
+      }),
+    );
+  });
+
+  it("resets the password with token and new password", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ message: "ok" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resetPassword("tok123", "newsecret123");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/reset-password"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ token: "tok123", password: "newsecret123" }),
+      }),
+    );
+  });
+});
+
 describe("room management", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("loads the current user role", async () => {
-    const currentUser = { id: "u1", username: "luan", role: "mod" };
+  it("loads the current user role and email", async () => {
+    const currentUser = { id: "u1", username: "luan", role: "mod", email: "luan@example.com" };
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(currentUser), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -107,6 +148,28 @@ describe("room management", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/me"),
       expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("updates the email with a PATCH to /api/me", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: "Email atualizado", email: "novo@example.com" }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updateEmail("novo@example.com")).resolves.toEqual({
+      message: "Email atualizado",
+      email: "novo@example.com",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/me"),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ email: "novo@example.com" }),
+      }),
     );
   });
 

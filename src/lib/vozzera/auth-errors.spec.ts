@@ -13,6 +13,19 @@ describe("authErrorMessageFor", () => {
     expect(authErrorMessageFor(new ApiError(400, "Email inválido"), "register")).toBe(
       "Email inválido.",
     );
+    expect(authErrorMessageFor(new ApiError(400, "Email inválido"), "forgot")).toBe(
+      "Email inválido.",
+    );
+    expect(authErrorMessageFor(new ApiError(400, "Email inválido"), "email")).toBe(
+      "Email inválido.",
+    );
+    expect(authErrorMessageFor(new ApiError(409, "x"), "email")).toBe("Esse email já está em uso.");
+    expect(authErrorMessageFor(new ApiError(400, "Token inválido ou expirado"), "reset")).toBe(
+      "Token inválido ou expirado.",
+    );
+    expect(
+      authErrorMessageFor(new ApiError(400, "Senha deve ter entre 8 e 72 caracteres"), "reset"),
+    ).toBe("Senha deve ter pelo menos 8 caracteres.");
   });
 
   it("falls back to the api message for other ApiErrors", () => {
