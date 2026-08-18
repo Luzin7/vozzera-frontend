@@ -73,7 +73,12 @@ describe("register", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await register("brian", "password", "brian@example.com", "convite");
+    await register({
+      username: "brian",
+      password: "password",
+      email: "brian@example.com",
+      inviteCode: "convite",
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/register"),

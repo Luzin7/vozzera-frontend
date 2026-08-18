@@ -2,6 +2,7 @@ import type {
   CurrentUser,
   HistoryMessage,
   LoginResponse,
+  RegisterRequest,
   RegisterResponse,
   Room,
 } from "@/lib/vozzera/types";
@@ -58,7 +59,7 @@ function jsonRequest(method: "POST" | "PATCH", data: unknown): RequestInit {
 export const login = (username: string, password: string) =>
   api<LoginResponse>("/api/login", jsonBody({ username, password }));
 
-export const register = (username: string, password: string, email: string, inviteCode: string) =>
+export const register = ({ username, password, email, inviteCode }: RegisterRequest) =>
   api<RegisterResponse>(
     "/api/register",
     jsonBody({ username, password, email, invite_code: inviteCode }),

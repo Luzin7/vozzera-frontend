@@ -48,7 +48,12 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
 
     try {
       if (mode === "register") {
-        await register(name, password, email.trim(), inviteCode.trim());
+        await register({
+          username: name,
+          password,
+          email: email.trim(),
+          inviteCode: inviteCode.trim(),
+        });
       }
       const session = await login(name, password);
       onAuthenticated(session.username);
