@@ -7,7 +7,7 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 - Todo `fetch` com `credentials: "include"` (sessão por cookie HttpOnly).
 - Erros HTTP são `text/plain` — ler com `res.text()`, **nunca** `res.json()`.
 - Identidade nunca é enviada pelo front; vem do servidor nas respostas.
-- Não existe `GET /api/me`: a identidade só chega no login. O front guarda só o `username` em `localStorage`, pra exibição (não é credencial).
+- A identidade e a permissão atuais vêm de `GET /api/me`; o `username` no `localStorage` serve apenas para exibição e não é credencial.
 - `POST /api/logout` encerra a sessão no servidor (204). Best-effort: o front limpa o estado local mesmo se a rota falhar.
 - **Sessão morreu** = qualquer `401` em rota autenticada ou o servidor fechar o WebSocket com `code 1005` (revogação/expiração). O front desloga sozinho e volta pro login — sem retry infinito do WS.
 - Base da API: `VITE_API_URL` (default `http://localhost:8080`). Em produção o build é servido pelo Go na mesma origem — deixar vazio. WebSocket deriva da mesma base.
@@ -23,20 +23,47 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 { "message": "string", "id": "string", "username": "string" }
 ```
 
+- `username` aceita **usuário ou email** (até 254 caracteres).
 - `401` → credenciais inválidas.
 
 ### `POST /api/register`
 
 ```jsonc
 // request
-{ "username": "string", "password": "string", "invite_code": "string" }
-// response 200
+{ "username": "string", "password": "string", "email": "string", "invite_code": "string" }
+// response 201
 { "message": "string", "id": "string" }
 ```
 
+- `400` → payload ou email inválido.
 - `403` → invite code inválido.
 - `409` → username já em uso.
 - Não loga: o front sempre faz `login` em seguida.
+
+### `POST /api/forgot-password`
+
+```jsonc
+// request
+{ "email": "string" }
+// response 200
+{ "message": "string" }
+```
+
+- Sem autenticação. Resposta é **sempre 200** quando o email é válido, cadastrado ou não — não vaza quais contas existem. `400` apenas para email inválido.
+- Front: o link "Esqueci minha senha?" na tela de login abre o formulário de email; no sucesso exibe sempre a mensagem genérica ("se o email existir, você receberá um link"), nunca confirma a existência da conta.
+
+### `POST /api/reset-password`
+
+```jsonc
+// request
+{ "token": "string", "password": "string" }
+// response 200
+{ "message": "string" }
+```
+
+- Sem autenticação. Token é de uso único e expira após `PASSWORD_RESET_TTL`; redefinir revoga todas as sessões do usuário.
+- `400` → token inválido/expirado ou senha fora de 8–72 caracteres.
+- Front: rota `/reset?token=...` (link do email) mostra o formulário de nova senha + confirmação; no sucesso volta pro login.
 
 ### `GET /api/rooms`
 
@@ -49,18 +76,57 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 
 - `401` → não autenticado (front mostra a tela de login).
 
+### `GET /api/me`
+
+```jsonc
+// response 200
+{ "id": "string", "username": "string", "role": "user" | "mod" | "admin", "email": "string" }
+```
+
+- `role` controla as ações administrativas da UI; apenas `mod` e `admin` podem criar, editar ou apagar salas.
+- `email` termina em `@legacy.local` quando a conta é legada e ainda não tem email real — o front bloqueia o app até cadastrar um (tela pós-login).
+
+### `PATCH /api/me`
+
+```jsonc
+// request
+{ "email": "string" }
+// response 200
+{ "message": "string", "email": "string" }
+```
+
+- Troca o email da conta autenticada. Usado pela tela bloqueante de email legado e pelas configurações.
+- `400` → email inválido. `409` → email já em uso por outra conta.
+
 ### `POST /api/rooms`
 
 ```jsonc
 // request
 { "name": "string", "type": "text" | "voice" }
-// response 200
-{ "id": "string", "name": "string", "type": "text" | "voice", "created_at": "string" }
+// response 201
+{ "id": "string", "name": "string", "type": "text" | "voice", "created_at": "string", "updated_at": "string" | null }
 ```
+
+- Requer `role` `mod` ou `admin`; `403` para usuários sem permissão.
+
+### `PATCH /api/rooms/{id}`
+
+```jsonc
+// request
+{ "name": "string" }
+// response 200
+{ "id": "string", "name": "string", "type": "text" | "voice", "created_at": "string", "updated_at": "string" | null }
+```
+
+- Requer `role` `mod` ou `admin`.
+- `400` para nome inválido, `403` sem permissão e `404` se a sala não existe.
 
 ### `DELETE /api/rooms/{id}`
 
 Remove uma sala. O front trata qualquer 2xx como sucesso (204 esperado) e limpa a sala do estado local.
+
+- Requer `role` `mod` ou `admin`.
+- `403` sem permissão e `404` se a sala não existe.
 
 ### `POST /api/voice/token`
 
@@ -103,7 +169,7 @@ Endpoint `/ws`, mesma base da API (http→ws, https→wss).
 
 ```jsonc
 {
-  "type": "message" | "presence" | "error",
+  "type": "message" | "presence" | "room" | "error",
   "id": "string",          // sempre presente; ZERO_UUID quando não se aplica
   "room_id": "string",     // idem
   "user_id": "string",     // idem
@@ -114,15 +180,23 @@ Endpoint `/ws`, mesma base da API (http→ws, https→wss).
 }
 ```
 
+Eventos de sala:
+
+```jsonc
+{ "type": "room", "action": "created" | "updated", "id": "string", "name": "string", "room_type": "text" | "voice" }
+{ "type": "room", "action": "deleted", "id": "string" }
+```
+
 Regras:
 
 - Campos zerados (`ZERO_UUID = 00000000-0000-0000-0000-000000000000` e `created_at` zero) são ignorados.
 - O servidor **esquece as salas a cada conexão** — o front re-envia `join` de todas as salas conhecidas no `open`, e refaz isso a cada reconexão.
 - Sem otimismo na UI: a mensagem aparece quando o eco volta (não há `client_msg_id` pra deduplicar).
+- `room:created` e `room:updated` atualizam a lista local sem recarregar. `room:deleted` remove a sala e seu histórico local; a conexão WebSocket permanece aberta.
 - **Revogação/expiração de sessão**: o servidor fecha o WS com `CloseMessage` vazio → no browser `CloseEvent.code === 1005`. O front trata como "sessão morta" (desloga e para de reconectar), distinto de queda de rede/crash (`1006`), que tem retry com backoff.
 
 ## Limitações conhecidas
 
-- **Presença/online, typing, editar/apagar, upload, paginação e voz funcional não existem** no backend — a UI não deve sugerir isso (a barra lateral lista salas de voz como "em breve").
+- **Presença/online, typing, upload e paginação não existem** no backend.
 - Nenhuma privacidade por sala: qualquer logado lê e escreve em qualquer sala — o invite code é a única barreira.
 - Cookie `SameSite=Lax`: em dev cross-origin (front num domínio diferente de `localhost:8080`) o cookie não viaja; auth funciona rodando o front localmente contra o Go, ou com o build servido pelo próprio Go.

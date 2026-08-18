@@ -18,56 +18,81 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Room } from "@/lib/vozzera/types";
+import { MAX_ROOM_NAME_LENGTH, type Room } from "@/lib/vozzera/types";
+
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  existingRooms: Room[];
+  room?: Room | null;
+  onCreate: (name: string, type: "text" | "voice") => Promise<void>;
+  onUpdate: (roomId: string, name: string) => Promise<void>;
+};
 
 export function CreateRoomDialog({
   open,
   onOpenChange,
   existingRooms,
+  room,
   onCreate,
-}: Readonly<{
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  existingRooms: Room[];
-  onCreate: (name: string, type: "text" | "voice") => Promise<void>;
-}>) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState<"text" | "voice">("text");
+  onUpdate,
+}: Readonly<Props>) {
+  const [name, setName] = useState(room?.name ?? "");
+  const [type, setType] = useState<"text" | "voice">(room?.type ?? "text");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const close = () => {
+    setName(room?.name ?? "");
+    setType(room?.type ?? "text");
+    setError(null);
+    onOpenChange(false);
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) return;
+    close();
+  };
+
   const submit = async () => {
     const clean = name.trim();
+
     if (!clean) {
-      setError("Dê um nome pra sala.");
+      setError("Dê um nome para a sala.");
       return;
     }
-    if (existingRooms.some((r) => r.name.toLowerCase() === clean.toLowerCase())) {
+
+    const duplicate = existingRooms.some(
+      (current) => current.id !== room?.id && current.name.toLowerCase() === clean.toLowerCase(),
+    );
+
+    if (duplicate) {
       setError("Já existe uma sala com esse nome.");
       return;
     }
 
     setBusy(true);
     setError(null);
+
     try {
-      await onCreate(clean, type);
-      setName("");
-      setType("text");
-      onOpenChange(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível criar a sala.");
+      await (room ? onUpdate(room.id, clean) : onCreate(clean, type));
+      close();
+    } catch {
+      setError("Não foi possível salvar a sala.");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nova sala</DialogTitle>
+          <DialogTitle>{room ? "Editar sala" : "Nova sala"}</DialogTitle>
           <DialogDescription>
-            Salas de voz podem ser criadas agora, mas só funcionarão quando a voz entrar no ar.
+            {room
+              ? "Altere o nome exibido para todos os membros."
+              : "Escolha um nome e o tipo da nova sala."}
           </DialogDescription>
         </DialogHeader>
 
@@ -77,33 +102,39 @@ export function CreateRoomDialog({
             <Input
               id="room-name"
               value={name}
+              maxLength={MAX_ROOM_NAME_LENGTH}
               placeholder="geral"
-              onChange={(e) => setName(e.target.value)}
+              onChange={(event) => setName(event.target.value)}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="room-type">Tipo</Label>
-            <Select value={type} onValueChange={(v) => setType(v === "voice" ? "voice" : "text")}>
-              <SelectTrigger id="room-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="text">Texto</SelectItem>
-                <SelectItem value="voice">Voz</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {!room && (
+            <div className="space-y-2">
+              <Label htmlFor="room-type">Tipo</Label>
+              <Select
+                value={type}
+                onValueChange={(value) => setType(value === "voice" ? "voice" : "text")}
+              >
+                <SelectTrigger id="room-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Texto</SelectItem>
+                  <SelectItem value="voice">Voz</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={close}>
             Cancelar
           </Button>
-          <Button onClick={submit} disabled={busy}>
-            {busy ? "Criando..." : "Criar sala"}
+          <Button onClick={() => void submit()} disabled={busy}>
+            {busy ? "Salvando..." : room ? "Salvar alterações" : "Criar sala"}
           </Button>
         </DialogFooter>
       </DialogContent>

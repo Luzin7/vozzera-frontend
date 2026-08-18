@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
+import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
@@ -11,6 +12,7 @@ import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
 import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
 import { VoiceCallView } from "@/components/vozzera/VoiceCallView";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
+import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
@@ -35,8 +37,10 @@ export const Route = createFileRoute("/")({
 function Index() {
   const {
     username,
+    email,
     authed,
     rooms,
+    canManageRooms,
     activeRoom,
     messages,
     banner,
@@ -45,16 +49,20 @@ function Index() {
     socketStatus,
     openRoom,
     createRoom,
+    updateRoom,
+    deleteRoom,
     deleteMessage,
     logout,
     authenticate,
     dismissBanner,
     showBanner,
+    updateEmail,
     notificationsEnabled,
     toggleNotifications,
     sendMessage,
   } = useChat();
-  const [createOpen, setCreateOpen] = useState(false);
+  const [roomDialogOpen, setRoomDialogOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
@@ -100,6 +108,32 @@ function Index() {
     [dismissBanner, voiceActiveRoomId, connect],
   );
 
+  const handleCreateRoom = useCallback(() => {
+    setEditingRoom(null);
+    setRoomDialogOpen(true);
+  }, []);
+
+  const handleEditRoom = useCallback((room: Room) => {
+    setEditingRoom(room);
+    setRoomDialogOpen(true);
+  }, []);
+
+  const handleDeleteRoom = useCallback(
+    async (room: Room) => {
+      try {
+        await deleteRoom(room.id);
+      } catch {
+        showBanner("Não foi possível apagar a sala.");
+      }
+    },
+    [deleteRoom, showBanner],
+  );
+
+  const handleDeleteRoomVoid = useCallback(
+    (room: Room) => void handleDeleteRoom(room),
+    [handleDeleteRoom],
+  );
+
   const handleToggleMic = useCallback(
     () => void setMicEnabled(!micEnabled),
     [micEnabled, setMicEnabled],
@@ -118,9 +152,22 @@ function Index() {
     setScreenShareOpen(true);
   }, [screenShareEnabled, setScreenShare]);
 
+  const handleLogout = useCallback(() => {
+    void disconnect();
+    void logout();
+  }, [disconnect, logout]);
+
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
+
+  useEffect(() => {
+    if (!voiceActiveRoomId) return;
+    if (rooms.some((room) => room.id === voiceActiveRoomId)) return;
+
+    setVisibleVoiceRoomId(null);
+    void disconnect();
+  }, [rooms, voiceActiveRoomId, disconnect]);
 
   if (authed === null) {
     return (
@@ -132,6 +179,10 @@ function Index() {
 
   if (!authed) {
     return <AuthForm onAuthenticated={authenticate} />;
+  }
+
+  if (requiresEmailSetup(email)) {
+    return <EmailRequiredScreen onUpdateEmail={updateEmail} onLogout={handleLogout} />;
   }
 
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
@@ -146,7 +197,10 @@ function Index() {
         visibleVoiceRoomId={visibleVoiceRoom?.id ?? null}
         onSelectRoom={handleSelectRoom}
         onSelectVoiceRoom={handleSelectVoiceRoom}
-        onCreateRoom={() => setCreateOpen(true)}
+        onCreateRoom={handleCreateRoom}
+        canManageRooms={canManageRooms}
+        onEditRoom={handleEditRoom}
+        onDeleteRoom={handleDeleteRoomVoid}
         onOpenSettings={() => setSettingsOpen(true)}
         username={username}
         status={socketStatus}
@@ -256,7 +310,9 @@ function Index() {
             <div>
               <p className="text-sm font-medium text-foreground">Nenhuma sala de texto ainda</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Crie a primeira no botão + da barra lateral.
+                {canManageRooms
+                  ? "Crie a primeira no botão + da barra lateral."
+                  : "Aguarde um moderador criar uma sala."}
               </p>
             </div>
           </div>
@@ -264,10 +320,13 @@ function Index() {
       </main>
 
       <CreateRoomDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        key={editingRoom?.id ?? "create"}
+        open={roomDialogOpen}
+        onOpenChange={setRoomDialogOpen}
         existingRooms={rooms}
+        room={editingRoom}
         onCreate={createRoom}
+        onUpdate={updateRoom}
       />
 
       <ScreenShareDialog
@@ -280,6 +339,7 @@ function Index() {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         username={username}
+        email={email}
         micDevices={voice.micDevices}
         selectedDeviceId={voice.selectedDeviceId}
         noiseFilter={voice.noiseFilter}
@@ -288,10 +348,8 @@ function Index() {
         onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
         onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
         onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
-        onLogout={() => {
-          void voice.disconnect();
-          void logout();
-        }}
+        onUpdateEmail={updateEmail}
+        onLogout={handleLogout}
       />
     </div>
   );

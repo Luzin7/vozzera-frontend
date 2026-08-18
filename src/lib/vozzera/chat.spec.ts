@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { appendMessage, backoffDelay, firstTextRoom, nextRoomIndex, parseFrame } from "./chat";
-import type { ChatMessage, Room } from "./types";
-import { MAX_FRAME_BYTES } from "./ws-schema";
+import {
+  appendMessage,
+  backoffDelay,
+  firstTextRoom,
+  nextRoomIndex,
+  parseFrame,
+  removeRoom,
+  upsertRoom,
+} from "@/lib/vozzera/chat";
+import type { ChatMessage, Room } from "@/lib/vozzera/types";
+import { MAX_FRAME_BYTES } from "@/lib/vozzera/ws-schema";
 
 function message(id: string, roomId = "r1"): ChatMessage {
   return {
@@ -75,6 +83,23 @@ describe("nextRoomIndex", () => {
   });
 });
 
+describe("room state", () => {
+  const room: Room = { id: "r1", name: "geral", type: "text", created_at: "" };
+
+  it("adds and updates a room without duplicating it", () => {
+    expect(upsertRoom([], room)).toEqual([room]);
+    expect(upsertRoom([room], { ...room, name: "bate-papo" })).toEqual([
+      { ...room, name: "bate-papo" },
+    ]);
+  });
+
+  it("removes the state owned by a deleted room", () => {
+    expect(removeRoom({ r1: [message("a")], r2: [message("b", "r2")] }, "r1")).toEqual({
+      r2: [message("b", "r2")],
+    });
+  });
+});
+
 describe("parseFrame", () => {
   it("parses a valid json frame", () => {
     const raw = {
@@ -90,6 +115,18 @@ describe("parseFrame", () => {
     const event = parseFrame(raw);
     expect(event).not.toBeNull();
     expect(event).toMatchObject({ action: "updated", content: "oi editado" });
+  });
+
+  it("parses room lifecycle frames", () => {
+    const updated = {
+      data: '{"type":"room","action":"updated","id":"r1","name":"geral","room_type":"text"}',
+    } as MessageEvent;
+    const deleted = {
+      data: '{"type":"room","action":"deleted","id":"r1"}',
+    } as MessageEvent;
+
+    expect(parseFrame(updated)).toMatchObject({ type: "room", action: "updated" });
+    expect(parseFrame(deleted)).toMatchObject({ type: "room", action: "deleted" });
   });
 
   it("returns null for invalid json", () => {

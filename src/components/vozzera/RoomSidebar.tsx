@@ -2,17 +2,36 @@ import {
   Hash,
   Mic,
   MicOff,
+  MoreHorizontal,
   MonitorUp,
   MonitorX,
   PhoneOff,
   Plus,
+  Pencil,
   Settings2,
+  Trash2,
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { memo, type KeyboardEvent } from "react";
+import { memo, type KeyboardEvent, useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex } from "@/lib/vozzera/chat";
@@ -28,6 +47,9 @@ type Props = {
   onSelectRoom: (room: Room) => void;
   onSelectVoiceRoom: (room: Room) => void;
   onCreateRoom: () => void;
+  canManageRooms: boolean;
+  onEditRoom: (room: Room) => void;
+  onDeleteRoom: (room: Room) => void;
   onOpenSettings: () => void;
   username: string | null;
   status: SocketStatus;
@@ -60,6 +82,41 @@ const statusColor: Record<SocketStatus, string> = {
   closed: "bg-destructive",
 };
 
+function RoomActions({
+  room,
+  onEdit,
+  onDelete,
+}: Readonly<{
+  room: Room;
+  onEdit: () => void;
+  onDelete: () => void;
+}>) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="absolute right-1 top-1/2 z-10 h-7 w-7 shrink-0 -translate-y-1/2 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+          <span className="sr-only">Ações da sala {room.name}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil className="h-4 w-4" />
+          Editar sala
+        </DropdownMenuItem>
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+          <Trash2 className="h-4 w-4" />
+          Apagar sala
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export const RoomSidebar = memo(function RoomSidebar({
   rooms,
   activeRoomId,
@@ -67,6 +124,9 @@ export const RoomSidebar = memo(function RoomSidebar({
   onSelectRoom,
   onSelectVoiceRoom,
   onCreateRoom,
+  canManageRooms,
+  onEditRoom,
+  onDeleteRoom,
   onOpenSettings,
   username,
   status,
@@ -86,6 +146,7 @@ export const RoomSidebar = memo(function RoomSidebar({
   mutedParticipants,
   speakingNames,
 }: Readonly<Props>) {
+  const [deleteTarget, setDeleteTarget] = useState<Room | null>(null);
   const textRooms = rooms.filter((r) => r.type === "text");
   const voiceRooms = rooms.filter((r) => r.type === "voice");
   const currentVoiceRoom = voiceRooms.find((r) => r.id === voiceRoomId) ?? null;
@@ -107,10 +168,12 @@ export const RoomSidebar = memo(function RoomSidebar({
     <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-sidebar">
       <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
         <span className="font-semibold tracking-tight text-sidebar-foreground">Vozzera</span>
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCreateRoom}>
-          <Plus className="h-4 w-4" />
-          <span className="sr-only">Nova sala</span>
-        </Button>
+        {canManageRooms && (
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCreateRoom}>
+            <Plus className="h-4 w-4" />
+            <span className="sr-only">Nova sala</span>
+          </Button>
+        )}
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto p-2">
@@ -122,13 +185,13 @@ export const RoomSidebar = memo(function RoomSidebar({
             <p className="px-2 py-1 text-xs text-muted-foreground">Nenhuma sala ainda.</p>
           )}
           {textRooms.map((room) => (
-            <div key={room.id} className="group flex items-center rounded-md py-0.5">
+            <div key={room.id} className="group relative rounded-md py-0.5">
               <Button
                 variant="ghost"
                 data-room-nav="text"
                 onClick={() => onSelectRoom(room)}
                 onKeyDown={(event) => focusRoom(event, "text")}
-                className={`flex justify-start min-w-0 flex-1 gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                className={`flex w-full min-w-0 justify-start gap-2 rounded-md py-1.5 pl-2 pr-10 text-sm transition-colors ${
                   room.id === activeRoomId
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -142,6 +205,13 @@ export const RoomSidebar = memo(function RoomSidebar({
                   </span>
                 ) : null}
               </Button>
+              {canManageRooms && (
+                <RoomActions
+                  room={room}
+                  onEdit={() => onEditRoom(room)}
+                  onDelete={() => setDeleteTarget(room)}
+                />
+              )}
             </div>
           ))}
         </section>
@@ -158,25 +228,34 @@ export const RoomSidebar = memo(function RoomSidebar({
             const isSelected = room.id === visibleVoiceRoomId;
             return (
               <div key={room.id} className="group flex flex-col rounded-md py-0.5">
-                <Button
-                  variant="ghost"
-                  data-room-nav="voice"
-                  onClick={() => onSelectVoiceRoom(room)}
-                  onKeyDown={(event) => focusRoom(event, "voice")}
-                  className={`flex w-full min-w-0 items-center justify-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                    isSelected
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-                  }`}
-                >
-                  <Volume2 className="h-4 w-4 shrink-0 opacity-70" />
-                  <span className="truncate">{room.name}</span>
-                  {isConnected && voiceStatus === "connecting" && (
-                    <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                      conectando…
-                    </span>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    data-room-nav="voice"
+                    onClick={() => onSelectVoiceRoom(room)}
+                    onKeyDown={(event) => focusRoom(event, "voice")}
+                    className={`flex w-full min-w-0 items-center justify-start gap-2 rounded-md py-1.5 pl-2 pr-10 text-sm transition-colors ${
+                      isSelected
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                    }`}
+                  >
+                    <Volume2 className="h-4 w-4 shrink-0 opacity-70" />
+                    <span className="truncate">{room.name}</span>
+                    {isConnected && voiceStatus === "connecting" && (
+                      <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        conectando…
+                      </span>
+                    )}
+                  </Button>
+                  {canManageRooms && (
+                    <RoomActions
+                      room={room}
+                      onEdit={() => onEditRoom(room)}
+                      onDelete={() => setDeleteTarget(room)}
+                    />
                   )}
-                </Button>
+                </div>
 
                 {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 && (
                   <ul className="mb-1 ml-8 mt-1.5 space-y-2">
@@ -301,6 +380,33 @@ export const RoomSidebar = memo(function RoomSidebar({
           </Button>
         </div>
       </div>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar sala?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A sala {deleteTarget?.name} e todo o histórico dela serão apagados permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!deleteTarget) return;
+                onDeleteRoom(deleteTarget);
+                setDeleteTarget(null);
+              }}
+            >
+              Apagar sala
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 });

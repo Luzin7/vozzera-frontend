@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MAX_MESSAGE_LENGTH } from "./types";
+import { MAX_MESSAGE_LENGTH } from "@/lib/vozzera/types";
 
 export const MAX_FRAME_BYTES = MAX_MESSAGE_LENGTH + 4096;
 
@@ -43,7 +43,23 @@ const error = z.object({
   error: z.string(),
 });
 
+const roomChanged = z.object({
+  type: z.literal("room"),
+  action: z.union([z.literal("created"), z.literal("updated")]),
+  id: z.string(),
+  name: z.string(),
+  room_type: z.union([z.literal("text"), z.literal("voice")]),
+});
+
+const roomDeleted = z.object({
+  type: z.literal("room"),
+  action: z.literal("deleted"),
+  id: z.string(),
+});
+
 export const outboundFrameSchema = z.union([
+  roomChanged,
+  roomDeleted,
   messageCreated,
   messageUpdated,
   messageDeleted,

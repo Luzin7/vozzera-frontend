@@ -3,27 +3,51 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ForgotPasswordForm } from "@/components/vozzera/ForgotPasswordForm";
 import { login, register } from "@/lib/vozzera/api";
 import { authErrorMessageFor } from "@/lib/vozzera/auth-errors";
-import { MAX_USERNAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/vozzera/types";
+import { registrationEmailErrorFor } from "@/lib/vozzera/auth-validation";
+import {
+  MAX_LOGIN_IDENTIFIER_LENGTH,
+  MAX_USERNAME_LENGTH,
+  MIN_PASSWORD_LENGTH,
+} from "@/lib/vozzera/types";
 
-type Mode = "login" | "register";
+type Mode = "login" | "register" | "forgot";
+
+function identifierLabelFor(mode: Mode): string {
+  if (mode === "login") return "Usuário ou email";
+  return "Usuário";
+}
+
+function identifierMaxLengthFor(mode: Mode): number {
+  if (mode === "login") return MAX_LOGIN_IDENTIFIER_LENGTH;
+  return MAX_USERNAME_LENGTH;
+}
 
 export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: string) => void }) {
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const validate = () => {
     const name = username.trim();
-    if (!name) return "Escolha um nome de usuário.";
-    if (name.length > MAX_USERNAME_LENGTH)
-      return `Nome de usuário deve ter no máximo ${MAX_USERNAME_LENGTH} caracteres.`;
+    if (!name)
+      return mode === "login" ? "Informe usuário ou email." : "Escolha um nome de usuário.";
+    if (name.length > identifierMaxLengthFor(mode))
+      return mode === "login"
+        ? `Usuário ou email deve ter no máximo ${MAX_LOGIN_IDENTIFIER_LENGTH} caracteres.`
+        : `Nome de usuário deve ter no máximo ${MAX_USERNAME_LENGTH} caracteres.`;
     if (password.length < MIN_PASSWORD_LENGTH)
       return `Senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+    if (mode === "register") {
+      const emailProblem = registrationEmailErrorFor(email);
+      if (emailProblem) return emailProblem;
+    }
     if (mode === "register" && !inviteCode.trim()) return "Informe o código de convite.";
     return null;
   };
@@ -42,12 +66,17 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
 
     try {
       if (mode === "register") {
-        await register(name, password, inviteCode.trim());
+        await register({
+          username: name,
+          password,
+          email: email.trim(),
+          inviteCode: inviteCode.trim(),
+        });
       }
       const session = await login(name, password);
       onAuthenticated(session.username);
     } catch (err) {
-      setError(authErrorMessageFor(err));
+      setError(authErrorMessageFor(err, mode));
     } finally {
       setBusy(false);
     }
@@ -67,70 +96,102 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
         </div>
 
         <div className="rounded-xl border border-border bg-card p-6">
-          <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-            {(["login", "register"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setError(null);
-                }}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  mode === m
-                    ? "bg-background text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {m === "login" ? "Entrar" : "Criar conta"}
-              </button>
-            ))}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Usuário</Label>
-              <Input
-                id="username"
-                value={username}
-                maxLength={MAX_USERNAME_LENGTH}
-                autoComplete="username"
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-
-            {mode === "register" && (
-              <div className="space-y-2">
-                <Label htmlFor="invite">Código de convite</Label>
-                <Input
-                  id="invite"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                />
+          {mode === "forgot" ? (
+            <ForgotPasswordForm onBack={() => setMode("login")} />
+          ) : (
+            <>
+              <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+                {(["login", "register"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setMode(m);
+                      setError(null);
+                    }}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      mode === m
+                        ? "bg-background text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m === "login" ? "Entrar" : "Criar conta"}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {error && (
-              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </p>
-            )}
+              <form noValidate onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">{identifierLabelFor(mode)}</Label>
+                  <Input
+                    id="username"
+                    name="username"
+                    value={username}
+                    maxLength={identifierMaxLengthFor(mode)}
+                    autoComplete="username"
+                    onChange={(e) => setUsername(e.target.value)}
+                  />
+                </div>
 
-            <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta e entrar"}
-            </Button>
-          </form>
+                {mode === "register" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={email}
+                      autoComplete="email"
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    value={password}
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+
+                {mode === "register" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="invite">Código de convite</Label>
+                    <Input
+                      id="invite"
+                      name="inviteCode"
+                      value={inviteCode}
+                      onChange={(event) => setInviteCode(event.target.value)}
+                    />
+                  </div>
+                )}
+
+                {error && (
+                  <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {error}
+                  </p>
+                )}
+
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta e entrar"}
+                </Button>
+                {mode === "login" && (
+                  <button
+                    type="button"
+                    onClick={() => setMode("forgot")}
+                    className="block w-full text-center text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Esqueci minha senha
+                  </button>
+                )}
+              </form>
+            </>
+          )}
         </div>
       </div>
     </div>

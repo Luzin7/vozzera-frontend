@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { api, ApiError, wsUrl } from "./api";
+import {
+  api,
+  ApiError,
+  deleteRoom,
+  getCurrentUser,
+  register,
+  requestPasswordReset,
+  resetPassword,
+  updateEmail,
+  updateRoom,
+  wsUrl,
+} from "@/lib/vozzera/api";
 
 type WindowLike = { window?: { location: { origin: string } } };
 
@@ -53,6 +64,139 @@ describe("api", () => {
     );
 
     await expect(api("/api/rooms/1", { method: "DELETE" })).resolves.toBeUndefined();
+  });
+});
+
+describe("register", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends the required email in the request body", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ message: "ok", id: "u1" }), { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await register({
+      username: "brian",
+      password: "password",
+      email: "brian@example.com",
+      inviteCode: "convite",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/register"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          username: "brian",
+          password: "password",
+          email: "brian@example.com",
+          invite_code: "convite",
+        }),
+      }),
+    );
+  });
+});
+
+describe("password reset", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("requests a reset email with the given address", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ message: "ok" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestPasswordReset("brian@example.com");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/forgot-password"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "brian@example.com" }),
+      }),
+    );
+  });
+
+  it("resets the password with token and new password", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ message: "ok" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resetPassword("tok123", "newsecret123");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/reset-password"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ token: "tok123", password: "newsecret123" }),
+      }),
+    );
+  });
+});
+
+describe("room management", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("loads the current user role and email", async () => {
+    const currentUser = { id: "u1", username: "luan", role: "mod", email: "luan@example.com" };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(currentUser), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCurrentUser()).resolves.toEqual(currentUser);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/me"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("updates the email with a PATCH to /api/me", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: "Email atualizado", email: "novo@example.com" }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updateEmail("novo@example.com")).resolves.toEqual({
+      message: "Email atualizado",
+      email: "novo@example.com",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/me"),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ email: "novo@example.com" }),
+      }),
+    );
+  });
+
+  it("renames and deletes rooms with the expected methods", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "r1", name: "novo", type: "text", created_at: "" }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateRoom("r1", "novo");
+    await deleteRoom("r1");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("/api/rooms/r1"),
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "novo" }) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("/api/rooms/r1"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 });
 

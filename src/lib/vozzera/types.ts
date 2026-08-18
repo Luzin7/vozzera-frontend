@@ -3,6 +3,21 @@ export type Room = {
   name: string;
   type: "text" | "voice";
   created_at: string;
+  updated_at?: string | null;
+};
+
+export type UserRole = "user" | "mod" | "admin";
+
+export type CurrentUser = {
+  id: string;
+  username: string;
+  role: UserRole;
+  email: string;
+};
+
+export type UpdateEmailResponse = {
+  message: string;
+  email: string;
 };
 
 export type HistoryMessage = {
@@ -25,6 +40,13 @@ export type RegisterResponse = {
   id: string;
 };
 
+export type RegisterRequest = {
+  username: string;
+  password: string;
+  email: string;
+  inviteCode: string;
+};
+
 export type MessageAction = "created" | "updated" | "deleted";
 
 export type InboundEvent =
@@ -39,6 +61,18 @@ export type InboundEvent =
     };
 
 export type OutboundEvent =
+  | {
+      type: "room";
+      action: "created" | "updated";
+      id: string;
+      name: string;
+      room_type: "text" | "voice";
+    }
+  | {
+      type: "room";
+      action: "deleted";
+      id: string;
+    }
   | {
       type: "message";
       action: "created";
@@ -120,5 +154,7 @@ export const fromEvent = (
 });
 
 export const MAX_MESSAGE_LENGTH = 2000;
+export const MAX_ROOM_NAME_LENGTH = 100;
 export const MAX_USERNAME_LENGTH = 50;
-export const MIN_PASSWORD_LENGTH = 6;
+export const MAX_LOGIN_IDENTIFIER_LENGTH = 254;
+export const MIN_PASSWORD_LENGTH = 8;
