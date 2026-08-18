@@ -5,6 +5,7 @@ import type {
   RegisterRequest,
   RegisterResponse,
   Room,
+  UpdateEmailResponse,
 } from "@/lib/vozzera/types";
 
 export const API_BASE: string =
@@ -65,11 +66,20 @@ export const register = ({ username, password, email, inviteCode }: RegisterRequ
     jsonBody({ username, password, email, invite_code: inviteCode }),
   );
 
+export const requestPasswordReset = (email: string) =>
+  api("/api/forgot-password", jsonBody({ email }));
+
+export const resetPassword = (token: string, password: string) =>
+  api("/api/reset-password", jsonBody({ token, password }));
+
 export const logout = () => api<void>("/api/logout", { method: "POST" });
 
 export const listRooms = () => api<Room[]>("/api/rooms");
 
 export const getCurrentUser = () => api<CurrentUser>("/api/me");
+
+export const updateEmail = (email: string) =>
+  api<UpdateEmailResponse>("/api/me", jsonRequest("PATCH", { email }));
 
 export const createRoom = (name: string, type: "text" | "voice") =>
   api<Room>("/api/rooms", jsonBody({ name, type }));

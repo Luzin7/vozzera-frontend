@@ -12,6 +12,12 @@ export type CurrentUser = {
   id: string;
   username: string;
   role: UserRole;
+  email: string;
+};
+
+export type UpdateEmailResponse = {
+  message: string;
+  email: string;
 };
 
 export type HistoryMessage = {
@@ -150,4 +156,5 @@ export const fromEvent = (
 export const MAX_MESSAGE_LENGTH = 2000;
 export const MAX_ROOM_NAME_LENGTH = 100;
 export const MAX_USERNAME_LENGTH = 50;
-export const MIN_PASSWORD_LENGTH = 6;
+export const MAX_LOGIN_IDENTIFIER_LENGTH = 254;
+export const MIN_PASSWORD_LENGTH = 8;

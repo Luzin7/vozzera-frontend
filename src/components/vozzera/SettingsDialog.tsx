@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { MicDevice } from "@/lib/vozzera/voice";
+import { EmailChangeForm } from "./EmailChangeForm";
 import { MicSettings } from "./MicSettings";
 
 type Section = "microphone" | "account";
@@ -12,6 +13,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   username: string | null;
+  email: string | null;
   micDevices: MicDevice[];
   selectedDeviceId: string | null;
   noiseFilter: boolean;
@@ -20,6 +22,7 @@ type Props = {
   onSelectDevice: (deviceId: string) => void;
   onToggleNoiseFilter: (enabled: boolean) => void;
   onToggleSelfMonitor: (enabled: boolean) => void;
+  onUpdateEmail: (email: string) => Promise<string>;
   onLogout: () => void;
 };
 
@@ -32,6 +35,7 @@ export function SettingsDialog({
   open,
   onOpenChange,
   username,
+  email,
   micDevices,
   selectedDeviceId,
   noiseFilter,
@@ -40,6 +44,7 @@ export function SettingsDialog({
   onSelectDevice,
   onToggleNoiseFilter,
   onToggleSelfMonitor,
+  onUpdateEmail,
   onLogout,
 }: Readonly<Props>) {
   const [section, setSection] = useState<Section>("microphone");
@@ -89,8 +94,10 @@ export function SettingsDialog({
               <div className="mb-6">
                 <p className="text-sm text-muted-foreground">Entrando como</p>
                 <p className="text-sm font-medium text-foreground">{username ?? "você"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{email ?? "sem email"}</p>
               </div>
-              <Button variant="destructive" className="mt-auto self-start" onClick={onLogout}>
+              <EmailChangeForm onSubmit={onUpdateEmail} />
+              <Button variant="destructive" className="mt-4 self-start" onClick={onLogout}>
                 <LogOut className="h-4 w-4" />
                 Sair
               </Button>

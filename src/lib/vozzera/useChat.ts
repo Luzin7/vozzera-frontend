@@ -10,6 +10,7 @@ import {
   listRooms,
   logout as logoutApi,
   setUnauthorizedHandler,
+  updateEmail as updateEmailApi,
   updateRoom as updateRoomApi,
 } from "@/lib/vozzera/api";
 import {
@@ -38,6 +39,7 @@ export function useChat() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [banner, setBanner] = useState<string | null>(null);
@@ -61,6 +63,7 @@ export function useChat() {
     setAuthed(false);
     setRooms([]);
     setRole(null);
+    setEmail(null);
     setActiveRoom(null);
     setMessages({});
     selectedInitialRoomRef.current = false;
@@ -78,6 +81,7 @@ export function useChat() {
       setRooms(nextRooms);
       setUsername(currentUser.username);
       setRole(currentUser.role);
+      setEmail(currentUser.email);
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
@@ -315,6 +319,12 @@ export function useChat() {
 
   const showBanner = useCallback((message: string) => setBanner(message), []);
 
+  const updateEmail = useCallback(async (next: string) => {
+    const updated = await updateEmailApi(next);
+    setEmail(updated.email);
+    return updated.email;
+  }, []);
+
   const toggleNotifications = useCallback(async () => {
     if (typeof Notification === "undefined") return;
 
@@ -364,6 +374,7 @@ export function useChat() {
 
   return {
     username,
+    email,
     authed,
     rooms,
     canManageRooms: canManageRooms(role),
@@ -382,6 +393,7 @@ export function useChat() {
     authenticate,
     dismissBanner,
     showBanner,
+    updateEmail,
     notificationsEnabled,
     toggleNotifications,
     sendMessage,
