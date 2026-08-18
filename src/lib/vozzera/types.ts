@@ -34,6 +34,13 @@ export type RegisterResponse = {
   id: string;
 };
 
+export type RegisterRequest = {
+  username: string;
+  password: string;
+  email: string;
+  inviteCode: string;
+};
+
 export type MessageAction = "created" | "updated" | "deleted";
 
 export type InboundEvent =

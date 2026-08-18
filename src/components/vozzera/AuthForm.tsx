@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login, register } from "@/lib/vozzera/api";
 import { authErrorMessageFor } from "@/lib/vozzera/auth-errors";
+import { registrationEmailErrorFor } from "@/lib/vozzera/auth-validation";
 import { MAX_USERNAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/vozzera/types";
 
 type Mode = "login" | "register";
@@ -13,6 +14,7 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -24,6 +26,10 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
       return `Nome de usuário deve ter no máximo ${MAX_USERNAME_LENGTH} caracteres.`;
     if (password.length < MIN_PASSWORD_LENGTH)
       return `Senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+    if (mode === "register") {
+      const emailProblem = registrationEmailErrorFor(email);
+      if (emailProblem) return emailProblem;
+    }
     if (mode === "register" && !inviteCode.trim()) return "Informe o código de convite.";
     return null;
   };
@@ -42,12 +48,17 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
 
     try {
       if (mode === "register") {
-        await register(name, password, inviteCode.trim());
+        await register({
+          username: name,
+          password,
+          email: email.trim(),
+          inviteCode: inviteCode.trim(),
+        });
       }
       const session = await login(name, password);
       onAuthenticated(session.username);
     } catch (err) {
-      setError(authErrorMessageFor(err));
+      setError(authErrorMessageFor(err, mode));
     } finally {
       setBusy(false);
     }
@@ -87,11 +98,12 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
             ))}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form noValidate onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Usuário</Label>
               <Input
                 id="username"
+                name="username"
                 value={username}
                 maxLength={MAX_USERNAME_LENGTH}
                 autoComplete="username"
@@ -99,10 +111,25 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
               />
             </div>
 
+            {mode === "register" && (
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={email}
+                  autoComplete="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
                 value={password}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
@@ -115,8 +142,9 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
                 <Label htmlFor="invite">Código de convite</Label>
                 <Input
                   id="invite"
+                  name="inviteCode"
                   value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
+                  onChange={(event) => setInviteCode(event.target.value)}
                 />
               </div>
             )}
