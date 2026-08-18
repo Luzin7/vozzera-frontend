@@ -186,7 +186,7 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
                     onClick={() => setMode("forgot")}
                     className="block w-full text-center text-sm text-muted-foreground hover:text-foreground"
                   >
-                    Esqueci minha senha?
+                    Esqueci minha senha
                   </button>
                 )}
               </form>
