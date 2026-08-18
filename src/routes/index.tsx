@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
+import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
@@ -11,6 +12,7 @@ import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
 import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
 import { VoiceCallView } from "@/components/vozzera/VoiceCallView";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
+import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
@@ -35,6 +37,7 @@ export const Route = createFileRoute("/")({
 function Index() {
   const {
     username,
+    email,
     authed,
     rooms,
     canManageRooms,
@@ -53,6 +56,7 @@ function Index() {
     authenticate,
     dismissBanner,
     showBanner,
+    updateEmail,
     notificationsEnabled,
     toggleNotifications,
     sendMessage,
@@ -148,6 +152,11 @@ function Index() {
     setScreenShareOpen(true);
   }, [screenShareEnabled, setScreenShare]);
 
+  const handleLogout = useCallback(() => {
+    void disconnect();
+    void logout();
+  }, [disconnect, logout]);
+
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
@@ -170,6 +179,10 @@ function Index() {
 
   if (!authed) {
     return <AuthForm onAuthenticated={authenticate} />;
+  }
+
+  if (requiresEmailSetup(email)) {
+    return <EmailRequiredScreen onUpdateEmail={updateEmail} onLogout={handleLogout} />;
   }
 
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
@@ -326,6 +339,7 @@ function Index() {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         username={username}
+        email={email}
         micDevices={voice.micDevices}
         selectedDeviceId={voice.selectedDeviceId}
         noiseFilter={voice.noiseFilter}
@@ -334,10 +348,8 @@ function Index() {
         onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
         onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
         onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
-        onLogout={() => {
-          void voice.disconnect();
-          void logout();
-        }}
+        onUpdateEmail={updateEmail}
+        onLogout={handleLogout}
       />
     </div>
   );
