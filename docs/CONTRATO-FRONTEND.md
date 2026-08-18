@@ -23,6 +23,7 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 { "message": "string", "id": "string", "username": "string" }
 ```
 
+- `username` aceita **usuário ou email** (até 254 caracteres).
 - `401` → credenciais inválidas.
 
 ### `POST /api/register`
@@ -39,6 +40,31 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 - `409` → username já em uso.
 - Não loga: o front sempre faz `login` em seguida.
 
+### `POST /api/forgot-password`
+
+```jsonc
+// request
+{ "email": "string" }
+// response 200
+{ "message": "string" }
+```
+
+- Sem autenticação. Resposta é **sempre 200** quando o email é válido, cadastrado ou não — não vaza quais contas existem. `400` apenas para email inválido.
+- Front: o link "Esqueci minha senha?" na tela de login abre o formulário de email; no sucesso exibe sempre a mensagem genérica ("se o email existir, você receberá um link"), nunca confirma a existência da conta.
+
+### `POST /api/reset-password`
+
+```jsonc
+// request
+{ "token": "string", "password": "string" }
+// response 200
+{ "message": "string" }
+```
+
+- Sem autenticação. Token é de uso único e expira após `PASSWORD_RESET_TTL`; redefinir revoga todas as sessões do usuário.
+- `400` → token inválido/expirado ou senha fora de 8–72 caracteres.
+- Front: rota `/reset?token=...` (link do email) mostra o formulário de nova senha + confirmação; no sucesso volta pro login.
+
 ### `GET /api/rooms`
 
 ```jsonc
@@ -54,10 +80,23 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 
 ```jsonc
 // response 200
-{ "id": "string", "username": "string", "role": "user" | "mod" | "admin" }
+{ "id": "string", "username": "string", "role": "user" | "mod" | "admin", "email": "string" }
 ```
 
 - `role` controla as ações administrativas da UI; apenas `mod` e `admin` podem criar, editar ou apagar salas.
+- `email` termina em `@legacy.local` quando a conta é legada e ainda não tem email real — o front bloqueia o app até cadastrar um (tela pós-login).
+
+### `PATCH /api/me`
+
+```jsonc
+// request
+{ "email": "string" }
+// response 200
+{ "message": "string", "email": "string" }
+```
+
+- Troca o email da conta autenticada. Usado pela tela bloqueante de email legado e pelas configurações.
+- `400` → email inválido. `409` → email já em uso por outra conta.
 
 ### `POST /api/rooms`
 
