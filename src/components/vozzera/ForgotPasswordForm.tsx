@@ -7,7 +7,7 @@ import { requestPasswordReset } from "@/lib/vozzera/api";
 import { authErrorMessageFor } from "@/lib/vozzera/auth-errors";
 import { registrationEmailErrorFor } from "@/lib/vozzera/auth-validation";
 
-export function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
+export function ForgotPasswordForm({ onBack }: Readonly<{ onBack: () => void }>) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -37,7 +37,8 @@ export function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
     return (
       <div className="space-y-4 text-center">
         <p className="text-sm text-muted-foreground">
-          Se o email existir, você receberá um link para redefinir a senha.
+          Se o email existir, você receberá um link para redefinir a senha. (Lembre de checar sua
+          caixa de spam!)
         </p>
         <Button variant="outline" className="w-full" onClick={onBack}>
           Voltar para o login
