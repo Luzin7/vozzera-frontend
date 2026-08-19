@@ -25,6 +25,13 @@ export const MessageComposer = memo(function MessageComposer({
     inputRef.current?.focus();
   }, [roomId]);
 
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
   const submit = () => {
     if (!canSend) return;
     onSend(trimmed);
