@@ -34,12 +34,14 @@ export const MessageList = memo(function MessageList({
   loading,
   roomId,
   roomName,
+  canModerateMessages,
   onDelete,
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
   roomId: string;
   roomName: string;
+  canModerateMessages: boolean;
   onDelete: (message: ChatMessage) => void;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -107,6 +109,8 @@ export const MessageList = memo(function MessageList({
           const previous = messages[index - 1];
           const grouped = previous?.userId === message.userId;
           const isEditing = editingMessageId === message.id;
+          const isOwnMessage = username === message.username;
+          const canDeleteMessage = isOwnMessage || canModerateMessages;
 
           return (
             <li
@@ -135,16 +139,18 @@ export const MessageList = memo(function MessageList({
                     </div>
                   )}
 
-                  {username === message.username && !isEditing && (
+                  {canDeleteMessage && !isEditing && (
                     <div className="absolute right-0 top-0 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                      <Button
-                        variant="secondary"
-                        className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-foreground"
-                        onClick={() => startEditing(message)}
-                      >
-                        <Pen className="h-3.5 w-3.5" />
-                        <span className="sr-only">Editar mensagem</span>
-                      </Button>
+                      {isOwnMessage && (
+                        <Button
+                          variant="secondary"
+                          className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-foreground"
+                          onClick={() => startEditing(message)}
+                        >
+                          <Pen className="h-3.5 w-3.5" />
+                          <span className="sr-only">Editar mensagem</span>
+                        </Button>
+                      )}
                       <Button
                         variant="secondary"
                         className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-destructive"
