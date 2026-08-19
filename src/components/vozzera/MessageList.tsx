@@ -49,8 +49,14 @@ function MessageActions({
       <div className="absolute right-0 top-0 md:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-11 w-11 text-muted-foreground/70">
-              <MoreHorizontal className="h-4 w-4" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="group/action h-11 w-11 text-muted-foreground/70 hover:bg-transparent"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-md group-hover/action:bg-muted">
+                <MoreHorizontal className="h-4 w-4" />
+              </span>
               <span className="sr-only">Ações da mensagem</span>
             </Button>
           </DropdownMenuTrigger>

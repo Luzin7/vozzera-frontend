@@ -99,9 +99,11 @@ function RoomActions({
         <Button
           size="icon"
           variant="ghost"
-          className="absolute right-0 top-1/2 z-10 h-11 w-11 shrink-0 -translate-y-1/2 p-0 opacity-100 transition-opacity md:right-1 md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 data-[state=open]:opacity-100"
+          className="group/action absolute right-0 top-1/2 z-10 h-11 w-11 shrink-0 -translate-y-1/2 p-0 opacity-100 transition-opacity hover:bg-transparent md:right-1 md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 data-[state=open]:opacity-100"
         >
-          <MoreHorizontal className="h-4 w-4" />
+          <span className="flex h-7 w-7 items-center justify-center rounded-md group-hover/action:bg-sidebar-accent">
+            <MoreHorizontal className="h-4 w-4" />
+          </span>
           <span className="sr-only">Ações da sala {room.name}</span>
         </Button>
       </DropdownMenuTrigger>
