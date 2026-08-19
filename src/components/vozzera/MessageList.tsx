@@ -86,7 +86,7 @@ function DesktopMessageActions({
   onDelete: () => void;
 }>) {
   return (
-    <div className="absolute right-0 top-0 hidden gap-1 opacity-0 transition-opacity md:flex md:group-hover:opacity-100 md:focus-within:opacity-100">
+    <div className="pointer-events-none absolute right-0 top-0 z-20 hidden gap-1 opacity-0 transition-opacity md:flex md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:focus-within:opacity-100">
       {isOwnMessage && (
         <Button
           variant="secondary"
@@ -197,7 +197,7 @@ export const MessageList = memo(function MessageList({
               key={message.id}
               className={`${grouped ? "" : "pt-3"} ${index < messages.length - 1 ? "[content-visibility:auto] [contain-intrinsic-size:auto_4rem]" : ""}`}
             >
-              <div className="group flex gap-2 rounded-md px-1 py-0.5 hover:bg-muted/40 sm:gap-3 sm:px-2">
+              <div className="group relative flex gap-2 rounded-md px-1 py-0.5 hover:z-10 hover:bg-muted/40 sm:gap-3 sm:px-2">
                 <div className="w-9 shrink-0">
                   {!grouped && (
                     <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold text-foreground">
