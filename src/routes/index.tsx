@@ -12,6 +12,7 @@ import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
 import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
 import { VoiceCallView } from "@/components/vozzera/VoiceCallView";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
 import { useChat } from "@/lib/vozzera/useChat";
@@ -69,6 +70,7 @@ function Index() {
   const [screenShareOpen, setScreenShareOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
   const voice = useVoice();
   const {
     micEnabled,
@@ -174,6 +176,11 @@ function Index() {
   }, [voice.error, showBanner]);
 
   useEffect(() => {
+    if (isMobile) return;
+    setSidebarOpen(false);
+  }, [isMobile]);
+
+  useEffect(() => {
     if (!voiceActiveRoomId) return;
     if (rooms.some((room) => room.id === voiceActiveRoomId)) return;
 
@@ -232,17 +239,19 @@ function Index() {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
-      <RoomSidebar {...sidebarProps} className="hidden md:flex" />
-
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent
-          side="left"
-          className="h-dvh w-[min(20rem,calc(100vw-2rem))] max-w-none p-0 md:hidden [&>button]:right-2 [&>button]:top-1.5 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
-        >
-          <SheetTitle className="sr-only">Salas do Vozzera</SheetTitle>
-          <RoomSidebar {...sidebarProps} className="h-full w-full border-r-0" />
-        </SheetContent>
-      </Sheet>
+      {isMobile ? (
+        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SheetContent
+            side="left"
+            className="h-dvh w-[min(20rem,calc(100vw-2rem))] max-w-none p-0 [&>button]:right-2 [&>button]:top-1.5 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
+          >
+            <SheetTitle className="sr-only">Salas do Vozzera</SheetTitle>
+            <RoomSidebar {...sidebarProps} className="h-full w-full border-r-0" />
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <RoomSidebar {...sidebarProps} className="hidden md:flex" />
+      )}
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-14 w-full shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
