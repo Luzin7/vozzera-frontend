@@ -82,7 +82,7 @@ function MessageActions({
         {isOwnMessage && (
           <Button
             variant="secondary"
-            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground [&_svg]:size-4"
             onClick={onEdit}
           >
             <Pen />
@@ -91,7 +91,7 @@ function MessageActions({
         )}
         <Button
           variant="secondary"
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-3.5"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-4"
           onClick={onDelete}
         >
           <Trash2 />
