@@ -75,8 +75,8 @@ function MessageActions({
       <div className="absolute right-0 top-0 hidden gap-1 opacity-0 transition-opacity md:flex md:group-hover:opacity-100 md:focus-within:opacity-100">
         {isOwnMessage && (
           <Button
-            variant="ghost"
-            className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-foreground [&_svg]:size-3"
+            variant="secondary"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
             onClick={onEdit}
           >
             <Pen />
@@ -84,8 +84,8 @@ function MessageActions({
           </Button>
         )}
         <Button
-          variant="ghost"
-          className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-destructive [&_svg]:size-3"
+          variant="secondary"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-3.5"
           onClick={onDelete}
         >
           <Trash2 />
