@@ -51,13 +51,13 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[520px] max-w-2xl gap-0 overflow-hidden p-0">
-        <nav className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-border bg-muted/30 p-2">
+      <DialogContent className="flex h-[min(520px,calc(100dvh-2rem))] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-lg p-0 sm:flex-row [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center">
+        <nav className="flex w-full shrink-0 gap-0.5 overflow-x-auto border-b border-border bg-muted/30 p-2 pr-14 sm:w-44 sm:flex-col sm:overflow-x-visible sm:border-b-0 sm:border-r sm:pr-2">
           {sections.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setSection(id)}
-              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+              className={`flex min-h-11 shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
                 section === id
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -69,7 +69,7 @@ export function SettingsDialog({
           ))}
         </nav>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
           {section === "microphone" ? (
             <>
               <DialogTitle className="mb-4 text-base">Microfone e voz</DialogTitle>
@@ -97,7 +97,7 @@ export function SettingsDialog({
                 <p className="mt-1 text-sm text-muted-foreground">{email ?? "sem email"}</p>
               </div>
               <EmailChangeForm onSubmit={onUpdateEmail} />
-              <Button variant="destructive" className="mt-4 self-start" onClick={onLogout}>
+              <Button variant="destructive" className="mt-4 min-h-11 self-start" onClick={onLogout}>
                 <LogOut className="h-4 w-4" />
                 Sair
               </Button>
