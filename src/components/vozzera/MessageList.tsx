@@ -46,7 +46,7 @@ function MessageActions({
 }>) {
   return (
     <>
-      <div className="absolute right-0 top-0 md:hidden">
+      <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -78,7 +78,7 @@ function MessageActions({
         </DropdownMenu>
       </div>
 
-      <div className="absolute right-0 top-0 hidden gap-1 opacity-0 transition-opacity md:flex md:group-hover:opacity-100 md:focus-within:opacity-100">
+      <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 gap-1 opacity-0 transition-opacity md:flex md:group-hover:opacity-100 md:focus-within:opacity-100">
         {isOwnMessage && (
           <Button
             variant="secondary"
@@ -199,7 +199,7 @@ export const MessageList = memo(function MessageList({
                   )}
                 </div>
 
-                <div className={`relative min-w-0 flex-1 ${isEditing ? "" : "pr-12 md:pr-0"}`}>
+                <div className="relative min-w-0 flex-1">
                   {!grouped && (
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold text-foreground">
@@ -210,14 +210,6 @@ export const MessageList = memo(function MessageList({
                         {time(message.createdAt)}
                       </span>
                     </div>
-                  )}
-
-                  {canDeleteMessage && !isEditing && (
-                    <MessageActions
-                      isOwnMessage={isOwnMessage}
-                      onEdit={() => startEditing(message)}
-                      onDelete={() => setDeleteTarget(message)}
-                    />
                   )}
 
                   {isEditing ? (
@@ -262,8 +254,17 @@ export const MessageList = memo(function MessageList({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-sm leading-relaxed text-foreground/90">
+                    <div
+                      className={`relative text-sm leading-relaxed text-foreground/90 ${canDeleteMessage ? "pr-12 md:pr-0" : ""}`}
+                    >
                       <Markdown content={message.content} />
+                      {canDeleteMessage && (
+                        <MessageActions
+                          isOwnMessage={isOwnMessage}
+                          onEdit={() => startEditing(message)}
+                          onDelete={() => setDeleteTarget(message)}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
