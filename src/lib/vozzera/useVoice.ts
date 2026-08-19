@@ -212,15 +212,16 @@ export function useVoice() {
       return;
     }
 
-    const options: ScreenShareCaptureOptions | undefined = quality
+    const options: ScreenShareCaptureOptions = quality
       ? {
+          audio: true,
           resolution: {
             width: quality.width,
             height: quality.height,
             frameRate: quality.frameRate,
           },
         }
-      : undefined;
+      : { audio: true };
 
     const publication = await room.localParticipant.setScreenShareEnabled(true, options);
     const track = publication?.videoTrack;
