@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, BellOff, Volume2 } from "lucide-react";
+import { Bell, BellOff, Menu, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
@@ -11,6 +11,8 @@ import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
 import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
 import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
 import { VoiceCallView } from "@/components/vozzera/VoiceCallView";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
 import { useChat } from "@/lib/vozzera/useChat";
@@ -66,7 +68,9 @@ function Index() {
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
   const voice = useVoice();
   const {
     micEnabled,
@@ -93,6 +97,7 @@ function Index() {
 
   const handleSelectRoom = useCallback(
     (room: Room) => {
+      setSidebarOpen(false);
       setVisibleVoiceRoomId(null);
       void openRoom(room);
     },
@@ -101,6 +106,7 @@ function Index() {
 
   const handleSelectVoiceRoom = useCallback(
     (room: Room) => {
+      setSidebarOpen(false);
       dismissBanner();
       setVisibleVoiceRoomId(room.id);
       if (voiceActiveRoomId === room.id) return;
@@ -110,11 +116,13 @@ function Index() {
   );
 
   const handleCreateRoom = useCallback(() => {
+    setSidebarOpen(false);
     setEditingRoom(null);
     setRoomDialogOpen(true);
   }, []);
 
   const handleEditRoom = useCallback((room: Room) => {
+    setSidebarOpen(false);
     setEditingRoom(room);
     setRoomDialogOpen(true);
   }, []);
@@ -158,9 +166,19 @@ function Index() {
     void logout();
   }, [disconnect, logout]);
 
+  const handleOpenSettings = useCallback(() => {
+    setSidebarOpen(false);
+    setSettingsOpen(true);
+  }, []);
+
   useEffect(() => {
     if (voice.error) showBanner(voice.error);
   }, [voice.error, showBanner]);
+
+  useEffect(() => {
+    if (isMobile) return;
+    setSidebarOpen(false);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!voiceActiveRoomId) return;
@@ -189,42 +207,64 @@ function Index() {
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
   const visibleVoiceRoom =
     voice.status === "idle" ? null : (rooms.find((room) => room.id === visibleVoiceRoomId) ?? null);
+  const sidebarProps = {
+    rooms,
+    activeRoomId: visibleVoiceRoom ? null : (activeRoom?.id ?? null),
+    visibleVoiceRoomId: visibleVoiceRoom?.id ?? null,
+    onSelectRoom: handleSelectRoom,
+    onSelectVoiceRoom: handleSelectVoiceRoom,
+    onCreateRoom: handleCreateRoom,
+    canManageRooms,
+    onEditRoom: handleEditRoom,
+    onDeleteRoom: handleDeleteRoomVoid,
+    onOpenSettings: handleOpenSettings,
+    username,
+    status: socketStatus,
+    voiceStatus: voice.status,
+    voiceRoomId: voice.activeRoomId,
+    voiceParticipants: voice.participants,
+    micEnabled: voice.micEnabled,
+    onToggleMic: handleToggleMic,
+    onLeaveVoice: handleLeaveVoice,
+    unread,
+    volumes: voice.volumes,
+    onSetVolume: voice.setParticipantVolume,
+    onToggleLocalMute: voice.toggleLocalMute,
+    screenShareEnabled: voice.screenShareEnabled,
+    onToggleScreenShare: handleToggleScreenShare,
+    screenShares: voice.screenShares,
+    mutedParticipants: voice.mutedParticipants,
+    speakingNames: voice.speakingNames,
+  };
 
   return (
-    <div className="flex h-screen bg-background">
-      <RoomSidebar
-        rooms={rooms}
-        activeRoomId={visibleVoiceRoom ? null : (activeRoom?.id ?? null)}
-        visibleVoiceRoomId={visibleVoiceRoom?.id ?? null}
-        onSelectRoom={handleSelectRoom}
-        onSelectVoiceRoom={handleSelectVoiceRoom}
-        onCreateRoom={handleCreateRoom}
-        canManageRooms={canManageRooms}
-        onEditRoom={handleEditRoom}
-        onDeleteRoom={handleDeleteRoomVoid}
-        onOpenSettings={() => setSettingsOpen(true)}
-        username={username}
-        status={socketStatus}
-        voiceStatus={voice.status}
-        voiceRoomId={voice.activeRoomId}
-        voiceParticipants={voice.participants}
-        micEnabled={voice.micEnabled}
-        onToggleMic={handleToggleMic}
-        onLeaveVoice={handleLeaveVoice}
-        unread={unread}
-        volumes={voice.volumes}
-        onSetVolume={voice.setParticipantVolume}
-        onToggleLocalMute={voice.toggleLocalMute}
-        screenShareEnabled={voice.screenShareEnabled}
-        onToggleScreenShare={handleToggleScreenShare}
-        screenShares={voice.screenShares}
-        mutedParticipants={voice.mutedParticipants}
-        speakingNames={voice.speakingNames}
-      />
+    <div className="flex h-dvh overflow-hidden bg-background">
+      {isMobile ? (
+        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SheetContent
+            side="left"
+            className="h-dvh w-[min(20rem,calc(100vw-2rem))] max-w-none p-0 [&>button]:right-2 [&>button]:top-1.5 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
+          >
+            <SheetTitle className="sr-only">Salas do Vozzera</SheetTitle>
+            <RoomSidebar {...sidebarProps} className="h-full w-full border-r-0" />
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <RoomSidebar {...sidebarProps} className="hidden md:flex" />
+      )}
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-          <h1 className="truncate text-sm font-semibold text-foreground">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-14 w-full shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
+          <button
+            type="button"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Abrir menu de salas"
+            aria-expanded={sidebarOpen}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">
             {visibleVoiceRoom ? (
               <span className="flex items-center gap-2">
                 <Volume2 className="h-4 w-4" />
@@ -237,13 +277,13 @@ function Index() {
             )}
           </h1>
           {!visibleVoiceRoom && (
-            <span className="text-xs text-muted-foreground">
+            <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">
               · todos os membros do servidor leem esta sala
             </span>
           )}
           {activeRoom && !visibleVoiceRoom && (
             <button
-              className="ml-auto rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={() => void toggleNotifications()}
               aria-label={
                 notificationsEnabled

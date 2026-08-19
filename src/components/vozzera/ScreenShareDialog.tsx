@@ -48,7 +48,7 @@ export function ScreenShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-lg [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center">
         <DialogHeader>
           <DialogTitle>Compartilhar tela</DialogTitle>
           <DialogDescription>Escolha a qualidade da transmissão.</DialogDescription>
