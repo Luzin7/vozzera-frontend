@@ -206,7 +206,7 @@ export const MessageList = memo(function MessageList({
                   )}
                 </div>
 
-                <div className="relative min-w-0 flex-1">
+                <div className="relative min-w-0 flex-1 md:min-h-6">
                   {!grouped && (
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold text-foreground">
