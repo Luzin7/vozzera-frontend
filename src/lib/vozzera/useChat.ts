@@ -28,7 +28,7 @@ import {
   notificationPermissionGranted,
   writeNotificationsEnabled,
 } from "@/lib/vozzera/notifications";
-import { canManageRooms } from "@/lib/vozzera/permissions";
+import { canManageRooms, canModerateMessages } from "@/lib/vozzera/permissions";
 import type { ChatMessage, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
@@ -378,6 +378,7 @@ export function useChat() {
     authed,
     rooms,
     canManageRooms: canManageRooms(role),
+    canModerateMessages: canModerateMessages(role),
     activeRoom,
     messages,
     banner,

@@ -41,6 +41,7 @@ function Index() {
     authed,
     rooms,
     canManageRooms,
+    canModerateMessages,
     activeRoom,
     messages,
     banner,
@@ -296,6 +297,7 @@ function Index() {
               loading={loadingHistory && activeMessages.length === 0}
               roomId={activeRoom.id}
               roomName={activeRoom.name}
+              canModerateMessages={canModerateMessages}
               onDelete={handleDeleteMessage}
             />
             <MessageComposer
