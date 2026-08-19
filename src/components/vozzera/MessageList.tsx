@@ -239,23 +239,27 @@ export const MessageList = memo(function MessageList({
                         }}
                       />
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-11 w-11 shrink-0 p-0 text-primary"
-                        onClick={() => void editMessage(message.id)}
-                      >
-                        <Check />
-                      </Button>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-11 w-11 p-0 text-primary md:h-8 md:w-8 md:bg-secondary md:hover:bg-secondary/80 [&_svg]:size-4"
+                          onClick={() => void editMessage(message.id)}
+                        >
+                          <Check />
+                          <span className="sr-only">Salvar edição</span>
+                        </Button>
 
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-11 w-11 shrink-0 p-0 text-muted-foreground"
-                        onClick={cancelEditing}
-                      >
-                        <X />
-                      </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-11 w-11 p-0 text-muted-foreground md:h-8 md:w-8 md:bg-secondary md:hover:bg-secondary/80 [&_svg]:size-4"
+                          onClick={cancelEditing}
+                        >
+                          <X />
+                          <span className="sr-only">Cancelar edição</span>
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-sm leading-relaxed text-foreground/90">
