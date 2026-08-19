@@ -45,60 +45,67 @@ function MessageActions({
   onDelete: () => void;
 }>) {
   return (
-    <>
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="group/action h-11 w-11 text-muted-foreground/70 hover:bg-transparent"
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-md group-hover/action:bg-muted">
-                <MoreHorizontal className="h-4 w-4" />
-              </span>
-              <span className="sr-only">Ações da mensagem</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {isOwnMessage && (
-              <DropdownMenuItem onClick={onEdit}>
-                <Pen className="h-4 w-4" />
-                Editar mensagem
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={onDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-              Excluir mensagem
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 gap-1 opacity-0 transition-opacity md:flex md:group-hover:opacity-100 md:focus-within:opacity-100">
-        {isOwnMessage && (
+    <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button
-            variant="secondary"
-            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground [&_svg]:size-4"
-            onClick={onEdit}
+            variant="ghost"
+            size="icon"
+            className="group/action h-11 w-11 text-muted-foreground/70 hover:bg-transparent"
           >
-            <Pen />
-            <span className="sr-only">Editar mensagem</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-md group-hover/action:bg-muted">
+              <MoreHorizontal className="h-4 w-4" />
+            </span>
+            <span className="sr-only">Ações da mensagem</span>
           </Button>
-        )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {isOwnMessage && (
+            <DropdownMenuItem onClick={onEdit}>
+              <Pen className="h-4 w-4" />
+              Editar mensagem
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+            <Trash2 className="h-4 w-4" />
+            Excluir mensagem
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function DesktopMessageActions({
+  isOwnMessage,
+  onEdit,
+  onDelete,
+}: Readonly<{
+  isOwnMessage: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}>) {
+  return (
+    <div className="absolute right-0 top-0 hidden gap-1 opacity-0 transition-opacity md:flex md:group-hover:opacity-100 md:focus-within:opacity-100">
+      {isOwnMessage && (
         <Button
           variant="secondary"
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-4"
-          onClick={onDelete}
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground [&_svg]:size-4"
+          onClick={onEdit}
         >
-          <Trash2 />
-          <span className="sr-only">Excluir mensagem</span>
+          <Pen />
+          <span className="sr-only">Editar mensagem</span>
         </Button>
-      </div>
-    </>
+      )}
+      <Button
+        variant="secondary"
+        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-4"
+        onClick={onDelete}
+      >
+        <Trash2 />
+        <span className="sr-only">Excluir mensagem</span>
+      </Button>
+    </div>
   );
 }
 
@@ -210,6 +217,14 @@ export const MessageList = memo(function MessageList({
                         {time(message.createdAt)}
                       </span>
                     </div>
+                  )}
+
+                  {canDeleteMessage && !isEditing && (
+                    <DesktopMessageActions
+                      isOwnMessage={isOwnMessage}
+                      onEdit={() => startEditing(message)}
+                      onDelete={() => setDeleteTarget(message)}
+                    />
                   )}
 
                   {isEditing ? (
