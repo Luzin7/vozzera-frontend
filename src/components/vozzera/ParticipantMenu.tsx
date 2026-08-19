@@ -35,7 +35,7 @@ export function ParticipantMenu({
         <button
           type="button"
           aria-label={`Opções de ${name}`}
-          className="flex w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-sidebar-accent/60"
+          className="flex min-h-11 w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-sidebar-accent/60 md:min-h-0"
         >
           {children}
         </button>
@@ -62,7 +62,7 @@ export function ParticipantMenu({
             type="button"
             onClick={onToggleLocalMute}
             aria-label={locallyMuted ? `Ouvir ${name}` : `Silenciar ${name} para mim`}
-            className={`shrink-0 rounded-md p-1 transition-colors ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition-colors ${
               locallyMuted
                 ? "text-destructive hover:bg-destructive/10"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"

@@ -59,7 +59,7 @@ function FeaturedVideo({ share, isTabHidden }: { share: ScreenShare; isTabHidden
       <button
         type="button"
         onClick={toggleFullscreen}
-        className="absolute right-2 top-2 rounded-md bg-black/60 p-1.5 text-foreground opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+        className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-md bg-black/60 text-foreground opacity-100 transition-opacity hover:bg-black/80 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
         aria-label={isFullscreen ? "Sair da tela cheia" : "Ver em tela cheia"}
       >
         {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
