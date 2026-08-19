@@ -13,7 +13,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { memo, type KeyboardEvent, useState } from "react";
+import { memo, type KeyboardEvent, useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -36,11 +36,13 @@ import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
+import { cn } from "@/lib/utils";
 import type { ScreenShare } from "@/lib/vozzera/useVoice";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
 import type { VoiceStatus } from "@/lib/vozzera/useVoice";
 
 type Props = {
+  className?: string;
   rooms: Room[];
   activeRoomId: string | null;
   visibleVoiceRoomId: string | null;
@@ -97,7 +99,7 @@ function RoomActions({
         <Button
           size="icon"
           variant="ghost"
-          className="absolute right-1 top-1/2 z-10 h-7 w-7 shrink-0 -translate-y-1/2 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+          className="absolute right-0 top-1/2 z-10 h-11 w-11 shrink-0 -translate-y-1/2 p-0 opacity-100 transition-opacity md:right-1 md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 data-[state=open]:opacity-100"
         >
           <MoreHorizontal className="h-4 w-4" />
           <span className="sr-only">Ações da sala {room.name}</span>
@@ -118,6 +120,7 @@ function RoomActions({
 }
 
 export const RoomSidebar = memo(function RoomSidebar({
+  className,
   rooms,
   activeRoomId,
   visibleVoiceRoomId,
@@ -147,13 +150,14 @@ export const RoomSidebar = memo(function RoomSidebar({
   speakingNames,
 }: Readonly<Props>) {
   const [deleteTarget, setDeleteTarget] = useState<Room | null>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const textRooms = rooms.filter((r) => r.type === "text");
   const voiceRooms = rooms.filter((r) => r.type === "voice");
   const currentVoiceRoom = voiceRooms.find((r) => r.id === voiceRoomId) ?? null;
 
   const focusRoom = (event: KeyboardEvent<HTMLButtonElement>, group: string) => {
     const buttons = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(`[data-room-nav="${group}"]`),
+      sidebarRef.current?.querySelectorAll<HTMLButtonElement>(`[data-room-nav="${group}"]`) ?? [],
     );
     const currentIndex = buttons.indexOf(event.currentTarget);
     const nextIndex = nextRoomIndex(event.key, currentIndex, buttons.length);
@@ -165,11 +169,19 @@ export const RoomSidebar = memo(function RoomSidebar({
   };
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-sidebar">
-      <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
+    <aside
+      ref={sidebarRef}
+      className={cn("flex w-60 shrink-0 flex-col border-r border-border bg-sidebar", className)}
+    >
+      <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4 pr-16 md:pr-4">
         <span className="font-semibold tracking-tight text-sidebar-foreground">Vozzera</span>
         {canManageRooms && (
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCreateRoom}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-11 w-11 md:h-7 md:w-7"
+            onClick={onCreateRoom}
+          >
             <Plus className="h-4 w-4" />
             <span className="sr-only">Nova sala</span>
           </Button>
@@ -191,7 +203,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                 data-room-nav="text"
                 onClick={() => onSelectRoom(room)}
                 onKeyDown={(event) => focusRoom(event, "text")}
-                className={`flex w-full min-w-0 justify-start gap-2 rounded-md py-1.5 pl-2 pr-10 text-sm transition-colors ${
+                className={`flex min-h-11 w-full min-w-0 justify-start gap-2 rounded-md py-1.5 pl-2 pr-12 text-sm transition-colors md:min-h-0 md:pr-10 ${
                   room.id === activeRoomId
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -234,7 +246,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                     data-room-nav="voice"
                     onClick={() => onSelectVoiceRoom(room)}
                     onKeyDown={(event) => focusRoom(event, "voice")}
-                    className={`flex w-full min-w-0 items-center justify-start gap-2 rounded-md py-1.5 pl-2 pr-10 text-sm transition-colors ${
+                    className={`flex min-h-11 w-full min-w-0 items-center justify-start gap-2 rounded-md py-1.5 pl-2 pr-12 text-sm transition-colors md:min-h-0 md:pr-10 ${
                       isSelected
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -319,7 +331,7 @@ export const RoomSidebar = memo(function RoomSidebar({
       </nav>
 
       {currentVoiceRoom && voiceStatus !== "idle" && (
-        <div className="border-t border-sidebar-border px-3 py-2">
+        <div className="border-t border-sidebar-border px-2 py-2 sm:px-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-primary">
@@ -327,11 +339,11 @@ export const RoomSidebar = memo(function RoomSidebar({
               </p>
               <p className="truncate text-xs text-muted-foreground">{currentVoiceRoom.name}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center">
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-11 w-11 md:h-7 md:w-7"
                 onClick={onToggleScreenShare}
                 disabled={voiceStatus !== "connected"}
               >
@@ -347,14 +359,19 @@ export const RoomSidebar = memo(function RoomSidebar({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-11 w-11 md:h-7 md:w-7"
                 onClick={onToggleMic}
                 disabled={voiceStatus !== "connected"}
               >
                 {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
                 <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
               </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onLeaveVoice}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-11 w-11 md:h-7 md:w-7"
+                onClick={onLeaveVoice}
+              >
                 <PhoneOff className="h-4 w-4" />
                 <span className="sr-only">Sair do canal de voz</span>
               </Button>
@@ -374,7 +391,12 @@ export const RoomSidebar = memo(function RoomSidebar({
               {statusLabel[status]}
             </p>
           </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onOpenSettings}>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-11 w-11 md:h-7 md:w-7"
+            onClick={onOpenSettings}
+          >
             <Settings2 className="h-4 w-4" />
             <span className="sr-only">Configurações</span>
           </Button>
@@ -385,7 +407,7 @@ export const RoomSidebar = memo(function RoomSidebar({
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Apagar sala?</AlertDialogTitle>
             <AlertDialogDescription>
