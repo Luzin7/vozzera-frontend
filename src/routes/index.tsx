@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, BellOff, Menu, Volume2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
@@ -8,19 +8,29 @@ import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
-import { ScreenShareDialog } from "@/components/vozzera/ScreenShareDialog";
-import { SettingsDialog } from "@/components/vozzera/SettingsDialog";
-import { VoiceCallView } from "@/components/vozzera/VoiceCallView";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useOnline } from "@/hooks/useOnline";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
+const VoiceCallView = lazy(() =>
+  import("@/components/vozzera/VoiceCallView").then((m) => ({ default: m.VoiceCallView })),
+);
+const ScreenShareDialog = lazy(() =>
+  import("@/components/vozzera/ScreenShareDialog").then((m) => ({ default: m.ScreenShareDialog })),
+);
+const SettingsDialog = lazy(() =>
+  import("@/components/vozzera/SettingsDialog").then((m) => ({ default: m.SettingsDialog })),
+);
+
 const title = "Vozzera — servidor privado de chat e voz";
 const description =
   "Chat em tempo real por convite: salas de texto, histórico e mensagens ao vivo para você e seus amigos.";
+const offlineBanner = "Você está offline. A conexão volta sozinha.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -71,6 +81,7 @@ function Index() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
   const isMobile = useIsMobile();
+  const isOnline = useOnline();
   const voice = useVoice();
   const {
     micEnabled,
@@ -80,6 +91,7 @@ function Index() {
     disconnect,
     setMicEnabled,
     setScreenShare,
+    ensureKrispLoaded,
   } = voice;
 
   const handleDeleteMessage = useCallback(
@@ -176,6 +188,19 @@ function Index() {
   }, [voice.error, showBanner]);
 
   useEffect(() => {
+    if (settingsOpen) void ensureKrispLoaded();
+  }, [settingsOpen, ensureKrispLoaded]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      showBanner(offlineBanner);
+      return;
+    }
+
+    if (banner === offlineBanner) dismissBanner();
+  }, [isOnline, banner, showBanner, dismissBanner]);
+
+  useEffect(() => {
     if (isMobile) return;
     setSidebarOpen(false);
   }, [isMobile]);
@@ -187,22 +212,6 @@ function Index() {
     setVisibleVoiceRoomId(null);
     void disconnect();
   }, [rooms, voiceActiveRoomId, disconnect]);
-
-  if (authed === null) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Conectando ao servidor...
-      </div>
-    );
-  }
-
-  if (!authed) {
-    return <AuthForm onAuthenticated={authenticate} />;
-  }
-
-  if (requiresEmailSetup(email)) {
-    return <EmailRequiredScreen onUpdateEmail={updateEmail} onLogout={handleLogout} />;
-  }
 
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
   const visibleVoiceRoom =
@@ -236,6 +245,35 @@ function Index() {
     mutedParticipants: voice.mutedParticipants,
     speakingNames: voice.speakingNames,
   };
+
+  if (authed === null) {
+    return (
+      <div className="flex h-dvh overflow-hidden bg-background">
+        <RoomSidebar {...sidebarProps} loading className="hidden md:flex" />
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="flex h-14 w-full shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
+            <Skeleton className="h-4 w-40" />
+          </header>
+          <MessageList
+            loading
+            messages={[]}
+            roomId=""
+            roomName=""
+            canModerateMessages={false}
+            onDelete={() => {}}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  if (!authed) {
+    return <AuthForm onAuthenticated={authenticate} />;
+  }
+
+  if (requiresEmailSetup(email)) {
+    return <EmailRequiredScreen onUpdateEmail={updateEmail} onLogout={handleLogout} />;
+  }
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
@@ -314,22 +352,31 @@ function Index() {
         )}
 
         {visibleVoiceRoom ? (
-          <VoiceCallView
-            roomName={visibleVoiceRoom.name}
-            status={voice.status}
-            participants={voice.participants}
-            username={username}
-            micEnabled={voice.micEnabled}
-            mutedParticipants={voice.mutedParticipants}
-            speakingNames={voice.speakingNames}
-            screenShareEnabled={voice.screenShareEnabled}
-            screenShares={voice.screenShares}
-            localPreview={voice.localPreview}
-            isTabHidden={voice.isTabHidden}
-            onToggleMic={handleToggleMic}
-            onToggleScreenShare={handleToggleScreenShare}
-            onLeave={handleLeaveVoice}
-          />
+          <Suspense
+            fallback={
+              <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3">
+                <Skeleton className="h-8 w-48" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            }
+          >
+            <VoiceCallView
+              roomName={visibleVoiceRoom.name}
+              status={voice.status}
+              participants={voice.participants}
+              username={username}
+              micEnabled={voice.micEnabled}
+              mutedParticipants={voice.mutedParticipants}
+              speakingNames={voice.speakingNames}
+              screenShareEnabled={voice.screenShareEnabled}
+              screenShares={voice.screenShares}
+              localPreview={voice.localPreview}
+              isTabHidden={voice.isTabHidden}
+              onToggleMic={handleToggleMic}
+              onToggleScreenShare={handleToggleScreenShare}
+              onLeave={handleLeaveVoice}
+            />
+          </Suspense>
         ) : activeRoom ? (
           <>
             <MessageList
@@ -371,28 +418,32 @@ function Index() {
         onUpdate={updateRoom}
       />
 
-      <ScreenShareDialog
-        open={screenShareOpen}
-        onOpenChange={setScreenShareOpen}
-        onStart={(quality) => void voice.setScreenShare(true, quality)}
-      />
+      <Suspense fallback={null}>
+        <ScreenShareDialog
+          open={screenShareOpen}
+          onOpenChange={setScreenShareOpen}
+          onStart={(quality) => void voice.setScreenShare(true, quality)}
+        />
+      </Suspense>
 
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        username={username}
-        email={email}
-        micDevices={voice.micDevices}
-        selectedDeviceId={voice.selectedDeviceId}
-        noiseFilter={voice.noiseFilter}
-        krispSupported={voice.krispSupported}
-        selfMonitor={voice.selfMonitor}
-        onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
-        onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
-        onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
-        onUpdateEmail={updateEmail}
-        onLogout={handleLogout}
-      />
+      <Suspense fallback={null}>
+        <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          username={username}
+          email={email}
+          micDevices={voice.micDevices}
+          selectedDeviceId={voice.selectedDeviceId}
+          noiseFilter={voice.noiseFilter}
+          krispSupported={voice.krispSupported}
+          selfMonitor={voice.selfMonitor}
+          onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
+          onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
+          onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
+          onUpdateEmail={updateEmail}
+          onLogout={handleLogout}
+        />
+      </Suspense>
     </div>
   );
 }

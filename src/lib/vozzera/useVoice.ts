@@ -89,6 +89,7 @@ export function useVoice() {
   const micPermissionRef = useRef(false);
   const krispProcessorRef = useRef<KrispNoiseFilterProcessor | null>(null);
   const krispSupportedRef = useRef(false);
+  const krispLoadPromiseRef = useRef<Promise<boolean> | null>(null);
 
   noiseFilterRef.current = noiseFilter;
   selectedDeviceIdRef.current = selectedDeviceId;
@@ -140,9 +141,31 @@ export function useVoice() {
     setLocalMicTrack((publication?.track ?? null) as AudioTrack | null);
   }, []);
 
+  const ensureKrispLoaded = useCallback(() => {
+    if (krispLoadPromiseRef.current) return krispLoadPromiseRef.current;
+
+    krispLoadPromiseRef.current = import("@livekit/krisp-noise-filter")
+      .then(({ isKrispNoiseFilterSupported }) => {
+        const supported = isKrispNoiseFilterSupported();
+        krispSupportedRef.current = supported;
+        setKrispSupported(supported);
+        return supported;
+      })
+      .catch(() => {
+        krispSupportedRef.current = false;
+        setKrispSupported(false);
+        return false;
+      });
+
+    return krispLoadPromiseRef.current;
+  }, []);
+
   const attachKrispNoiseFilter = useCallback(
     async (track: LocalAudioTrack) => {
-      if (!krispSupportedRef.current || !noiseFilterRef.current) return;
+      if (!noiseFilterRef.current) return;
+
+      const supported = await ensureKrispLoaded();
+      if (!supported) return;
 
       try {
         const { KrispNoiseFilter } = await import("@livekit/krisp-noise-filter");
@@ -154,7 +177,7 @@ export function useVoice() {
         setError("Não consegui ativar o filtro de ruído.");
       }
     },
-    [setError],
+    [ensureKrispLoaded, setError],
   );
 
   const setParticipantVolume = useCallback((name: string, volume: number) => {
@@ -421,21 +444,6 @@ export function useVoice() {
   );
 
   useEffect(() => {
-    let cancelled = false;
-
-    void import("@livekit/krisp-noise-filter").then(({ isKrispNoiseFilterSupported }) => {
-      if (cancelled) return;
-      const supported = isKrispNoiseFilterSupported();
-      krispSupportedRef.current = supported;
-      setKrispSupported(supported);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     if (status !== "connected" && !micPermissionRef.current) return;
 
     void refreshMicDevices();
@@ -500,6 +508,7 @@ export function useVoice() {
     isTabHidden,
     error,
     clearError: useCallback(() => setError(null), []),
+    ensureKrispLoaded,
     connect,
     disconnect,
     setMicEnabled,
