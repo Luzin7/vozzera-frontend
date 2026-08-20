@@ -16,6 +16,7 @@ import type { MicDevice } from "./voice";
 export type VoiceStatus = "idle" | "connecting" | "connected";
 
 type LiveKitRoom = import("livekit-client").Room;
+type RemoteParticipant = import("livekit-client").RemoteParticipant;
 type LocalVideoTrack = import("livekit-client").LocalVideoTrack;
 type RemoteVideoTrack = import("livekit-client").RemoteVideoTrack;
 type LocalAudioTrack = import("livekit-client").LocalAudioTrack;
@@ -36,13 +37,27 @@ export type ScreenShare = {
   track: ScreenShareTrack;
 };
 
+type ParticipantVolumeSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
+
+let screenShareAudioSource: ParticipantVolumeSource | null = null;
+
+function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number) {
+  participant.setVolume(volume);
+  if (screenShareAudioSource === null) return;
+  participant.setVolume(volume, screenShareAudioSource);
+}
+
 export type ScreenShareQuality = {
   width: number;
   height: number;
   frameRate: number;
 };
 
-const loadLiveKitClient = () => import("livekit-client");
+async function loadLiveKitClient() {
+  const client = await import("livekit-client");
+  screenShareAudioSource = client.Track.Source.ScreenShareAudio satisfies ParticipantVolumeSource;
+  return client;
+}
 
 async function applyKrispToggle(
   processor: KrispNoiseFilterProcessor,
@@ -102,7 +117,7 @@ export function useVoice() {
     for (const p of room.remoteParticipants.values()) {
       const name = p.name || p.identity;
       const volume = volumesRef.current[name];
-      if (volume !== undefined) p.setVolume(volume);
+      if (volume !== undefined) setRemoteParticipantVolume(p, volume);
     }
   }, []);
 
@@ -187,9 +202,7 @@ export function useVoice() {
     const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
       (p) => (p.name || p.identity) === name,
     );
-    if (participant) {
-      participant.setVolume(volume);
-    }
+    if (participant) setRemoteParticipantVolume(participant, volume);
   }, []);
 
   const setLocalMute = useCallback(
