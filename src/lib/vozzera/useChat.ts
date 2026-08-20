@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
@@ -29,13 +30,14 @@ import {
   writeNotificationsEnabled,
 } from "@/lib/vozzera/notifications";
 import { canManageRooms, canModerateMessages } from "@/lib/vozzera/permissions";
-import type { ChatMessage, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
+import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
 
 export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
+  const queryClient = useQueryClient();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [role, setRole] = useState<UserRole | null>(null);
@@ -67,7 +69,9 @@ export function useChat() {
     setActiveRoom(null);
     setMessages({});
     selectedInitialRoomRef.current = false;
-  }, [clearUsername]);
+    queryClient.removeQueries({ queryKey: ["rooms"] });
+    queryClient.removeQueries({ queryKey: ["me"] });
+  }, [clearUsername, queryClient]);
 
   useEffect(() => {
     setUnauthorizedHandler(endSession);
@@ -77,7 +81,18 @@ export function useChat() {
 
   const loadSession = useCallback(async () => {
     try {
-      const [nextRooms, currentUser] = await Promise.all([listRooms(), getCurrentUser()]);
+      const [nextRooms, currentUser] = await Promise.all([
+        queryClient.ensureQueryData({
+          queryKey: ["rooms"],
+          queryFn: listRooms,
+          staleTime: 30_000,
+        }),
+        queryClient.ensureQueryData({
+          queryKey: ["me"],
+          queryFn: getCurrentUser,
+          staleTime: 5 * 60_000,
+        }),
+      ]);
       setRooms(nextRooms);
       setUsername(currentUser.username);
       setRole(currentUser.role);
@@ -90,7 +105,7 @@ export function useChat() {
 
       setBanner("Não consegui falar com o servidor.");
     }
-  }, [setUsername]);
+  }, [queryClient, setUsername]);
 
   useEffect(() => {
     void loadSession();
@@ -107,6 +122,9 @@ export function useChat() {
     (event: Extract<OutboundEvent, { type: "room" }>) => {
       if (event.action === "deleted") {
         removeRoomLocally(event.id);
+        queryClient.setQueryData<Room[]>(["rooms"], (prev) =>
+          prev?.filter((room) => room.id !== event.id),
+        );
         return;
       }
 
@@ -120,9 +138,10 @@ export function useChat() {
       };
 
       setRooms((prev) => upsertRoom(prev, room));
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
       setActiveRoom((active) => (active?.id === room.id ? { ...active, ...room } : active));
     },
-    [removeRoomLocally],
+    [queryClient, removeRoomLocally],
   );
 
   const handleMessageEvent = useCallback((event: Extract<OutboundEvent, { type: "message" }>) => {
@@ -248,26 +267,34 @@ export function useChat() {
       const room = await createRoomApi(name, type);
 
       setRooms((prev) => upsertRoom(prev, room));
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
 
       if (room.type === "text") {
         void openRoom(room);
       }
     },
-    [openRoom],
+    [openRoom, queryClient],
   );
 
-  const updateRoom = useCallback(async (roomId: string, name: string) => {
-    const room = await updateRoomApi(roomId, name);
-    setRooms((prev) => upsertRoom(prev, room));
-    setActiveRoom((current) => (current?.id === room.id ? room : current));
-  }, []);
+  const updateRoom = useCallback(
+    async (roomId: string, name: string) => {
+      const room = await updateRoomApi(roomId, name);
+      setRooms((prev) => upsertRoom(prev, room));
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
+      setActiveRoom((current) => (current?.id === room.id ? room : current));
+    },
+    [queryClient],
+  );
 
   const deleteRoom = useCallback(
     async (roomId: string) => {
       await deleteRoomApi(roomId);
       removeRoomLocally(roomId);
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) =>
+        prev?.filter((room) => room.id !== roomId),
+      );
     },
-    [removeRoomLocally],
+    [queryClient, removeRoomLocally],
   );
 
   const deleteMessage = useCallback(
@@ -319,11 +346,18 @@ export function useChat() {
 
   const showBanner = useCallback((message: string) => setBanner(message), []);
 
-  const updateEmail = useCallback(async (next: string) => {
-    const updated = await updateEmailApi(next);
-    setEmail(updated.email);
-    return updated.email;
-  }, []);
+  const updateEmail = useCallback(
+    async (next: string) => {
+      const updated = await updateEmailApi(next);
+      setEmail(updated.email);
+      queryClient.setQueryData<CurrentUser>(["me"], (prev) => {
+        if (!prev) return prev;
+        return { ...prev, email: updated.email };
+      });
+      return updated.email;
+    },
+    [queryClient],
+  );
 
   const toggleNotifications = useCallback(async () => {
     if (typeof Notification === "undefined") return;

@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
+import { Skeleton } from "@/components/ui/skeleton";
 import { initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
@@ -43,6 +44,7 @@ import type { VoiceStatus } from "@/lib/vozzera/useVoice";
 
 type Props = {
   className?: string;
+  loading?: boolean;
   rooms: Room[];
   activeRoomId: string | null;
   visibleVoiceRoomId: string | null;
@@ -123,6 +125,7 @@ function RoomActions({
 
 export const RoomSidebar = memo(function RoomSidebar({
   className,
+  loading = false,
   rooms,
   activeRoomId,
   visibleVoiceRoomId,
@@ -169,6 +172,40 @@ export const RoomSidebar = memo(function RoomSidebar({
     event.preventDefault();
     buttons[nextIndex]?.focus();
   };
+
+  if (loading) {
+    return (
+      <aside
+        className={cn("flex w-60 shrink-0 flex-col border-r border-border bg-sidebar", className)}
+      >
+        <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4 pr-16 md:pr-4">
+          <span className="font-semibold tracking-tight text-sidebar-foreground">Vozzera</span>
+        </div>
+        <nav className="flex-1 space-y-5 overflow-y-auto p-2">
+          <section>
+            <Skeleton className="mb-2 ml-2 mt-1 h-3 w-14" />
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="mb-1.5 h-9 w-full" />
+            ))}
+          </section>
+          <section>
+            <Skeleton className="mb-2 ml-2 mt-1 h-3 w-14" />
+            <Skeleton className="mb-1.5 h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </section>
+        </nav>
+        <div className="border-t border-sidebar-border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 space-y-1.5">
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+            <Skeleton className="h-7 w-7 rounded-md" />
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside
