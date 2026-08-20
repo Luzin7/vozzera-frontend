@@ -268,11 +268,8 @@ export function useVoice() {
             el.style.display = "none";
             document.body.appendChild(el);
 
-            const name = participant.name || participant.identity;
-            const volume = volumesRef.current[name];
-            if (volume !== undefined) setRemoteParticipantVolume(participant, volume);
-
             if (publication.source === Track.Source.Microphone && !participant.isLocal) {
+              const name = participant.name || participant.identity;
               setMutedParticipants((prev) => ({ ...prev, [name]: publication.isMuted }));
             }
             return;
