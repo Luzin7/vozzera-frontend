@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import { ResetPasswordPage } from "@/components/vozzera/ResetPasswordPage";
 
@@ -16,5 +17,11 @@ export const Route = createFileRoute("/reset")({
 
 function ResetRoute() {
   const { token } = Route.useSearch();
+
+  useEffect(() => {
+    if (window.location.search === "") return;
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
   return <ResetPasswordPage token={token} />;
 }
