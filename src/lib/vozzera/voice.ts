@@ -12,6 +12,7 @@ export type MicCaptureOptions = {
 
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
+const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
 
 export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions {
   return {
@@ -40,6 +41,34 @@ export function readMicDeviceId(storage: Storage | null): string | null {
 export function writeMicDeviceId(storage: Storage | null, deviceId: string): void {
   if (!storage) return;
   storage.setItem(MIC_DEVICE_KEY, deviceId);
+}
+
+function isVolumeMap(value: unknown): value is Record<string, number> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every(
+    (volume) => typeof volume === "number" && volume >= 0 && volume <= 1,
+  );
+}
+
+export function readParticipantVolumes(storage: Storage | null): Record<string, number> {
+  if (!storage) return {};
+  const raw = storage.getItem(PARTICIPANT_VOLUMES_KEY);
+  if (!raw) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isVolumeMap(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function writeParticipantVolumes(
+  storage: Storage | null,
+  volumes: Record<string, number>,
+): void {
+  if (!storage) return;
+  storage.setItem(PARTICIPANT_VOLUMES_KEY, JSON.stringify(volumes));
 }
 
 export function audioInputDevices(devices: MediaDeviceInfo[]): MicDevice[] {

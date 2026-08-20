@@ -8,8 +8,10 @@ import {
   muteVolume,
   readMicDeviceId,
   readNoiseFilter,
+  readParticipantVolumes,
   writeMicDeviceId,
   writeNoiseFilter,
+  writeParticipantVolumes,
 } from "./voice";
 import type { MicDevice } from "./voice";
 
@@ -61,7 +63,10 @@ export function useVoice() {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<string[]>([]);
   const [micEnabled, setMicEnabledState] = useState(true);
-  const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const [volumes, setVolumes] = useState<Record<string, number>>(() => {
+    if (typeof localStorage === "undefined") return {};
+    return readParticipantVolumes(localStorage);
+  });
   const [screenShareEnabled, setScreenShareEnabledState] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShare[]>([]);
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
@@ -82,7 +87,7 @@ export function useVoice() {
   const [error, setError] = useState<string | null>(null);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
-  const volumesRef = useRef<Record<string, number>>({});
+  const volumesRef = useRef(volumes);
   const mutedVolumesRef = useRef<Record<string, number>>({});
   const noiseFilterRef = useRef(noiseFilter);
   const selectedDeviceIdRef = useRef(selectedDeviceId);
@@ -181,8 +186,10 @@ export function useVoice() {
   );
 
   const setParticipantVolume = useCallback((name: string, volume: number) => {
-    volumesRef.current[name] = volume;
-    setVolumes((prev) => ({ ...prev, [name]: volume }));
+    const next = { ...volumesRef.current, [name]: volume };
+    volumesRef.current = next;
+    setVolumes(next);
+    writeParticipantVolumes(typeof localStorage === "undefined" ? null : localStorage, next);
 
     const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
       (p) => (p.name || p.identity) === name,

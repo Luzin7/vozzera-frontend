@@ -8,9 +8,48 @@ import {
   participantStatusLabelFor,
   readMicDeviceId,
   readNoiseFilter,
+  readParticipantVolumes,
   writeMicDeviceId,
   writeNoiseFilter,
+  writeParticipantVolumes,
 } from "./voice";
+
+function fakeStorage(initial: Array<[string, string]> = []): Storage {
+  const store = new Map<string, string>(initial);
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+  } as Storage;
+}
+
+describe("readParticipantVolumes / writeParticipantVolumes", () => {
+  it("defaults to an empty map without storage", () => {
+    expect(readParticipantVolumes(null)).toEqual({});
+  });
+
+  it("persists and reads volumes back", () => {
+    const storage = fakeStorage();
+
+    expect(readParticipantVolumes(storage)).toEqual({});
+
+    writeParticipantVolumes(storage, { luan: 0.3, ana: 1 });
+    expect(readParticipantVolumes(storage)).toEqual({ luan: 0.3, ana: 1 });
+  });
+
+  it("returns an empty map for corrupt data", () => {
+    const storage = fakeStorage([["vozzera.participantVolumes", "nope"]]);
+
+    expect(readParticipantVolumes(storage)).toEqual({});
+  });
+
+  it("returns an empty map for invalid volume values", () => {
+    const storage = fakeStorage([["vozzera.participantVolumes", JSON.stringify({ luan: 5 })]]);
+
+    expect(readParticipantVolumes(storage)).toEqual({});
+  });
+});
 
 describe("audioCaptureOptions", () => {
   it("always enables echo cancellation, noise suppression and auto gain", () => {
