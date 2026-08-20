@@ -100,6 +100,11 @@ function RootShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="pt-BR">
       <head>
+        {/* script-src 'unsafe-inline' exigido pelo SSR do TanStack Start (scripts inline de hidratação) — não remover */}
+        <meta
+          httpEquiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' ws: wss: http://localhost:*; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+        />
         <HeadContent />
       </head>
       <body>
