@@ -22,6 +22,7 @@ export const MessageComposer = memo(function MessageComposer({
   const canSend = !disabled && trimmed.length > 0 && trimmed.length <= MAX_MESSAGE_LENGTH;
 
   useEffect(() => {
+    setValue("");
     inputRef.current?.focus();
   }, [roomId]);
 
