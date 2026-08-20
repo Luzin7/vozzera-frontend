@@ -16,6 +16,7 @@ import type { MicDevice } from "./voice";
 export type VoiceStatus = "idle" | "connecting" | "connected";
 
 type LiveKitRoom = import("livekit-client").Room;
+type RemoteParticipant = import("livekit-client").RemoteParticipant;
 type LocalVideoTrack = import("livekit-client").LocalVideoTrack;
 type RemoteVideoTrack = import("livekit-client").RemoteVideoTrack;
 type LocalAudioTrack = import("livekit-client").LocalAudioTrack;
@@ -35,6 +36,15 @@ export type ScreenShare = {
   name: string;
   track: ScreenShareTrack;
 };
+
+type ParticipantVolumeSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
+
+const SCREEN_SHARE_AUDIO_SOURCE = "screen_share_audio" as ParticipantVolumeSource;
+
+function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number) {
+  participant.setVolume(volume);
+  participant.setVolume(volume, SCREEN_SHARE_AUDIO_SOURCE);
+}
 
 export type ScreenShareQuality = {
   width: number;
@@ -101,7 +111,7 @@ export function useVoice() {
     for (const p of room.remoteParticipants.values()) {
       const name = p.name || p.identity;
       const volume = volumesRef.current[name];
-      if (volume !== undefined) p.setVolume(volume);
+      if (volume !== undefined) setRemoteParticipantVolume(p, volume);
     }
   }, []);
 
@@ -164,9 +174,7 @@ export function useVoice() {
     const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
       (p) => (p.name || p.identity) === name,
     );
-    if (participant) {
-      participant.setVolume(volume);
-    }
+    if (participant) setRemoteParticipantVolume(participant, volume);
   }, []);
 
   const setLocalMute = useCallback(
@@ -260,8 +268,11 @@ export function useVoice() {
             el.style.display = "none";
             document.body.appendChild(el);
 
+            const name = participant.name || participant.identity;
+            const volume = volumesRef.current[name];
+            if (volume !== undefined) setRemoteParticipantVolume(participant, volume);
+
             if (publication.source === Track.Source.Microphone && !participant.isLocal) {
-              const name = participant.name || participant.identity;
               setMutedParticipants((prev) => ({ ...prev, [name]: publication.isMuted }));
             }
             return;
