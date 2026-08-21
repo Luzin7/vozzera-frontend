@@ -8,12 +8,14 @@ import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { WhatsNewDialog } from "@/components/vozzera/WhatsNewDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnline } from "@/hooks/useOnline";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
+import { useChangelog } from "@/lib/vozzera/useChangelog";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
@@ -74,6 +76,11 @@ function Index() {
     toggleNotifications,
     sendMessage,
   } = useChat();
+  const {
+    changelog,
+    shouldShow: shouldShowChangelog,
+    dismiss: dismissChangelog,
+  } = useChangelog(authed === true);
   const [roomDialogOpen, setRoomDialogOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -444,6 +451,13 @@ function Index() {
           onLogout={handleLogout}
         />
       </Suspense>
+
+      <WhatsNewDialog
+        open={shouldShowChangelog}
+        items={changelog?.items ?? []}
+        version={changelog?.version ?? ""}
+        onDismiss={dismissChangelog}
+      />
     </div>
   );
 }

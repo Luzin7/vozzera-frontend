@@ -1,0 +1,18 @@
+{
+  "version": "v1.4.0",
+  "releasedAt": "2026-08-20",
+  "items": [
+    {
+      "title": "Feat/layout responsivo mobile drawer salas",
+      "kind": "feat",
+      "pr": 50,
+      "summary": ""
+    },
+    {
+      "title": "feat(chat): moderação de mensagens por mod/admin",
+      "kind": "feat",
+      "pr": 48,
+      "summary": ""
+    }
+  ]
+}
