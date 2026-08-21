@@ -9,9 +9,11 @@ import {
   readMicDeviceId,
   readNoiseFilter,
   readParticipantVolumes,
+  readScreenShareVolumes,
   writeMicDeviceId,
   writeNoiseFilter,
   writeParticipantVolumes,
+  writeScreenShareVolumes,
 } from "./voice";
 import type { MicDevice } from "./voice";
 import {
@@ -45,14 +47,16 @@ export type ScreenShare = {
   track: ScreenShareTrack;
 };
 
-type ParticipantVolumeSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
-
-let screenShareAudioSource: ParticipantVolumeSource | null = null;
-
 function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number) {
   participant.setVolume(volume);
+}
+
+function setRemoteParticipantScreenShareVolume(participant: RemoteParticipant, volume: number) {
   if (screenShareAudioSource === null) return;
-  participant.setVolume(volume, screenShareAudioSource);
+  participant.setVolume(
+    volume,
+    screenShareAudioSource as Parameters<RemoteParticipant["setVolume"]>[1],
+  );
 }
 
 export type ScreenShareQuality = {
@@ -61,9 +65,11 @@ export type ScreenShareQuality = {
   frameRate: number;
 };
 
+let screenShareAudioSource: unknown = null;
+
 async function loadLiveKitClient() {
   const client = await import("livekit-client");
-  screenShareAudioSource = client.Track.Source.ScreenShareAudio satisfies ParticipantVolumeSource;
+  screenShareAudioSource = client.Track.Source.ScreenShareAudio;
   return client;
 }
 
@@ -88,6 +94,10 @@ export function useVoice() {
     if (typeof localStorage === "undefined") return {};
     return readParticipantVolumes(localStorage);
   });
+  const [screenShareVolumes, setScreenShareVolumes] = useState<Record<string, number>>(() => {
+    if (typeof localStorage === "undefined") return {};
+    return readScreenShareVolumes(localStorage);
+  });
   const [screenShareEnabled, setScreenShareEnabledState] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShare[]>([]);
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
@@ -102,15 +112,22 @@ export function useVoice() {
   const [krispSupported, setKrispSupported] = useState(false);
   const [selfMonitor, setSelfMonitor] = useState(false);
   const [mutedParticipants, setMutedParticipants] = useState<Record<string, boolean>>({});
+  const [screenShareMutedParticipants, setScreenShareMutedParticipants] = useState<
+    Record<string, boolean>
+  >({});
   const [speakingNames, setSpeakingNames] = useState<string[]>([]);
   const [localMicTrack, setLocalMicTrack] = useState<AudioTrack | null>(null);
   const [localPreview, setLocalPreview] = useState<ScreenShare | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deafen, setDeafen] = useState(false);
+  const deafenRef = useRef(false);
+  const screenShareRef = useRef(false);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
   const volumesRef = useRef(volumes);
+  const screenShareVolumesRef = useRef(screenShareVolumes);
   const mutedVolumesRef = useRef<Record<string, number>>({});
+  const screenShareMutedVolumesRef = useRef<Record<string, number>>({});
   const noiseFilterRef = useRef(noiseFilter);
   const selectedDeviceIdRef = useRef(selectedDeviceId);
   const micPermissionRef = useRef(false);
@@ -126,6 +143,8 @@ export function useVoice() {
 
   noiseFilterRef.current = noiseFilter;
   selectedDeviceIdRef.current = selectedDeviceId;
+  deafenRef.current = deafen;
+  screenShareVolumesRef.current = screenShareVolumes;
 
   const syncParticipants = useCallback((room: LiveKitRoom) => {
     const remotes = Array.from(room.remoteParticipants.values()).map((p) => p.name || p.identity);
@@ -136,6 +155,8 @@ export function useVoice() {
       const name = p.name || p.identity;
       const volume = volumesRef.current[name];
       if (volume !== undefined) setRemoteParticipantVolume(p, volume);
+      const ssVolume = screenShareVolumesRef.current[name];
+      if (ssVolume !== undefined) setRemoteParticipantScreenShareVolume(p, ssVolume);
     }
   }, []);
 
@@ -146,20 +167,30 @@ export function useVoice() {
       delete next[name];
       return next;
     });
+    setScreenShareMutedParticipants((prev) => {
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
     setSpeakingNames((prev) => prev.filter((speaker) => speaker !== name));
     delete mutedVolumesRef.current[name];
+    delete screenShareMutedVolumesRef.current[name];
   }, []);
 
   const resetRoomState = useCallback(() => {
     setParticipants([]);
     setMutedParticipants({});
+    setScreenShareMutedParticipants({});
     setSpeakingNames([]);
     setLocalMicTrack(null);
     setScreenShareEnabledState(false);
     setScreenShares([]);
     setLocalPreview(null);
     mutedVolumesRef.current = {};
+    screenShareMutedVolumesRef.current = {};
     krispProcessorRef.current = null;
+    screenShareRef.current = false;
   }, []);
 
   const refreshMicDevices = useCallback(async () => {
@@ -196,9 +227,19 @@ export function useVoice() {
   const attachKrispNoiseFilter = useCallback(
     async (track: LocalAudioTrack) => {
       if (!noiseFilterRef.current) return;
+      if (screenShareRef.current) return;
 
       const supported = await ensureKrispLoaded();
       if (!supported) return;
+
+      if (krispProcessorRef.current) {
+        try {
+          await krispProcessorRef.current.setEnabled(true);
+        } catch {
+          setError("Não consegui ativar o filtro de ruído.");
+        }
+        return;
+      }
 
       try {
         const { KrispNoiseFilter } = await import("@livekit/krisp-noise-filter");
@@ -225,6 +266,18 @@ export function useVoice() {
     if (participant) setRemoteParticipantVolume(participant, volume);
   }, []);
 
+  const setScreenShareVolume = useCallback((name: string, volume: number) => {
+    const next = { ...screenShareVolumesRef.current, [name]: volume };
+    screenShareVolumesRef.current = next;
+    setScreenShareVolumes(next);
+    writeScreenShareVolumes(typeof localStorage === "undefined" ? null : localStorage, next);
+
+    const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
+      (p) => (p.name || p.identity) === name,
+    );
+    if (participant) setRemoteParticipantScreenShareVolume(participant, volume);
+  }, []);
+
   const setLocalMute = useCallback(
     (name: string, muted: boolean) => {
       const current = volumesRef.current[name];
@@ -249,6 +302,32 @@ export function useVoice() {
     [setLocalMute],
   );
 
+  const setLocalScreenShareMute = useCallback(
+    (name: string, muted: boolean) => {
+      const current = screenShareVolumesRef.current[name];
+
+      if (muted) {
+        screenShareMutedVolumesRef.current[name] = current ?? 1;
+        setScreenShareVolume(name, muteVolume(true, undefined));
+        setScreenShareMutedParticipants((prev) => ({ ...prev, [name]: true }));
+        return;
+      }
+
+      const previous = screenShareMutedVolumesRef.current[name];
+      delete screenShareMutedVolumesRef.current[name];
+      setScreenShareVolume(name, muteVolume(false, previous));
+      setScreenShareMutedParticipants((prev) => ({ ...prev, [name]: false }));
+    },
+    [setScreenShareVolume],
+  );
+
+  const toggleLocalScreenShareMute = useCallback(
+    (name: string) => {
+      setLocalScreenShareMute(name, screenShareVolumesRef.current[name] !== 0);
+    },
+    [setLocalScreenShareMute],
+  );
+
   const disconnect = useCallback(async () => {
     await roomRef.current?.disconnect();
     roomRef.current = null;
@@ -265,6 +344,14 @@ export function useVoice() {
       await room.localParticipant.setScreenShareEnabled(false);
       setScreenShareEnabledState(false);
       setLocalPreview(null);
+      screenShareRef.current = false;
+      if (noiseFilterRef.current && krispProcessorRef.current) {
+        try {
+          await krispProcessorRef.current.setEnabled(true);
+        } catch {
+          /* silêncio — filtro será reativado na próxima publicação */
+        }
+      }
       return;
     }
 
@@ -285,6 +372,15 @@ export function useVoice() {
 
     setScreenShareEnabledState(true);
     setLocalPreview(track ? { id: "local", name, track } : null);
+    screenShareRef.current = true;
+
+    if (krispProcessorRef.current) {
+      try {
+        await krispProcessorRef.current.setEnabled(false);
+      } catch {
+        /* silêncio */
+      }
+    }
   }, []);
 
   const connect = useCallback(
@@ -374,7 +470,15 @@ export function useVoice() {
         });
 
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-          setSpeakingNames(speakers.map((p) => p.name || p.identity));
+          const localName = room.localParticipant.name || room.localParticipant.identity;
+          setSpeakingNames(
+            speakers
+              .map((p) => p.name || p.identity)
+              .filter((name) => {
+                if (name !== localName) return true;
+                return !screenShareRef.current;
+              }),
+          );
         });
 
         room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
@@ -382,6 +486,10 @@ export function useVoice() {
 
           setScreenShareEnabledState(false);
           setLocalPreview(null);
+          screenShareRef.current = false;
+          if (noiseFilterRef.current && krispProcessorRef.current) {
+            void krispProcessorRef.current.setEnabled(true).catch(() => {});
+          }
         });
 
         room.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -390,6 +498,18 @@ export function useVoice() {
           const name = participant.name || participant.identity;
           const me = room.localParticipant.name || room.localParticipant.identity;
           if (name === me) return;
+
+          if (deafenRef.current) {
+            setParticipantVolume(name, 0);
+            setScreenShareVolume(name, 0);
+          }
+
+          const ssVolume = screenShareVolumesRef.current[name];
+          if (ssVolume !== undefined) {
+            const remoteParticipant = room.remoteParticipants.get(participant.sid);
+            if (remoteParticipant)
+              setRemoteParticipantScreenShareVolume(remoteParticipant, ssVolume);
+          }
 
           if (
             typeof document !== "undefined" &&
@@ -446,6 +566,8 @@ export function useVoice() {
       disconnect,
       removeParticipant,
       resetRoomState,
+      setParticipantVolume,
+      setScreenShareVolume,
       syncLocalMicTrack,
       syncParticipants,
     ],
@@ -484,6 +606,8 @@ export function useVoice() {
       writeNoiseFilter(typeof localStorage === "undefined" ? null : localStorage, enabled);
       setNoiseFilterState(enabled);
 
+      if (screenShareRef.current) return;
+
       const processor = krispProcessorRef.current;
       if (processor) {
         await applyKrispToggle(processor, enabled, setError);
@@ -504,6 +628,7 @@ export function useVoice() {
   const savedDeafenStateRef = useRef<{
     micEnabled: boolean;
     volumes: Record<string, number>;
+    screenShareVolumes: Record<string, number>;
   } | null>(null);
 
   const toggleDeafen = useCallback(() => {
@@ -514,22 +639,32 @@ export function useVoice() {
         for (const [name, volume] of Object.entries(saved.volumes)) {
           setParticipantVolume(name, volume);
         }
+        for (const [name, volume] of Object.entries(saved.screenShareVolumes)) {
+          setScreenShareVolume(name, volume);
+        }
         if (saved.micEnabled) void setMicEnabled(true);
       }
       setDeafen(false);
       return;
     }
 
+    const room = roomRef.current;
+    const remoteNames = room
+      ? Array.from(room.remoteParticipants.values()).map((p) => p.name || p.identity)
+      : [];
+
     savedDeafenStateRef.current = {
       micEnabled,
       volumes: { ...volumesRef.current },
+      screenShareVolumes: { ...screenShareVolumesRef.current },
     };
-    for (const name of Object.keys(volumesRef.current)) {
+    for (const name of remoteNames) {
       setParticipantVolume(name, 0);
+      setScreenShareVolume(name, 0);
     }
     void setMicEnabled(false);
     setDeafen(true);
-  }, [deafen, micEnabled, setParticipantVolume, setMicEnabled]);
+  }, [deafen, micEnabled, setParticipantVolume, setMicEnabled, setScreenShareVolume]);
 
   useEffect(() => {
     if (status !== "connected" && !micPermissionRef.current) return;
@@ -583,6 +718,7 @@ export function useVoice() {
     participants,
     micEnabled,
     volumes,
+    screenShareVolumes,
     screenShareEnabled,
     screenShares,
     micDevices,
@@ -591,6 +727,7 @@ export function useVoice() {
     krispSupported,
     selfMonitor,
     mutedParticipants,
+    screenShareMutedParticipants,
     speakingNames,
     localPreview,
     isTabHidden,
@@ -605,8 +742,11 @@ export function useVoice() {
     setNoiseFilter,
     setSelfMonitor,
     setParticipantVolume,
+    setScreenShareVolume,
     setLocalMute,
     toggleLocalMute,
+    setLocalScreenShareMute,
+    toggleLocalScreenShareMute,
     setScreenShare,
     toggleDeafen,
   };
