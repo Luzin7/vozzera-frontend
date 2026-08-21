@@ -12,6 +12,8 @@ import {
   Trash2,
   Volume2,
   VolumeX,
+  Ear,
+  EarOff,
 } from "lucide-react";
 import { memo, type KeyboardEvent, useRef, useState } from "react";
 
@@ -72,6 +74,8 @@ type Props = {
   screenShares: ScreenShare[];
   mutedParticipants: Record<string, boolean>;
   speakingNames: string[];
+  deafen: boolean;
+  onToggleDeafen: () => void;
 };
 
 const statusLabel: Record<SocketStatus, string> = {
@@ -153,6 +157,8 @@ export const RoomSidebar = memo(function RoomSidebar({
   screenShares,
   mutedParticipants,
   speakingNames,
+  deafen,
+  onToggleDeafen,
 }: Readonly<Props>) {
   const [deleteTarget, setDeleteTarget] = useState<Room | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -394,6 +400,16 @@ export const RoomSidebar = memo(function RoomSidebar({
                 <span className="sr-only">
                   {screenShareEnabled ? "Parar de compartilhar tela" : "Compartilhar tela"}
                 </span>
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-11 w-11 md:h-7 md:w-7"
+                onClick={onToggleDeafen}
+                disabled={voiceStatus !== "connected"}
+              >
+                {deafen ? <EarOff className="h-4 w-4" /> : <Ear className="h-4 w-4" />}
+                <span className="sr-only">{deafen ? "Ativar som" : "Mudo total"}</span>
               </Button>
               <Button
                 size="icon"

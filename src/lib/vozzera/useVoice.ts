@@ -100,6 +100,7 @@ export function useVoice() {
   const [localMicTrack, setLocalMicTrack] = useState<AudioTrack | null>(null);
   const [localPreview, setLocalPreview] = useState<ScreenShare | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deafen, setDeafen] = useState(false);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
   const volumesRef = useRef(volumes);
@@ -463,6 +464,36 @@ export function useVoice() {
     [attachKrispNoiseFilter, setError],
   );
 
+  const savedDeafenStateRef = useRef<{
+    micEnabled: boolean;
+    volumes: Record<string, number>;
+  } | null>(null);
+
+  const toggleDeafen = useCallback(() => {
+    if (deafen) {
+      const saved = savedDeafenStateRef.current;
+      savedDeafenStateRef.current = null;
+      if (saved) {
+        for (const [name, volume] of Object.entries(saved.volumes)) {
+          setParticipantVolume(name, volume);
+        }
+        if (saved.micEnabled) void setMicEnabled(true);
+      }
+      setDeafen(false);
+      return;
+    }
+
+    savedDeafenStateRef.current = {
+      micEnabled,
+      volumes: { ...volumesRef.current },
+    };
+    for (const name of Object.keys(volumesRef.current)) {
+      setParticipantVolume(name, 0);
+    }
+    void setMicEnabled(false);
+    setDeafen(true);
+  }, [deafen, micEnabled, setParticipantVolume, setMicEnabled]);
+
   useEffect(() => {
     if (status !== "connected" && !micPermissionRef.current) return;
 
@@ -526,6 +557,7 @@ export function useVoice() {
     speakingNames,
     localPreview,
     isTabHidden,
+    deafen,
     error,
     clearError: useCallback(() => setError(null), []),
     ensureKrispLoaded,
@@ -539,5 +571,6 @@ export function useVoice() {
     setLocalMute,
     toggleLocalMute,
     setScreenShare,
+    toggleDeafen,
   };
 }
