@@ -30,7 +30,7 @@
       "title": "Feat/layout responsivo mobile drawer salas",
       "kind": "feat",
       "pr": 50,
-      "summary": "VozerZer no bolso! Interface adaptada para celular com lista de salas em drawer, chat em tela cheia e controles que se ajustam sozinhos."
+      "summary": "Vozzera no bolso! Interface adaptada para celular com lista de salas em drawer, chat em tela cheia e controles que se ajustam sozinhos."
     },
     {
       "title": "feat(chat): moderação de mensagens por mod/admin",
