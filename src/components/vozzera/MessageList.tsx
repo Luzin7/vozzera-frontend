@@ -1,6 +1,7 @@
 import { updateMessage } from "@/lib/vozzera/api";
+import { dateGroupLabelFor } from "@/lib/vozzera/chat";
 import { useAuth } from "@/lib/vozzera/useAuth";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/vozzera/types";
 import {
@@ -173,27 +174,42 @@ export const MessageList = memo(function MessageList({
         <ol className="space-y-0.5">
           {messages.map((message, index) => {
             const previous = messages[index - 1];
-            const grouped = previous?.userId === message.userId;
+            const dateLabel = dateGroupLabelFor(message.createdAt);
+            const previousDateLabel = previous ? dateGroupLabelFor(previous.createdAt) : null;
+            const startsDateGroup = dateLabel !== previousDateLabel;
+            const grouped = !startsDateGroup && previous?.userId === message.userId;
             const isEditing = editingMessageId === message.id;
             const isOwnMessage = username === message.username;
             const canDeleteMessage = isOwnMessage || canModerateMessages;
 
             return (
-              <MessageItem
-                key={message.id}
-                message={message}
-                grouped={grouped}
-                isLast={index === messages.length - 1}
-                isOwnMessage={isOwnMessage}
-                canDeleteMessage={canDeleteMessage}
-                isEditing={isEditing}
-                editContent={isEditing ? editContent : ""}
-                onStartEdit={startEditing}
-                onRequestDelete={setDeleteTarget}
-                onEditContentChange={handleEditContentChange}
-                onSaveEdit={handleSaveEdit}
-                onCancelEdit={cancelEditing}
-              />
+              <Fragment key={message.id}>
+                {startsDateGroup && dateLabel && (
+                  <li
+                    role="separator"
+                    aria-label={dateLabel}
+                    className="flex items-center gap-3 py-4 text-xs text-muted-foreground"
+                  >
+                    <span className="h-px flex-1 bg-border" />
+                    <span>{dateLabel}</span>
+                    <span className="h-px flex-1 bg-border" />
+                  </li>
+                )}
+                <MessageItem
+                  message={message}
+                  grouped={grouped}
+                  isLast={index === messages.length - 1}
+                  isOwnMessage={isOwnMessage}
+                  canDeleteMessage={canDeleteMessage}
+                  isEditing={isEditing}
+                  editContent={isEditing ? editContent : ""}
+                  onStartEdit={startEditing}
+                  onRequestDelete={setDeleteTarget}
+                  onEditContentChange={handleEditContentChange}
+                  onSaveEdit={handleSaveEdit}
+                  onCancelEdit={cancelEditing}
+                />
+              </Fragment>
             );
           })}
         </ol>
