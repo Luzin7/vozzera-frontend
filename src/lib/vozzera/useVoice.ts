@@ -47,14 +47,16 @@ export type ScreenShare = {
   track: ScreenShareTrack;
 };
 
+let deafenVolumeActive = false;
+
 function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number) {
-  participant.setVolume(volume);
+  participant.setVolume(deafenVolumeActive ? 0 : volume);
 }
 
 function setRemoteParticipantScreenShareVolume(participant: RemoteParticipant, volume: number) {
   if (screenShareAudioSource === null) return;
   participant.setVolume(
-    volume,
+    deafenVolumeActive ? 0 : volume,
     screenShareAudioSource as Parameters<RemoteParticipant["setVolume"]>[1],
   );
 }
@@ -120,7 +122,7 @@ export function useVoice() {
   const [localPreview, setLocalPreview] = useState<ScreenShare | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deafen, setDeafen] = useState(false);
-  const deafenRef = useRef(false);
+  const savedDeafenMicRef = useRef(false);
   const screenShareRef = useRef(false);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
@@ -143,22 +145,32 @@ export function useVoice() {
 
   noiseFilterRef.current = noiseFilter;
   selectedDeviceIdRef.current = selectedDeviceId;
-  deafenRef.current = deafen;
+  deafenVolumeActive = deafen;
   screenShareVolumesRef.current = screenShareVolumes;
 
-  const syncParticipants = useCallback((room: LiveKitRoom) => {
-    const remotes = Array.from(room.remoteParticipants.values()).map((p) => p.name || p.identity);
-    const me = room.localParticipant.name || room.localParticipant.identity;
-    setParticipants([me, ...remotes]);
-
-    for (const p of room.remoteParticipants.values()) {
-      const name = p.name || p.identity;
-      const volume = volumesRef.current[name];
-      if (volume !== undefined) setRemoteParticipantVolume(p, volume);
-      const ssVolume = screenShareVolumesRef.current[name];
-      if (ssVolume !== undefined) setRemoteParticipantScreenShareVolume(p, ssVolume);
+  const applyParticipantVolumes = useCallback((p: RemoteParticipant) => {
+    const name = p.name || p.identity;
+    const volume = volumesRef.current[name];
+    const ssVolume = screenShareVolumesRef.current[name];
+    if (volume === undefined && ssVolume === undefined && deafenVolumeActive) {
+      setRemoteParticipantVolume(p, 0);
+      setRemoteParticipantScreenShareVolume(p, 0);
+      return;
     }
+    if (volume !== undefined) setRemoteParticipantVolume(p, volume);
+    if (ssVolume !== undefined) setRemoteParticipantScreenShareVolume(p, ssVolume);
   }, []);
+
+  const syncParticipants = useCallback(
+    (room: LiveKitRoom) => {
+      const remotes = Array.from(room.remoteParticipants.values()).map((p) => p.name || p.identity);
+      const me = room.localParticipant.name || room.localParticipant.identity;
+      setParticipants([me, ...remotes]);
+
+      for (const p of room.remoteParticipants.values()) applyParticipantVolumes(p);
+    },
+    [applyParticipantVolumes],
+  );
 
   const removeParticipant = useCallback((name: string) => {
     setMutedParticipants((prev) => {
@@ -412,10 +424,13 @@ export function useVoice() {
             el.style.display = "none";
             document.body.appendChild(el);
 
-            if (publication.source === Track.Source.Microphone && !participant.isLocal) {
-              const name = participant.name || participant.identity;
+            if (participant.isLocal) return;
+
+            const name = participant.name || participant.identity;
+            if (publication.source === Track.Source.Microphone) {
               setMutedParticipants((prev) => ({ ...prev, [name]: publication.isMuted }));
             }
+            applyParticipantVolumes(participant);
             return;
           }
 
@@ -499,11 +514,6 @@ export function useVoice() {
           const me = room.localParticipant.name || room.localParticipant.identity;
           if (name === me) return;
 
-          if (deafenRef.current) {
-            setParticipantVolume(name, 0);
-            setScreenShareVolume(name, 0);
-          }
-
           const ssVolume = screenShareVolumesRef.current[name];
           if (ssVolume !== undefined) {
             const remoteParticipant = room.remoteParticipants.get(participant.sid);
@@ -562,12 +572,11 @@ export function useVoice() {
       }
     },
     [
+      applyParticipantVolumes,
       attachKrispNoiseFilter,
       disconnect,
       removeParticipant,
       resetRoomState,
-      setParticipantVolume,
-      setScreenShareVolume,
       syncLocalMicTrack,
       syncParticipants,
     ],
@@ -625,46 +634,24 @@ export function useVoice() {
     [attachKrispNoiseFilter, setError],
   );
 
-  const savedDeafenStateRef = useRef<{
-    micEnabled: boolean;
-    volumes: Record<string, number>;
-    screenShareVolumes: Record<string, number>;
-  } | null>(null);
-
   const toggleDeafen = useCallback(() => {
     if (deafen) {
-      const saved = savedDeafenStateRef.current;
-      savedDeafenStateRef.current = null;
-      if (saved) {
-        for (const [name, volume] of Object.entries(saved.volumes)) {
-          setParticipantVolume(name, volume);
-        }
-        for (const [name, volume] of Object.entries(saved.screenShareVolumes)) {
-          setScreenShareVolume(name, volume);
-        }
-        if (saved.micEnabled) void setMicEnabled(true);
-      }
+      if (savedDeafenMicRef.current) void setMicEnabled(true);
       setDeafen(false);
       return;
     }
-
-    const room = roomRef.current;
-    const remoteNames = room
-      ? Array.from(room.remoteParticipants.values()).map((p) => p.name || p.identity)
-      : [];
-
-    savedDeafenStateRef.current = {
-      micEnabled,
-      volumes: { ...volumesRef.current },
-      screenShareVolumes: { ...screenShareVolumesRef.current },
-    };
-    for (const name of remoteNames) {
-      setParticipantVolume(name, 0);
-      setScreenShareVolume(name, 0);
-    }
+    savedDeafenMicRef.current = micEnabled;
     void setMicEnabled(false);
     setDeafen(true);
-  }, [deafen, micEnabled, setParticipantVolume, setMicEnabled, setScreenShareVolume]);
+  }, [deafen, micEnabled, setMicEnabled]);
+
+  useEffect(() => {
+    if (status !== "connected") return;
+    const room = roomRef.current;
+    if (!room) return;
+
+    for (const p of room.remoteParticipants.values()) applyParticipantVolumes(p);
+  }, [deafen, status, applyParticipantVolumes]);
 
   useEffect(() => {
     if (status !== "connected" && !micPermissionRef.current) return;
