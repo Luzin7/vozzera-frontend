@@ -197,7 +197,7 @@ export function useChat() {
           });
         }
 
-        if (typeof document !== "undefined" && document.hidden && soundEnabledRef.current) {
+        if (typeof document !== "undefined" && soundEnabledRef.current) {
           playMessageSound();
         }
       }
