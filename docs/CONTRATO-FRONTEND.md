@@ -180,6 +180,7 @@ Endpoint `/ws`, mesma base da API (http→ws, https→wss).
 ```jsonc
 { "type": "join", "room_id": "string" }
 { "type": "message", "room_id": "string", "content": "string" }
+{ "type": "typing", "room_id": "string", "action": "start" | "stop" }
 ```
 
 ### Outbound (server → front)
@@ -204,6 +205,12 @@ Eventos de sala:
 { "type": "room", "action": "deleted", "id": "string" }
 ```
 
+Evento efêmero de digitação:
+
+```jsonc
+{ "type": "typing", "action": "start" | "stop", "room_id": "string", "user_id": "string", "username": "string" }
+```
+
 Regras:
 
 - Campos zerados (`ZERO_UUID = 00000000-0000-0000-0000-000000000000` e `created_at` zero) são ignorados.
@@ -214,6 +221,6 @@ Regras:
 
 ## Limitações conhecidas
 
-- **Presença/online, typing, upload e paginação não existem** no backend.
+- **Presença/online, upload e paginação não existem** no backend.
 - Nenhuma privacidade por sala: qualquer logado lê e escreve em qualquer sala — o invite code é a única barreira.
 - Cookie `SameSite=Lax`: em dev cross-origin (front num domínio diferente de `localhost:8080`) o cookie não viaja; auth funciona rodando o front localmente contra o Go, ou com o build servido pelo próprio Go.
