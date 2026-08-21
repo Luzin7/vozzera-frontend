@@ -38,6 +38,14 @@ const presence = z.object({
   username: z.string(),
 });
 
+const typing = z.object({
+  type: z.literal("typing"),
+  action: z.union([z.literal("start"), z.literal("stop")]),
+  room_id: z.string(),
+  user_id: z.string(),
+  username: z.string(),
+});
+
 const error = z.object({
   type: z.literal("error"),
   error: z.string(),
@@ -64,5 +72,6 @@ export const outboundFrameSchema = z.union([
   messageUpdated,
   messageDeleted,
   presence,
+  typing,
   error,
 ]);

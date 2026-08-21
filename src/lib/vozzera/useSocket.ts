@@ -138,9 +138,21 @@ export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
     [rawSend],
   );
 
+  const sendTyping = useCallback(
+    (roomId: string, action: "start" | "stop") => {
+      rawSend({
+        type: "typing",
+        room_id: roomId,
+        action,
+      });
+    },
+    [rawSend],
+  );
+
   return {
     status,
     joinRoom,
     sendMessage,
+    sendTyping,
   };
 }

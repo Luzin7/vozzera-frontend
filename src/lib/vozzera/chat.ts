@@ -88,6 +88,72 @@ export function removeRoom<T>(state: Record<string, T>, roomId: string): Record<
   return next;
 }
 
+export type TypingUser = {
+  userId: string;
+  username: string;
+  lastTypedAt: number;
+};
+
+export type TypingUsers = Record<string, Record<string, TypingUser>>;
+
+export function updateTypingUsers(
+  users: TypingUsers,
+  event: Extract<OutboundEvent, { type: "typing" }>,
+  currentUserId: string | null,
+  now: number,
+): TypingUsers {
+  if (event.user_id === currentUserId) return users;
+
+  const roomUsers = users[event.room_id] ?? {};
+
+  if (event.action === "start") {
+    return {
+      ...users,
+      [event.room_id]: {
+        ...roomUsers,
+        [event.user_id]: {
+          userId: event.user_id,
+          username: event.username,
+          lastTypedAt: now,
+        },
+      },
+    };
+  }
+
+  return removeTypingUser(users, event.room_id, event.user_id);
+}
+
+export function expireTypingUsers(users: TypingUsers, now: number, timeout: number): TypingUsers {
+  let next = users;
+
+  for (const [roomId, roomUsers] of Object.entries(users)) {
+    for (const user of Object.values(roomUsers)) {
+      if (now - user.lastTypedAt < timeout) continue;
+      next = removeTypingUser(next, roomId, user.userId);
+    }
+  }
+
+  return next;
+}
+
+export function typingIndicatorText(users: TypingUser[]): string | null {
+  const [first, second] = users;
+  if (!first) return null;
+  if (!second) return `${first.username} está digitando...`;
+  if (users.length === 2) return `${first.username} e ${second.username} estão digitando...`;
+  return "Várias pessoas estão digitando ao mesmo tempo...";
+}
+
+function removeTypingUser(users: TypingUsers, roomId: string, userId: string): TypingUsers {
+  const roomUsers = users[roomId];
+  if (!roomUsers || !(userId in roomUsers)) return users;
+
+  const nextRoomUsers = { ...roomUsers };
+  delete nextRoomUsers[userId];
+  if (Object.keys(nextRoomUsers).length === 0) return removeRoom(users, roomId);
+  return { ...users, [roomId]: nextRoomUsers };
+}
+
 export function parseFrame(raw: MessageEvent): OutboundEvent | null {
   const data = raw.data as string;
 

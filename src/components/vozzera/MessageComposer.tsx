@@ -10,11 +10,13 @@ export const MessageComposer = memo(function MessageComposer({
   roomName,
   disabled,
   onSend,
+  onTypingChange,
 }: Readonly<{
   roomId: string;
   roomName: string;
   disabled: boolean;
   onSend: (content: string) => void;
+  onTypingChange: (typing: boolean) => void;
 }>) {
   const [value, setValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -23,8 +25,9 @@ export const MessageComposer = memo(function MessageComposer({
 
   useEffect(() => {
     setValue("");
+    onTypingChange(false);
     inputRef.current?.focus();
-  }, [roomId]);
+  }, [roomId, onTypingChange]);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -36,6 +39,7 @@ export const MessageComposer = memo(function MessageComposer({
   const submit = () => {
     if (!canSend) return;
     onSend(trimmed);
+    onTypingChange(false);
     setValue("");
   };
 
@@ -45,7 +49,10 @@ export const MessageComposer = memo(function MessageComposer({
         <Textarea
           ref={inputRef}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            onTypingChange(e.target.value.length > 0);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

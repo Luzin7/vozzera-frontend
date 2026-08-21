@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnline } from "@/hooks/useOnline";
+import { typingIndicatorText } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
 import { useChangelog } from "@/lib/vozzera/useChangelog";
@@ -61,6 +62,7 @@ function Index() {
     banner,
     loadingHistory,
     unread,
+    typingUsers,
     socketStatus,
     openRoom,
     createRoom,
@@ -77,6 +79,7 @@ function Index() {
     soundEnabled,
     toggleSound,
     sendMessage,
+    setTyping,
   } = useChat();
   const {
     changelog,
@@ -183,6 +186,7 @@ function Index() {
   }, [screenShareEnabled, setScreenShare]);
 
   const handleLogout = useCallback(() => {
+    setSettingsOpen(false);
     void disconnect();
     void logout();
   }, [disconnect, logout]);
@@ -223,6 +227,9 @@ function Index() {
   }, [rooms, voiceActiveRoomId, disconnect]);
 
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
+  const typingText = activeRoom
+    ? typingIndicatorText(Object.values(typingUsers[activeRoom.id] ?? {}))
+    : null;
   const visibleVoiceRoom =
     voice.status === "idle" ? null : (rooms.find((room) => room.id === visibleVoiceRoomId) ?? null);
   const sidebarProps = {
@@ -268,6 +275,7 @@ function Index() {
             messages={[]}
             roomId=""
             roomName=""
+            typingText={null}
             canModerateMessages={false}
             onDelete={() => {}}
           />
@@ -393,6 +401,7 @@ function Index() {
               loading={loadingHistory && activeMessages.length === 0}
               roomId={activeRoom.id}
               roomName={activeRoom.name}
+              typingText={typingText}
               canModerateMessages={canModerateMessages}
               onDelete={handleDeleteMessage}
             />
@@ -401,6 +410,7 @@ function Index() {
               roomName={activeRoom.name}
               disabled={socketStatus !== "open"}
               onSend={handleSendMessage}
+              onTypingChange={setTyping}
             />
           </>
         ) : (

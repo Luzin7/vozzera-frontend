@@ -18,14 +18,17 @@ import {
   appendMessage,
   clearActiveRoomId,
   clearUnread,
+  expireTypingUsers,
   firstTextRoom,
   incrementUnread,
   readActiveRoomId,
   removeRoom,
   totalUnread,
+  updateTypingUsers,
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
+import type { TypingUsers } from "@/lib/vozzera/chat";
 import {
   canNotify,
   initialNotificationsEnabled,
@@ -41,6 +44,9 @@ import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
 
+const TYPING_EVENT_INTERVAL_MS = 1000;
+const TYPING_EXPIRATION_MS = 3000;
+
 export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
   const queryClient = useQueryClient();
@@ -48,11 +54,13 @@ export function useChat() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [role, setRole] = useState<UserRole | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [banner, setBanner] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [typingUsers, setTypingUsers] = useState<TypingUsers>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     if (typeof localStorage === "undefined") return false;
     return initialNotificationsEnabled(localStorage);
@@ -66,6 +74,8 @@ export function useChat() {
   const notificationsEnabledRef = useRef(notificationsEnabled);
   const soundEnabledRef = useRef(soundEnabled);
   const selectedInitialRoomRef = useRef(false);
+  const typingRoomRef = useRef<string | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
@@ -78,8 +88,10 @@ export function useChat() {
     setRooms([]);
     setRole(null);
     setEmail(null);
+    setCurrentUserId(null);
     setActiveRoom(null);
     setMessages({});
+    setTypingUsers({});
     selectedInitialRoomRef.current = false;
     clearActiveRoomId(typeof localStorage === "undefined" ? null : localStorage);
     queryClient.removeQueries({ queryKey: ["rooms"] });
@@ -110,6 +122,7 @@ export function useChat() {
       setUsername(currentUser.username);
       setRole(currentUser.role);
       setEmail(currentUser.email);
+      setCurrentUserId(currentUser.id);
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
@@ -128,6 +141,7 @@ export function useChat() {
     setRooms((prev) => prev.filter((room) => room.id !== roomId));
     setMessages((prev) => removeRoom(prev, roomId));
     setUnread((prev) => removeRoom(prev, roomId));
+    setTypingUsers((prev) => removeRoom(prev, roomId));
     setActiveRoom((current) => (current?.id === roomId ? null : current));
   }, []);
 
@@ -219,13 +233,18 @@ export function useChat() {
         return;
       }
 
+      if (event.type === "typing") {
+        setTypingUsers((prev) => updateTypingUsers(prev, event, currentUserId, Date.now()));
+        return;
+      }
+
       if (event.type !== "message" || event.room_id === ZERO_UUID) return;
       handleMessageEvent(event);
     },
-    [handleMessageEvent, handleRoomEvent],
+    [currentUserId, handleMessageEvent, handleRoomEvent],
   );
 
-  const { status, joinRoom, sendMessage } = useSocket({
+  const { status, joinRoom, sendMessage, sendTyping } = useSocket({
     enabled: authed === true,
     onEvent: handleEvent,
     onSessionExpired: () => {
@@ -234,11 +253,50 @@ export function useChat() {
     },
   });
 
+  const setTyping = useCallback(
+    (typing: boolean) => {
+      const roomId = activeRoomRef.current?.id;
+
+      if (!typing) {
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+        if (typingRoomRef.current) sendTyping(typingRoomRef.current, "stop");
+        typingRoomRef.current = null;
+        return;
+      }
+
+      if (!roomId || typingTimerRef.current) return;
+
+      sendTyping(roomId, "start");
+      typingRoomRef.current = roomId;
+      typingTimerRef.current = setTimeout(() => {
+        typingTimerRef.current = null;
+      }, TYPING_EVENT_INTERVAL_MS);
+    },
+    [sendTyping],
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTypingUsers((prev) => expireTypingUsers(prev, Date.now(), TYPING_EXPIRATION_MS));
+    }, TYPING_EVENT_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    },
+    [],
+  );
+
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.type !== "text") return;
       if (room.id === activeRoomRef.current?.id) return;
 
+      setTyping(false);
       setActiveRoom(room);
       writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
       setUnread((prev) => clearUnread(prev, room.id));
@@ -266,7 +324,7 @@ export function useChat() {
         setLoadingHistory(false);
       }
     },
-    [joinRoom, messages],
+    [joinRoom, messages, setTyping],
   );
 
   useEffect(() => {
@@ -448,6 +506,7 @@ export function useChat() {
     banner,
     loadingHistory,
     unread,
+    typingUsers,
     socketStatus: status,
     openRoom,
     createRoom,
@@ -464,5 +523,6 @@ export function useChat() {
     soundEnabled,
     toggleSound,
     sendMessage,
+    setTyping,
   };
 }
