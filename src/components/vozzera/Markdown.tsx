@@ -1,7 +1,45 @@
-import { memo, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
+import { memo, type ReactNode, useEffect, useState } from "react";
 
 import { parseBlocks } from "@/lib/vozzera/markdown";
 import type { Block, Inline } from "@/lib/vozzera/markdown";
+
+function CodeBlock({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+
+    const timeoutId = window.setTimeout(() => setCopied(false), 2000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [copied]);
+
+  function copyCode() {
+    void navigator.clipboard.writeText(text).then(
+      () => setCopied(true),
+      () => setCopied(false),
+    );
+  }
+
+  const label = copied ? "Código copiado" : "Copiar código";
+  const Icon = copied ? Check : Copy;
+
+  return (
+    <pre className="relative overflow-x-auto rounded bg-muted p-2 pr-10 font-mono text-[0.85em] leading-relaxed text-foreground">
+      <button
+        type="button"
+        onClick={copyCode}
+        aria-label={label}
+        title={label}
+        className="absolute right-2 top-2 rounded p-1 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Icon className="size-4" aria-hidden="true" />
+      </button>
+      <code>{text}</code>
+    </pre>
+  );
+}
 
 function InlineNodes({
   nodes,
@@ -80,14 +118,7 @@ function BlockNodes({
     }
 
     if (block.kind === "code") {
-      return (
-        <pre
-          key={index}
-          className="overflow-x-auto rounded bg-muted p-2 font-mono text-[0.85em] leading-relaxed text-foreground"
-        >
-          <code>{block.text}</code>
-        </pre>
-      );
+      return <CodeBlock key={index} text={block.text} />;
     }
 
     if (block.kind === "quote") {
