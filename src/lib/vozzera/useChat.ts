@@ -30,7 +30,10 @@ import {
   canNotify,
   initialNotificationsEnabled,
   notificationPermissionGranted,
+  playMessageSound,
+  readSoundEnabled,
   writeNotificationsEnabled,
+  writeSoundEnabled,
 } from "@/lib/vozzera/notifications";
 import { canManageRooms, canModerateMessages } from "@/lib/vozzera/permissions";
 import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
@@ -54,14 +57,20 @@ export function useChat() {
     if (typeof localStorage === "undefined") return false;
     return initialNotificationsEnabled(localStorage);
   });
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof localStorage === "undefined") return false;
+    return readSoundEnabled(localStorage);
+  });
   const activeRoomRef = useRef(activeRoom);
   const roomsRef = useRef(rooms);
   const notificationsEnabledRef = useRef(notificationsEnabled);
+  const soundEnabledRef = useRef(soundEnabled);
   const selectedInitialRoomRef = useRef(false);
 
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
   notificationsEnabledRef.current = notificationsEnabled;
+  soundEnabledRef.current = soundEnabled;
 
   const endSession = useCallback(() => {
     clearUsername();
@@ -172,6 +181,10 @@ export function useChat() {
           new Notification(`# ${room?.name ?? "Sala"}`, {
             body: `${event.username ?? "Alguém"}: ${event.content ?? ""}`,
           });
+        }
+
+        if (typeof document !== "undefined" && document.hidden && soundEnabledRef.current) {
+          playMessageSound();
         }
       }
 
@@ -396,6 +409,12 @@ export function useChat() {
     setNotificationsEnabled(true);
   }, []);
 
+  const toggleSound = useCallback(async () => {
+    const next = !soundEnabledRef.current;
+    writeSoundEnabled(typeof localStorage === "undefined" ? null : localStorage, next);
+    setSoundEnabled(next);
+  }, []);
+
   const baseTitle = "Vozzera — servidor privado de chat e voz";
 
   useEffect(() => {
@@ -442,6 +461,8 @@ export function useChat() {
     updateEmail,
     notificationsEnabled,
     toggleNotifications,
+    soundEnabled,
+    toggleSound,
     sendMessage,
   };
 }

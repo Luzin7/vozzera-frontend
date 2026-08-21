@@ -1,8 +1,10 @@
+import { Label } from "@/components/ui/label";
 import { LogOut, Mic2, User } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import type { MicDevice } from "@/lib/vozzera/voice";
 import { EmailChangeForm } from "./EmailChangeForm";
 import { MicSettings } from "./MicSettings";
@@ -19,9 +21,11 @@ type Props = {
   noiseFilter: boolean;
   krispSupported: boolean;
   selfMonitor: boolean;
+  soundEnabled: boolean;
   onSelectDevice: (deviceId: string) => void;
   onToggleNoiseFilter: (enabled: boolean) => void;
   onToggleSelfMonitor: (enabled: boolean) => void;
+  onToggleSound: (enabled: boolean) => void;
   onUpdateEmail: (email: string) => Promise<string>;
   onLogout: () => void;
 };
@@ -41,9 +45,11 @@ export function SettingsDialog({
   noiseFilter,
   krispSupported,
   selfMonitor,
+  soundEnabled,
   onSelectDevice,
   onToggleNoiseFilter,
   onToggleSelfMonitor,
+  onToggleSound,
   onUpdateEmail,
   onLogout,
 }: Readonly<Props>) {
@@ -86,6 +92,15 @@ export function SettingsDialog({
                 onToggleNoiseFilter={onToggleNoiseFilter}
                 onToggleSelfMonitor={onToggleSelfMonitor}
               />
+              <div className="mt-5 flex items-center justify-between gap-2 border-t border-border pt-5">
+                <div>
+                  <Label htmlFor="sound-toggle">Som ao receber mensagem com a aba escondida</Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Som curto e discreto quando chega mensagem com a aba minimizada.
+                  </p>
+                </div>
+                <Switch id="sound-toggle" checked={soundEnabled} onCheckedChange={onToggleSound} />
+              </div>
             </>
           ) : (
             <div className="flex min-h-full flex-1 flex-col">
