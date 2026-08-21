@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const changelogPath = path.join(__dirname, "../../public/changelog.json");
+const changelogPath = path.join(__dirname, "../public/changelog.json");
 const changelog = JSON.parse(fs.readFileSync(changelogPath, "utf8"));
 
 const missingSummaries = changelog.items.filter(

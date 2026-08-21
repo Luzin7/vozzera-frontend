@@ -22,12 +22,12 @@ jobs:
 
       - name: Validate summaries
         run: |
-          if node scripts/validate-summaries.js; then
+          if node scripts/validate-summaries.cjs; then
             echo "Summaries válidos"
           else
             echo "Erro: summaries não preenchidos"
             exit 1
           fi
 
-      - name: Run update script
-        run: npm run update
+      - name: Run changelog
+        run: npm run changelog
