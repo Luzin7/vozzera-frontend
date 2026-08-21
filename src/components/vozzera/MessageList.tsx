@@ -21,6 +21,7 @@ export const MessageList = memo(function MessageList({
   loading,
   roomId,
   roomName,
+  typingText,
   canModerateMessages,
   onDelete,
 }: Readonly<{
@@ -28,6 +29,7 @@ export const MessageList = memo(function MessageList({
   loading: boolean;
   roomId: string;
   roomName: string;
+  typingText: string | null;
   canModerateMessages: boolean;
   onDelete: (message: ChatMessage) => void;
 }>) {
@@ -146,56 +148,71 @@ export const MessageList = memo(function MessageList({
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 text-center">
-        <div>
-          <p className="text-sm font-medium text-foreground">Silêncio absoluto em #{roomName}</p>
-          <p className="mt-1 text-sm text-muted-foreground">Manda a primeira mensagem.</p>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 items-center justify-center px-6 text-center">
+          <div>
+            <p className="text-sm font-medium text-foreground">Silêncio absoluto em #{roomName}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Manda a primeira mensagem.</p>
+          </div>
         </div>
+        {typingText && (
+          <p className="px-4 pb-2 text-xs text-muted-foreground" aria-live="polite">
+            {typingText}
+          </p>
+        )}
       </div>
     );
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="relative min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
-    >
-      <ol className="space-y-0.5">
-        {messages.map((message, index) => {
-          const previous = messages[index - 1];
-          const grouped = previous?.userId === message.userId;
-          const isEditing = editingMessageId === message.id;
-          const isOwnMessage = username === message.username;
-          const canDeleteMessage = isOwnMessage || canModerateMessages;
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        ref={scrollRef}
+        className="relative min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
+      >
+        <ol className="space-y-0.5">
+          {messages.map((message, index) => {
+            const previous = messages[index - 1];
+            const grouped = previous?.userId === message.userId;
+            const isEditing = editingMessageId === message.id;
+            const isOwnMessage = username === message.username;
+            const canDeleteMessage = isOwnMessage || canModerateMessages;
 
-          return (
-            <MessageItem
-              key={message.id}
-              message={message}
-              grouped={grouped}
-              isLast={index === messages.length - 1}
-              isOwnMessage={isOwnMessage}
-              canDeleteMessage={canDeleteMessage}
-              isEditing={isEditing}
-              editContent={isEditing ? editContent : ""}
-              onStartEdit={startEditing}
-              onRequestDelete={setDeleteTarget}
-              onEditContentChange={handleEditContentChange}
-              onSaveEdit={handleSaveEdit}
-              onCancelEdit={cancelEditing}
-            />
-          );
-        })}
-      </ol>
+            return (
+              <MessageItem
+                key={message.id}
+                message={message}
+                grouped={grouped}
+                isLast={index === messages.length - 1}
+                isOwnMessage={isOwnMessage}
+                canDeleteMessage={canDeleteMessage}
+                isEditing={isEditing}
+                editContent={isEditing ? editContent : ""}
+                onStartEdit={startEditing}
+                onRequestDelete={setDeleteTarget}
+                onEditContentChange={handleEditContentChange}
+                onSaveEdit={handleSaveEdit}
+                onCancelEdit={cancelEditing}
+              />
+            );
+          })}
+        </ol>
 
-      {showJumpToLatest && (
-        <button
-          type="button"
-          onClick={jumpToLatest}
-          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
-        >
-          Ir para a última mensagem
-        </button>
+        {showJumpToLatest && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
+          >
+            Ir para a última mensagem
+          </button>
+        )}
+      </div>
+
+      {typingText && (
+        <p className="px-4 pb-2 text-xs text-muted-foreground" aria-live="polite">
+          {typingText}
+        </p>
       )}
 
       <AlertDialog
