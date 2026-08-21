@@ -104,7 +104,7 @@ function RootShell({ children }: Readonly<{ children: ReactNode }>) {
         {/* script-src 'unsafe-inline' exigido pelo SSR do TanStack Start (scripts inline de hidratação) — não remover */}
         <meta
           httpEquiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' ws: wss: http://localhost:* https://vozzera-sha-ae9fd4f.onrender.com https://integrations.livekit.io https://vozzera-qgu7rhfy.livekit.cloud; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' blob: ws: wss: http://localhost:* https://vozzera-sha-ae9fd4f.onrender.com https://integrations.livekit.io https://vozzera-qgu7rhfy.livekit.cloud; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
         />
         <HeadContent />
       </head>
