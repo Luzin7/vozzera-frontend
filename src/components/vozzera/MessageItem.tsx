@@ -110,6 +110,7 @@ type MessageItemProps = Readonly<{
   onEditContentChange: (content: string) => void;
   onSaveEdit: (messageId: string) => void;
   onCancelEdit: () => void;
+  onRoomClick: ((roomName: string) => void) | undefined;
 }>;
 
 export const MessageItem = memo(function MessageItem({
@@ -125,6 +126,7 @@ export const MessageItem = memo(function MessageItem({
   onEditContentChange,
   onSaveEdit,
   onCancelEdit,
+  onRoomClick,
 }: MessageItemProps) {
   return (
     <li
@@ -201,7 +203,7 @@ export const MessageItem = memo(function MessageItem({
             <div
               className={`relative text-sm leading-relaxed text-foreground/90 ${canDeleteMessage ? "pr-12 md:pr-0" : ""}`}
             >
-              <Markdown content={message.content} />
+              <Markdown content={message.content} onRoomClick={onRoomClick} />
               {canDeleteMessage && (
                 <MessageActions
                   isOwnMessage={isOwnMessage}
