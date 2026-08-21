@@ -405,7 +405,15 @@ export function useVoice() {
         });
 
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-          setSpeakingNames(speakers.map((p) => p.name || p.identity));
+          const localName = room.localParticipant.name || room.localParticipant.identity;
+          setSpeakingNames(
+            speakers
+              .map((p) => p.name || p.identity)
+              .filter((name) => {
+                if (name !== localName) return true;
+                return !screenShareRef.current;
+              }),
+          );
         });
 
         room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
