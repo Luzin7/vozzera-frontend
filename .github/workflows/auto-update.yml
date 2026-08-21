@@ -31,3 +31,5 @@ jobs:
 
       - name: Run changelog
         run: npm run changelog
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

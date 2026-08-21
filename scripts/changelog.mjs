@@ -13,68 +13,84 @@ const tokenHeader = GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } :
 const acceptHeader = { Accept: "application/vnd.github.v3+json" };
 const defaultHeaders = { ...acceptHeader, ...tokenHeader };
 
-const release = await ghApiOrNull(`repos/${repo}/releases/latest`);
+if (GITHUB_TOKEN) {
+  const release = await ghApiOrNull(`repos/${repo}/releases/latest`);
 
-let baseline = null;
-let lastTag = null;
+  let baseline = null;
+  let lastTag = null;
 
-if (release) {
-  baseline = new Date(release.published_at);
-  lastTag = release.tag_name;
+  if (release) {
+    baseline = new Date(release.published_at);
+    lastTag = release.tag_name;
+  } else {
+    const tags = await ghApiOrNull(`repos/${repo}/tags?per_page=1`);
+
+    if (tags && tags.length > 0) {
+      lastTag = tags[0].name;
+      const commit = await ghApiOrNull(`repos/${repo}/commits/${tags[0].name}`);
+
+      if (commit) baseline = new Date(commit.commit.author.date);
+    }
+  }
+
+  const highlights = [];
+
+  for (let page = 1; page <= 3; page += 1) {
+    const pulls = await ghApiOrNull(`repos/${repo}/pulls?state=closed&per_page=100&page=${page}`);
+
+    if (!pulls || pulls.length === 0) break;
+
+    for (const pull of pulls) {
+      if (pull.merged_at === null) continue;
+      if (!pull.labels.some((label) => label.name === HIGHLIGHT_LABEL)) continue;
+      if (baseline !== null && new Date(pull.merged_at) <= baseline) continue;
+
+      highlights.push(pull);
+    }
+
+    if (highlights.length >= MAX_ITEMS) break;
+  }
+
+  highlights.sort(
+    (left, right) => new Date(right.merged_at).getTime() - new Date(left.merged_at).getTime(),
+  );
+
+  const existing = readExistingChangelog();
+  const existingSummaries = existing
+    ? Object.fromEntries(
+        (existing.items ?? [])
+          .filter((item) => item.summary)
+          .map((item) => [item.pr, item.summary]),
+      )
+    : {};
+  const items = highlights.slice(0, MAX_ITEMS).map((pull) => ({
+    title: pull.title,
+    kind: kindFromTitle(pull.title),
+    pr: pull.number,
+    summary: existingSummaries[pull.number] ?? "",
+  }));
+
+  const baseVersion = args.version ?? existing?.version ?? null ?? lastTag;
+  const samePRs =
+    existing &&
+    items.length === (existing.items ?? []).length &&
+    items.every((item, i) => item.pr === existing.items[i].pr);
+  const version = samePRs ? existing.version : nextVersion(items, baseVersion);
+
+  const payload = {
+    version,
+    releasedAt: new Date().toISOString().slice(0, 10),
+    items,
+  };
+
+  writeFileSync(resolve("public/changelog.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+
+  process.stdout.write(
+    `public/changelog.json atualizado: ${version} com ${items.length} destaque(s).\n`,
+  );
 } else {
-  const tags = await ghApi(`repos/${repo}/tags?per_page=1`);
-
-  if (tags.length > 0) {
-    lastTag = tags[0].name;
-    const commit = await ghApiOrNull(`repos/${repo}/commits/${tags[0].name}`);
-
-    if (commit) baseline = new Date(commit.commit.author.date);
-  }
+  process.stdout.write("Sem GITHUB_TOKEN — pulando changelog.\n");
 }
-
-const highlights = [];
-
-for (let page = 1; page <= 3; page += 1) {
-  const pulls = await ghApi(`repos/${repo}/pulls?state=closed&per_page=100&page=${page}`);
-
-  if (pulls.length === 0) break;
-
-  for (const pull of pulls) {
-    if (pull.merged_at === null) continue;
-    if (!pull.labels.some((label) => label.name === HIGHLIGHT_LABEL)) continue;
-    if (baseline !== null && new Date(pull.merged_at) <= baseline) continue;
-
-    highlights.push(pull);
-  }
-
-  if (highlights.length >= MAX_ITEMS) break;
-}
-
-highlights.sort(
-  (left, right) => new Date(right.merged_at).getTime() - new Date(left.merged_at).getTime(),
-);
-
-const existingSummaries = readExistingSummaries();
-const items = highlights.slice(0, MAX_ITEMS).map((pull) => ({
-  title: pull.title,
-  kind: kindFromTitle(pull.title),
-  pr: pull.number,
-  summary: existingSummaries[pull.number] ?? "",
-}));
-
-const version = args.version ?? nextVersion(items, lastTag);
-
-const payload = {
-  version,
-  releasedAt: new Date().toISOString().slice(0, 10),
-  items,
-};
-
-writeFileSync(resolve("public/changelog.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-
-process.stdout.write(
-  `public/changelog.json atualizado: ${version} com ${items.length} destaque(s).\n`,
-);
 
 function parseArgs(argv) {
   const parsed = { version: null };
@@ -117,14 +133,16 @@ async function ghApiOrNull(path) {
   }
 }
 
-function nextVersion(items, lastTag) {
-  if (items.length === 0) return lastTag ?? "v1.0.0";
-  if (items.some((item) => isMinorKind(item.kind))) return bumpMinor(lastTag) ?? "v1.0.0";
-  return bumpPatch(lastTag) ?? "v1.0.0";
+function nextVersion(items, base) {
+  if (items.length === 0) return base ?? "v1.0.0";
+  if (items.some((item) => isMinorKind(item.kind))) return bumpMinor(base) ?? "v1.0.0";
+
+  return bumpPatch(base) ?? "v1.0.0";
 }
 
 function isMinorKind(kind) {
   if (kind === undefined) return true;
+
   return kind.startsWith("feat");
 }
 
@@ -144,15 +162,11 @@ function bumpMinor(tag) {
   return `v${match[1]}.${Number(match[2]) + 1}.0`;
 }
 
-function readExistingSummaries() {
+function readExistingChangelog() {
   try {
-    const current = JSON.parse(readFileSync(resolve("public/changelog.json"), "utf8"));
-
-    return Object.fromEntries(
-      (current.items ?? []).filter((item) => item.summary).map((item) => [item.pr, item.summary]),
-    );
+    return JSON.parse(readFileSync(resolve("public/changelog.json"), "utf8"));
   } catch {
-    return {};
+    return null;
   }
 }
 
