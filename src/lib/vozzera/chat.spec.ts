@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ACTIVE_ROOM_STORAGE_KEY,
   appendMessage,
   backoffDelay,
+  clearActiveRoomId,
   expireTypingUsers,
   firstTextRoom,
   nextRoomIndex,
   parseFrame,
+  readActiveRoomId,
   removeRoom,
   typingIndicatorText,
   updateTypingUsers,
   upsertRoom,
+  writeActiveRoomId,
 } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { MAX_FRAME_BYTES } from "@/lib/vozzera/ws-schema";
+import type { ActiveRoomStorage } from "@/lib/vozzera/chat";
 
 function message(id: string, roomId = "r1"): ChatMessage {
   return {
@@ -100,6 +105,60 @@ describe("room state", () => {
     expect(removeRoom({ r1: [message("a")], r2: [message("b", "r2")] }, "r1")).toEqual({
       r2: [message("b", "r2")],
     });
+  });
+});
+
+function memoryStorage(): ActiveRoomStorage {
+  const values = new Map<string, string>();
+
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => void values.set(key, value),
+    removeItem: (key) => void values.delete(key),
+  };
+}
+
+describe("readActiveRoomId", () => {
+  it("returns null when nothing is stored", () => {
+    expect(readActiveRoomId(memoryStorage())).toBeNull();
+  });
+
+  it("returns the stored room id", () => {
+    const storage = memoryStorage();
+    storage.setItem(ACTIVE_ROOM_STORAGE_KEY, "r1");
+
+    expect(readActiveRoomId(storage)).toBe("r1");
+  });
+
+  it("returns null when storage is unavailable", () => {
+    expect(readActiveRoomId(null)).toBeNull();
+  });
+});
+
+describe("writeActiveRoomId", () => {
+  it("stores the room id", () => {
+    const storage = memoryStorage();
+    writeActiveRoomId(storage, "r1");
+
+    expect(storage.getItem(ACTIVE_ROOM_STORAGE_KEY)).toBe("r1");
+  });
+
+  it("does nothing when storage is unavailable", () => {
+    expect(() => writeActiveRoomId(null, "r1")).not.toThrow();
+  });
+});
+
+describe("clearActiveRoomId", () => {
+  it("removes the stored room id", () => {
+    const storage = memoryStorage();
+    storage.setItem(ACTIVE_ROOM_STORAGE_KEY, "r1");
+    clearActiveRoomId(storage);
+
+    expect(storage.getItem(ACTIVE_ROOM_STORAGE_KEY)).toBeNull();
+  });
+
+  it("does nothing when storage is unavailable", () => {
+    expect(() => clearActiveRoomId(null)).not.toThrow();
   });
 });
 

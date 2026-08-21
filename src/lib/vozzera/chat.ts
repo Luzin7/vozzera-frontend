@@ -45,6 +45,37 @@ export function firstTextRoom(rooms: Room[]): Room | undefined {
   return rooms.find((room) => room.type === "text");
 }
 
+export const ACTIVE_ROOM_STORAGE_KEY = "vozzera:active-room-id";
+
+export type ActiveRoomStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export function readActiveRoomId(storage: ActiveRoomStorage | null): string | null {
+  if (storage === null) return null;
+  try {
+    return storage.getItem(ACTIVE_ROOM_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeActiveRoomId(storage: ActiveRoomStorage | null, roomId: string): void {
+  if (storage === null) return;
+  try {
+    storage.setItem(ACTIVE_ROOM_STORAGE_KEY, roomId);
+  } catch {
+    // best-effort: armazenamento pode estar cheio ou desabilitado
+  }
+}
+
+export function clearActiveRoomId(storage: ActiveRoomStorage | null): void {
+  if (storage === null) return;
+  try {
+    storage.removeItem(ACTIVE_ROOM_STORAGE_KEY);
+  } catch {
+    // best-effort
+  }
+}
+
 export function upsertRoom(rooms: Room[], room: Room): Room[] {
   if (!rooms.some((current) => current.id === room.id)) return [...rooms, room];
   return rooms.map((current) => (current.id === room.id ? { ...current, ...room } : current));
