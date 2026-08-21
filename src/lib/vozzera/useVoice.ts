@@ -200,6 +200,15 @@ export function useVoice() {
       const supported = await ensureKrispLoaded();
       if (!supported) return;
 
+      if (krispProcessorRef.current) {
+        try {
+          await krispProcessorRef.current.setEnabled(true);
+        } catch {
+          setError("Não consegui ativar o filtro de ruído.");
+        }
+        return;
+      }
+
       try {
         const { KrispNoiseFilter } = await import("@livekit/krisp-noise-filter");
         const processor = KrispNoiseFilter();
