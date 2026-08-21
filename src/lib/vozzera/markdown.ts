@@ -98,7 +98,7 @@ export function parseInline(input: string): Inline[] {
     }
 
     if (rest.startsWith("#")) {
-      const match = rest.match(/^#([\w-]+)/);
+      const match = rest.match(/^#([^\s#]+)/);
       const roomName = match?.[1];
 
       if (roomName && (i === 0 || /\s/.test(input[i - 1] ?? ""))) {

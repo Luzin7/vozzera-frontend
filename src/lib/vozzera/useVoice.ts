@@ -45,14 +45,8 @@ export type ScreenShare = {
   track: ScreenShareTrack;
 };
 
-type ParticipantVolumeSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
-
-let screenShareAudioSource: ParticipantVolumeSource | null = null;
-
 function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number) {
   participant.setVolume(volume);
-  if (screenShareAudioSource === null) return;
-  participant.setVolume(volume, screenShareAudioSource);
 }
 
 export type ScreenShareQuality = {
@@ -62,9 +56,7 @@ export type ScreenShareQuality = {
 };
 
 async function loadLiveKitClient() {
-  const client = await import("livekit-client");
-  screenShareAudioSource = client.Track.Source.ScreenShareAudio satisfies ParticipantVolumeSource;
-  return client;
+  return await import("livekit-client");
 }
 
 async function applyKrispToggle(
