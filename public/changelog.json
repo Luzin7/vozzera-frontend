@@ -1,36 +1,42 @@
 {
-  "version": "v1.5.0",
+  "version": "v1.4.0",
   "releasedAt": "2026-08-21",
   "items": [
+    {
+      "title": "feat(voice): notificar entrada/saída de participantes do canal",
+      "kind": "feat",
+      "pr": 92,
+      "summary": ""
+    },
     {
       "title": "feat(voice): deafen — silenciar todos e o mic de uma vez",
       "kind": "feat",
       "pr": 91,
-      "summary": "Silencie tudo com um clique! O deafen desliga microfone e mute de todos os participantes de uma só vez — e restaura tudo quando você desativar."
+      "summary": ""
     },
     {
       "title": "feat(chat): som sutil em mensagem nova com aba escondida",
       "kind": "feat",
       "pr": 89,
-      "summary": "Nunca perca uma mensagem! Um som sutil toca quando chega mensagem com a aba minimizada — ativável nas configurações."
+      "summary": ""
     },
     {
       "title": "fix(voice): compartilhar áudio ao compartilhar a tela inteira",
       "kind": "fix",
       "pr": 53,
-      "summary": "Áudio incluso! Agora ao compartilhar a tela inteira, o som do sistema também é transmitido para todo mundo na sala."
+      "summary": ""
     },
     {
       "title": "Feat/layout responsivo mobile drawer salas",
       "kind": "feat",
       "pr": 50,
-      "summary": "Vozerra funciona em qualquer tela! Lista de salas vira drawer, chat ocupa tudo e os controles se adaptam sozinhos no celular."
+      "summary": ""
     },
     {
       "title": "feat(chat): moderação de mensagens por mod/admin",
       "kind": "feat",
       "pr": 48,
-      "summary": "Mensagens sempre seguras! Mods e admins podem excluir mensagens de qualquer um — edição continua só para o autor."
+      "summary": ""
     }
   ]
 }
