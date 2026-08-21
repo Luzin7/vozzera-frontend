@@ -16,12 +16,15 @@ import {
 } from "@/lib/vozzera/api";
 import {
   appendMessage,
+  clearActiveRoomId,
   clearUnread,
   firstTextRoom,
   incrementUnread,
+  readActiveRoomId,
   removeRoom,
   totalUnread,
   upsertRoom,
+  writeActiveRoomId,
 } from "@/lib/vozzera/chat";
 import {
   canNotify,
@@ -69,6 +72,7 @@ export function useChat() {
     setActiveRoom(null);
     setMessages({});
     selectedInitialRoomRef.current = false;
+    clearActiveRoomId(typeof localStorage === "undefined" ? null : localStorage);
     queryClient.removeQueries({ queryKey: ["rooms"] });
     queryClient.removeQueries({ queryKey: ["me"] });
   }, [clearUsername, queryClient]);
@@ -223,6 +227,7 @@ export function useChat() {
       if (room.id === activeRoomRef.current?.id) return;
 
       setActiveRoom(room);
+      writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
       setUnread((prev) => clearUnread(prev, room.id));
       joinRoom(room.id);
 
@@ -254,11 +259,17 @@ export function useChat() {
   useEffect(() => {
     if (selectedInitialRoomRef.current || activeRoom || rooms.length === 0) return;
 
-    const first = firstTextRoom(rooms);
+    const storage = typeof localStorage === "undefined" ? null : localStorage;
+    const persistedId = readActiveRoomId(storage);
+    const target = persistedId
+      ? rooms.find((room) => room.id === persistedId && room.type === "text")
+      : undefined;
 
-    if (first) {
+    const room = target ?? firstTextRoom(rooms);
+
+    if (room) {
       selectedInitialRoomRef.current = true;
-      void openRoom(first);
+      void openRoom(room);
     }
   }, [rooms, activeRoom, openRoom]);
 
