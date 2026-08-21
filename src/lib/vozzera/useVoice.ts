@@ -14,6 +14,12 @@ import {
   writeParticipantVolumes,
 } from "./voice";
 import type { MicDevice } from "./voice";
+import {
+  canNotify,
+  initialNotificationsEnabled,
+  playMessageSound,
+  readSoundEnabled,
+} from "./notifications";
 
 export type VoiceStatus = "idle" | "connecting" | "connected";
 
@@ -111,6 +117,12 @@ export function useVoice() {
   const krispProcessorRef = useRef<KrispNoiseFilterProcessor | null>(null);
   const krispSupportedRef = useRef(false);
   const krispLoadPromiseRef = useRef<Promise<boolean> | null>(null);
+  const notificationsEnabledRef = useRef(
+    typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
+  );
+  const soundEnabledRef = useRef(
+    typeof localStorage === "undefined" ? false : readSoundEnabled(localStorage),
+  );
 
   noiseFilterRef.current = noiseFilter;
   selectedDeviceIdRef.current = selectedDeviceId;
@@ -372,10 +384,35 @@ export function useVoice() {
           setLocalPreview(null);
         });
 
-        room.on(RoomEvent.ParticipantConnected, () => syncParticipants(room));
-        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-          removeParticipant(participant.name || participant.identity);
+        room.on(RoomEvent.ParticipantConnected, (participant) => {
           syncParticipants(room);
+
+          const name = participant.name || participant.identity;
+          const me = room.localParticipant.name || room.localParticipant.identity;
+          if (name === me) return;
+
+          if (
+            typeof document !== "undefined" &&
+            canNotify(notificationsEnabledRef.current, document.hidden)
+          ) {
+            new Notification("Canal de voz", { body: `${name} entrou no canal` });
+          }
+
+          if (typeof document !== "undefined" && document.hidden && soundEnabledRef.current) {
+            playMessageSound();
+          }
+        });
+        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+          const name = participant.name || participant.identity;
+          removeParticipant(name);
+          syncParticipants(room);
+
+          if (
+            typeof document !== "undefined" &&
+            canNotify(notificationsEnabledRef.current, document.hidden)
+          ) {
+            new Notification("Canal de voz", { body: `${name} saiu do canal` });
+          }
         });
         room.on(RoomEvent.Disconnected, () => {
           roomRef.current = null;
