@@ -3,7 +3,13 @@ import { memo, type ReactNode } from "react";
 import { parseBlocks } from "@/lib/vozzera/markdown";
 import type { Block, Inline } from "@/lib/vozzera/markdown";
 
-function InlineNodes({ nodes }: { nodes: Inline[] }): ReactNode {
+function InlineNodes({
+  nodes,
+  onRoomClick,
+}: {
+  nodes: Inline[];
+  onRoomClick: ((roomName: string) => void) | undefined;
+}): ReactNode {
   return nodes.map((node, index) => {
     if (node.kind === "text") return node.text;
     if (node.kind === "code") {
@@ -19,15 +25,27 @@ function InlineNodes({ nodes }: { nodes: Inline[] }): ReactNode {
     if (node.kind === "bold") {
       return (
         <strong key={index} className="font-semibold text-foreground">
-          <InlineNodes nodes={node.children} />
+          <InlineNodes nodes={node.children} onRoomClick={onRoomClick} />
         </strong>
       );
     }
     if (node.kind === "italic") {
       return (
         <em key={index}>
-          <InlineNodes nodes={node.children} />
+          <InlineNodes nodes={node.children} onRoomClick={onRoomClick} />
         </em>
+      );
+    }
+    if (node.kind === "room") {
+      return (
+        <button
+          key={index}
+          type="button"
+          onClick={() => onRoomClick?.(node.roomName)}
+          className="text-primary underline underline-offset-2 hover:no-underline"
+        >
+          #{node.roomName}
+        </button>
       );
     }
     return (
@@ -38,19 +56,25 @@ function InlineNodes({ nodes }: { nodes: Inline[] }): ReactNode {
         rel="noopener noreferrer"
         className="text-primary underline underline-offset-2"
       >
-        <InlineNodes nodes={node.children} />
+        <InlineNodes nodes={node.children} onRoomClick={onRoomClick} />
       </a>
     );
   });
 }
 
-function BlockNodes({ blocks }: { blocks: Block[] }) {
+function BlockNodes({
+  blocks,
+  onRoomClick,
+}: {
+  blocks: Block[];
+  onRoomClick: ((roomName: string) => void) | undefined;
+}) {
   return blocks.map((block, index) => {
     if (block.kind === "heading") {
       const Tag = `h${block.level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
       return (
         <Tag key={index} className="mt-2 font-semibold leading-snug text-foreground first:mt-0">
-          <InlineNodes nodes={block.children} />
+          <InlineNodes nodes={block.children} onRoomClick={onRoomClick} />
         </Tag>
       );
     }
@@ -69,7 +93,7 @@ function BlockNodes({ blocks }: { blocks: Block[] }) {
     if (block.kind === "quote") {
       return (
         <blockquote key={index} className="border-l-2 border-border pl-3 text-muted-foreground">
-          <InlineNodes nodes={block.children} />
+          <InlineNodes nodes={block.children} onRoomClick={onRoomClick} />
         </blockquote>
       );
     }
@@ -80,7 +104,7 @@ function BlockNodes({ blocks }: { blocks: Block[] }) {
         <Tag key={index} className="list-inside list-disc space-y-0.5">
           {block.items.map((item, itemIndex) => (
             <li key={itemIndex}>
-              <InlineNodes nodes={item} />
+              <InlineNodes nodes={item} onRoomClick={onRoomClick} />
             </li>
           ))}
         </Tag>
@@ -92,18 +116,24 @@ function BlockNodes({ blocks }: { blocks: Block[] }) {
         key={index}
         className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90"
       >
-        <InlineNodes nodes={block.children} />
+        <InlineNodes nodes={block.children} onRoomClick={onRoomClick} />
       </p>
     );
   });
 }
 
-export const Markdown = memo(function Markdown({ content }: { content: string }) {
+export const Markdown = memo(function Markdown({
+  content,
+  onRoomClick,
+}: {
+  content: string;
+  onRoomClick: ((roomName: string) => void) | undefined;
+}) {
   const blocks = parseBlocks(content);
 
   if (blocks.length === 0) {
     return <p className="text-sm leading-relaxed text-foreground/90" />;
   }
 
-  return <BlockNodes blocks={blocks} />;
+  return <BlockNodes blocks={blocks} onRoomClick={onRoomClick} />;
 });

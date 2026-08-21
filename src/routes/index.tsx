@@ -129,6 +129,14 @@ function Index() {
     [openRoom],
   );
 
+  const handleRoomMention = useCallback(
+    (roomName: string) => {
+      const room = rooms.find((r) => r.name === roomName);
+      if (room) handleSelectRoom(room);
+    },
+    [rooms, handleSelectRoom],
+  );
+
   const handleSelectVoiceRoom = useCallback(
     (room: Room) => {
       setSidebarOpen(false);
@@ -283,6 +291,7 @@ function Index() {
             typingText={null}
             canModerateMessages={false}
             onDelete={() => {}}
+            onRoomClick={undefined}
           />
         </main>
       </div>
@@ -409,6 +418,7 @@ function Index() {
               typingText={typingText}
               canModerateMessages={canModerateMessages}
               onDelete={handleDeleteMessage}
+              onRoomClick={handleRoomMention}
             />
             <MessageComposer
               roomId={activeRoom.id}

@@ -25,6 +25,7 @@ export const MessageList = memo(function MessageList({
   typingText,
   canModerateMessages,
   onDelete,
+  onRoomClick,
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
@@ -33,6 +34,7 @@ export const MessageList = memo(function MessageList({
   typingText: string | null;
   canModerateMessages: boolean;
   onDelete: (message: ChatMessage) => void;
+  onRoomClick: ((roomName: string) => void) | undefined;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -208,6 +210,7 @@ export const MessageList = memo(function MessageList({
                   onEditContentChange={handleEditContentChange}
                   onSaveEdit={handleSaveEdit}
                   onCancelEdit={cancelEditing}
+                  onRoomClick={onRoomClick}
                 />
               </Fragment>
             );
