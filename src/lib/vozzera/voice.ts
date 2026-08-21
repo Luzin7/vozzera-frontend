@@ -13,6 +13,7 @@ export type MicCaptureOptions = {
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
 const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
+const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
 
 export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions {
   return {
@@ -69,6 +70,27 @@ export function writeParticipantVolumes(
 ): void {
   if (!storage) return;
   storage.setItem(PARTICIPANT_VOLUMES_KEY, JSON.stringify(volumes));
+}
+
+export function readScreenShareVolumes(storage: Storage | null): Record<string, number> {
+  if (!storage) return {};
+  const raw = storage.getItem(SCREEN_SHARE_VOLUMES_KEY);
+  if (!raw) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isVolumeMap(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function writeScreenShareVolumes(
+  storage: Storage | null,
+  volumes: Record<string, number>,
+): void {
+  if (!storage) return;
+  storage.setItem(SCREEN_SHARE_VOLUMES_KEY, JSON.stringify(volumes));
 }
 
 export function audioInputDevices(devices: MediaDeviceInfo[]): MicDevice[] {

@@ -168,10 +168,10 @@ export const MessageList = memo(function MessageList({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
       <div
         ref={scrollRef}
-        className="relative min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
+        className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
       >
         <ol className="space-y-0.5">
           {messages.map((message, index) => {
@@ -216,17 +216,17 @@ export const MessageList = memo(function MessageList({
             );
           })}
         </ol>
-
-        {showJumpToLatest && (
-          <button
-            type="button"
-            onClick={jumpToLatest}
-            className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
-          >
-            Ir para a última mensagem
-          </button>
-        )}
       </div>
+
+      {showJumpToLatest && (
+        <button
+          type="button"
+          onClick={jumpToLatest}
+          className="absolute bottom-20 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
+        >
+          Ir para a última mensagem
+        </button>
+      )}
 
       {typingText && (
         <p className="px-4 pb-2 text-xs text-muted-foreground" aria-live="polite">
