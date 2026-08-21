@@ -31,5 +31,3 @@ jobs:
 
       - name: Run changelog
         run: npm run changelog
-        env:
-          GH_TOKEN: ${{ github.token }}

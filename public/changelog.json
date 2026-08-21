@@ -1,18 +1,24 @@
 {
-  "version": "v1.5.0",
+  "version": "v1.4.0",
   "releasedAt": "2026-08-21",
   "items": [
+    {
+      "title": "feat(voice): notificar entrada/saída de participantes do canal",
+      "kind": "feat",
+      "pr": 92,
+      "summary": "Notifica o usuário com `Notification` e som (quando aba oculta) quando alguém entra ou sai do canal de voz, reaproveitando o sistema `canNotify`/`playMessageSound` já existente no chat."
+    },
     {
       "title": "feat(voice): deafen — silenciar todos e o mic de uma vez",
       "kind": "feat",
       "pr": 91,
-      "summary": "Silencie tudo com um clique! O deafen desliga microfone e mute de todos os participantes de uma só vez — e restaura tudo quando você desativar."
+      "summary": "Adiciona toggle \"deafen\" no rodapé de voz: ao ativar, silencia todos os participantes remotos (volume 0) e desliga o microfone local; ao desativar, restaura os volumes e o estado do mic anteriores."
     },
     {
       "title": "feat(chat): som sutil em mensagem nova com aba escondida",
       "kind": "feat",
       "pr": 89,
-      "summary": "Nunca perca uma mensagem! Um som sutil toca quando chega mensagem com a aba minimizada — ativável nas configurações."
+      "summary": "Adiciona um som curto (WebAudio, sem asset) quando uma mensagem chega com a aba escondida, como complemento da notificação de desktop. Inclui toggle nas configurações (padrão: desligado)."
     },
     {
       "title": "fix(voice): compartilhar áudio ao compartilhar a tela inteira",
@@ -30,7 +36,7 @@
       "title": "feat(chat): moderação de mensagens por mod/admin",
       "kind": "feat",
       "pr": 48,
-      "summary": "Mensagens sempre seguras! Mods e admins podem excluir mensagens de qualquer um — edição continua só para o autor."
+      "summary": "Como mod ou admin, agora é possível apagar mensagens de outros usuários direto na sala (hover da mensagem mostra o botão de excluir), alinhado ao backend que já permite a exclusão. Editar continua restrito à mensagem própria — o backend nunca permite editar mensagem alheia. A permissão virou função pura `canModerateMessages` em `src/lib/vozzera/permissions.ts`, com spec ao lado. Também adicionei o checklist de conformidade obrigatório no `AGENTS.md` para futuras modificações por agentes de IA."
     }
   ]
 }

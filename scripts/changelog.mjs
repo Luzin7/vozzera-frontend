@@ -1,14 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const HIGHLIGHT_LABEL = "destaque";
 const MAX_ITEMS = 8;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
 
 const args = parseArgs(process.argv.slice(2));
 
 const repo = process.env.GITHUB_REPOSITORY ?? repoFromRemote();
-const release = ghApiOrNull(`repos/${repo}/releases/latest`);
+const tokenHeader = GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {};
+const acceptHeader = { Accept: "application/vnd.github.v3+json" };
+const defaultHeaders = { ...acceptHeader, ...tokenHeader };
+
+const release = await ghApiOrNull(`repos/${repo}/releases/latest`);
 
 let baseline = null;
 let lastTag = null;
@@ -17,11 +22,11 @@ if (release) {
   baseline = new Date(release.published_at);
   lastTag = release.tag_name;
 } else {
-  const tags = ghApi(`repos/${repo}/tags?per_page=1`);
+  const tags = await ghApi(`repos/${repo}/tags?per_page=1`);
 
   if (tags.length > 0) {
     lastTag = tags[0].name;
-    const commit = ghApiOrNull(`repos/${repo}/commits/${tags[0].name}`);
+    const commit = await ghApiOrNull(`repos/${repo}/commits/${tags[0].name}`);
 
     if (commit) baseline = new Date(commit.commit.author.date);
   }
@@ -30,7 +35,7 @@ if (release) {
 const highlights = [];
 
 for (let page = 1; page <= 3; page += 1) {
-  const pulls = ghApi(`repos/${repo}/pulls?state=closed&per_page=100&page=${page}`);
+  const pulls = await ghApi(`repos/${repo}/pulls?state=closed&per_page=100&page=${page}`);
 
   if (pulls.length === 0) break;
 
@@ -49,10 +54,12 @@ highlights.sort(
   (left, right) => new Date(right.merged_at).getTime() - new Date(left.merged_at).getTime(),
 );
 
+const existingSummaries = readExistingSummaries();
 const items = highlights.slice(0, MAX_ITEMS).map((pull) => ({
   title: pull.title,
   kind: kindFromTitle(pull.title),
   pr: pull.number,
+  summary: extractSummary(pull.body) ?? existingSummaries[pull.number] ?? "",
 }));
 
 const version = args.version ?? nextVersion(items, lastTag);
@@ -91,18 +98,20 @@ function repoFromRemote() {
   return match[1];
 }
 
-function ghApi(path) {
-  return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8" }));
+async function ghApi(path) {
+  const url = `https://api.github.com/${path}`;
+  const response = await fetch(url, { headers: defaultHeaders });
+
+  if (!response.ok) {
+    throw new Error(`GitHub API ${response.status} em ${url}: ${response.statusText}`);
+  }
+
+  return response.json();
 }
 
-function ghApiOrNull(path) {
+async function ghApiOrNull(path) {
   try {
-    return JSON.parse(
-      execFileSync("gh", ["api", path], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }),
-    );
+    return await ghApi(path);
   } catch {
     return null;
   }
@@ -133,6 +142,26 @@ function bumpMinor(tag) {
   if (!match) return null;
 
   return `v${match[1]}.${Number(match[2]) + 1}.0`;
+}
+
+function extractSummary(body) {
+  if (!body) return null;
+
+  const match = body.match(/^## Resumo\s*\n\n([\s\S]*?)(?:\n## |$)/m);
+
+  return match ? match[1].trim() : null;
+}
+
+function readExistingSummaries() {
+  try {
+    const current = JSON.parse(readFileSync(resolve("public/changelog.json"), "utf8"));
+
+    return Object.fromEntries(
+      (current.items ?? []).filter((item) => item.summary).map((item) => [item.pr, item.summary]),
+    );
+  } catch {
+    return {};
+  }
 }
 
 function kindFromTitle(title) {
