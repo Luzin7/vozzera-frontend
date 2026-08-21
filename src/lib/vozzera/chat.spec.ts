@@ -5,6 +5,7 @@ import {
   appendMessage,
   backoffDelay,
   clearActiveRoomId,
+  dateGroupLabelFor,
   expireTypingUsers,
   firstTextRoom,
   nextRoomIndex,
@@ -72,6 +73,28 @@ describe("firstTextRoom", () => {
 
   it("returns undefined when there is no text room", () => {
     expect(firstTextRoom(rooms.filter((room) => room.type === "voice"))).toBeUndefined();
+  });
+});
+
+describe("dateGroupLabelFor", () => {
+  const now = new Date(2026, 7, 21, 12);
+
+  it("labels messages from today", () => {
+    expect(dateGroupLabelFor(new Date(2026, 7, 21, 8).toISOString(), now)).toBe("Hoje");
+  });
+
+  it("labels messages from yesterday", () => {
+    expect(dateGroupLabelFor(new Date(2026, 7, 20, 23).toISOString(), now)).toBe("Ontem");
+  });
+
+  it("formats older dates in pt-BR", () => {
+    expect(dateGroupLabelFor(new Date(2026, 6, 15, 10).toISOString(), now)).toBe(
+      "15 de julho de 2026",
+    );
+  });
+
+  it("returns an empty label for an invalid timestamp", () => {
+    expect(dateGroupLabelFor("invalid", now)).toBe("");
   });
 });
 

@@ -1,5 +1,7 @@
 import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
 import { MAX_FRAME_BYTES, outboundFrameSchema } from "@/lib/vozzera/ws-schema";
+import { format, isSameDay, isValid, subDays } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export function appendMessage(
   messages: Record<string, ChatMessage[]>,
@@ -43,6 +45,14 @@ export function totalUnread(unread: Record<string, number>): number {
 
 export function firstTextRoom(rooms: Room[]): Room | undefined {
   return rooms.find((room) => room.type === "text");
+}
+
+export function dateGroupLabelFor(timestamp: string, now = new Date()): string {
+  const date = new Date(timestamp);
+  if (!isValid(date)) return "";
+  if (isSameDay(date, now)) return "Hoje";
+  if (isSameDay(date, subDays(now, 1))) return "Ontem";
+  return format(date, "d 'de' MMMM 'de' yyyy", { locale: ptBR });
 }
 
 export const ACTIVE_ROOM_STORAGE_KEY = "vozzera:active-room-id";
