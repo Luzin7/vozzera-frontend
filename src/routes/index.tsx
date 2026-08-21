@@ -104,6 +104,7 @@ function Index() {
     setMicEnabled,
     setScreenShare,
     ensureKrispLoaded,
+    toggleDeafen,
   } = voice;
 
   const handleDeleteMessage = useCallback(
@@ -185,6 +186,8 @@ function Index() {
     setScreenShareOpen(true);
   }, [screenShareEnabled, setScreenShare]);
 
+  const handleToggleDeafen = useCallback(() => toggleDeafen(), [toggleDeafen]);
+
   const handleLogout = useCallback(() => {
     setSettingsOpen(false);
     void disconnect();
@@ -260,6 +263,8 @@ function Index() {
     screenShares: voice.screenShares,
     mutedParticipants: voice.mutedParticipants,
     speakingNames: voice.speakingNames,
+    deafen: voice.deafen,
+    onToggleDeafen: handleToggleDeafen,
   };
 
   if (authed === null) {
