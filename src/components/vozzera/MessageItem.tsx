@@ -1,0 +1,220 @@
+import { memo } from "react";
+
+import { initials } from "@/lib/vozzera/avatar";
+import type { ChatMessage } from "@/lib/vozzera/types";
+import { Check, MoreHorizontal, Pen, Trash2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Markdown } from "@/components/vozzera/Markdown";
+
+function time(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+
+  return d.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function MessageActions({
+  isOwnMessage,
+  onEdit,
+  onDelete,
+}: Readonly<{
+  isOwnMessage: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}>) {
+  return (
+    <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="group/action h-11 w-11 text-muted-foreground/70 hover:bg-transparent"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-md group-hover/action:bg-muted">
+              <MoreHorizontal className="h-4 w-4" />
+            </span>
+            <span className="sr-only">Ações da mensagem</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {isOwnMessage && (
+            <DropdownMenuItem onClick={onEdit}>
+              <Pen className="h-4 w-4" />
+              Editar mensagem
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+            <Trash2 className="h-4 w-4" />
+            Excluir mensagem
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function DesktopMessageActions({
+  isOwnMessage,
+  onEdit,
+  onDelete,
+}: Readonly<{
+  isOwnMessage: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}>) {
+  return (
+    <div className="pointer-events-none absolute right-0 top-0 z-20 hidden gap-1 opacity-0 transition-opacity md:flex md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:focus-within:opacity-100">
+      {isOwnMessage && (
+        <Button
+          variant="secondary"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground [&_svg]:size-4"
+          onClick={onEdit}
+        >
+          <Pen />
+          <span className="sr-only">Editar mensagem</span>
+        </Button>
+      )}
+      <Button
+        variant="secondary"
+        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-4"
+        onClick={onDelete}
+      >
+        <Trash2 />
+        <span className="sr-only">Excluir mensagem</span>
+      </Button>
+    </div>
+  );
+}
+
+type MessageItemProps = Readonly<{
+  message: ChatMessage;
+  grouped: boolean;
+  isLast: boolean;
+  isOwnMessage: boolean;
+  canDeleteMessage: boolean;
+  isEditing: boolean;
+  editContent: string;
+  onStartEdit: (message: ChatMessage) => void;
+  onRequestDelete: (message: ChatMessage) => void;
+  onEditContentChange: (content: string) => void;
+  onSaveEdit: (messageId: string) => void;
+  onCancelEdit: () => void;
+  onRoomClick: ((roomName: string) => void) | undefined;
+}>;
+
+export const MessageItem = memo(function MessageItem({
+  message,
+  grouped,
+  isLast,
+  isOwnMessage,
+  canDeleteMessage,
+  isEditing,
+  editContent,
+  onStartEdit,
+  onRequestDelete,
+  onEditContentChange,
+  onSaveEdit,
+  onCancelEdit,
+  onRoomClick,
+}: MessageItemProps) {
+  return (
+    <li
+      className={`${grouped ? "" : "pt-3"} ${!isLast ? "[content-visibility:auto] [contain-intrinsic-size:auto_4rem]" : ""}`}
+    >
+      <div className="group relative flex gap-2 rounded-md px-1 py-0.5 hover:z-10 hover:bg-muted/40 sm:gap-3 sm:px-2">
+        <div className="w-9 shrink-0">
+          {!grouped && (
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold text-foreground">
+              {initials(message.username)}
+            </div>
+          )}
+        </div>
+
+        <div className="relative min-w-0 flex-1 md:min-h-6">
+          {!grouped && (
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-semibold text-foreground">{message.username}</span>
+
+              <span className="text-[11px] text-muted-foreground">{time(message.createdAt)}</span>
+            </div>
+          )}
+
+          {canDeleteMessage && !isEditing && (
+            <DesktopMessageActions
+              isOwnMessage={isOwnMessage}
+              onEdit={() => onStartEdit(message)}
+              onDelete={() => onRequestDelete(message)}
+            />
+          )}
+
+          {isEditing ? (
+            <div className="flex gap-2">
+              <Input
+                id={`message-edit-${message.id}`}
+                type="text"
+                value={editContent}
+                autoComplete="off"
+                onChange={(event) => onEditContentChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    onSaveEdit(message.id);
+                  }
+
+                  if (event.key === "Escape") {
+                    onCancelEdit();
+                  }
+                }}
+              />
+
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-8 w-8 p-0 text-primary [&_svg]:size-4"
+                  onClick={() => onSaveEdit(message.id)}
+                >
+                  <Check />
+                  <span className="sr-only">Salvar edição</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-8 w-8 p-0 text-muted-foreground [&_svg]:size-4"
+                  onClick={onCancelEdit}
+                >
+                  <X />
+                  <span className="sr-only">Cancelar edição</span>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`relative text-sm leading-relaxed text-foreground/90 ${canDeleteMessage ? "pr-12 md:pr-0" : ""}`}
+            >
+              <Markdown content={message.content} onRoomClick={onRoomClick} />
+              {canDeleteMessage && (
+                <MessageActions
+                  isOwnMessage={isOwnMessage}
+                  onEdit={() => onStartEdit(message)}
+                  onDelete={() => onRequestDelete(message)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+});

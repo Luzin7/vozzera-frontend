@@ -1,16 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ACTIVE_ROOM_STORAGE_KEY,
   appendMessage,
   backoffDelay,
+  clearActiveRoomId,
+  dateGroupLabelFor,
+  expireTypingUsers,
   firstTextRoom,
   nextRoomIndex,
   parseFrame,
+  readActiveRoomId,
   removeRoom,
+  typingIndicatorText,
+  updateTypingUsers,
   upsertRoom,
+  writeActiveRoomId,
 } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { MAX_FRAME_BYTES } from "@/lib/vozzera/ws-schema";
+import type { ActiveRoomStorage } from "@/lib/vozzera/chat";
 
 function message(id: string, roomId = "r1"): ChatMessage {
   return {
@@ -67,6 +76,28 @@ describe("firstTextRoom", () => {
   });
 });
 
+describe("dateGroupLabelFor", () => {
+  const now = new Date(2026, 7, 21, 12);
+
+  it("labels messages from today", () => {
+    expect(dateGroupLabelFor(new Date(2026, 7, 21, 8).toISOString(), now)).toBe("Hoje");
+  });
+
+  it("labels messages from yesterday", () => {
+    expect(dateGroupLabelFor(new Date(2026, 7, 20, 23).toISOString(), now)).toBe("Ontem");
+  });
+
+  it("formats older dates in pt-BR", () => {
+    expect(dateGroupLabelFor(new Date(2026, 6, 15, 10).toISOString(), now)).toBe(
+      "15 de julho de 2026",
+    );
+  });
+
+  it("returns an empty label for an invalid timestamp", () => {
+    expect(dateGroupLabelFor("invalid", now)).toBe("");
+  });
+});
+
 describe("nextRoomIndex", () => {
   it("moves down and wraps to the first", () => {
     expect(nextRoomIndex("ArrowDown", 0, 3)).toBe(1);
@@ -100,6 +131,60 @@ describe("room state", () => {
   });
 });
 
+function memoryStorage(): ActiveRoomStorage {
+  const values = new Map<string, string>();
+
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => void values.set(key, value),
+    removeItem: (key) => void values.delete(key),
+  };
+}
+
+describe("readActiveRoomId", () => {
+  it("returns null when nothing is stored", () => {
+    expect(readActiveRoomId(memoryStorage())).toBeNull();
+  });
+
+  it("returns the stored room id", () => {
+    const storage = memoryStorage();
+    storage.setItem(ACTIVE_ROOM_STORAGE_KEY, "r1");
+
+    expect(readActiveRoomId(storage)).toBe("r1");
+  });
+
+  it("returns null when storage is unavailable", () => {
+    expect(readActiveRoomId(null)).toBeNull();
+  });
+});
+
+describe("writeActiveRoomId", () => {
+  it("stores the room id", () => {
+    const storage = memoryStorage();
+    writeActiveRoomId(storage, "r1");
+
+    expect(storage.getItem(ACTIVE_ROOM_STORAGE_KEY)).toBe("r1");
+  });
+
+  it("does nothing when storage is unavailable", () => {
+    expect(() => writeActiveRoomId(null, "r1")).not.toThrow();
+  });
+});
+
+describe("clearActiveRoomId", () => {
+  it("removes the stored room id", () => {
+    const storage = memoryStorage();
+    storage.setItem(ACTIVE_ROOM_STORAGE_KEY, "r1");
+    clearActiveRoomId(storage);
+
+    expect(storage.getItem(ACTIVE_ROOM_STORAGE_KEY)).toBeNull();
+  });
+
+  it("does nothing when storage is unavailable", () => {
+    expect(() => clearActiveRoomId(null)).not.toThrow();
+  });
+});
+
 describe("parseFrame", () => {
   it("parses a valid json frame", () => {
     const raw = {
@@ -129,6 +214,14 @@ describe("parseFrame", () => {
     expect(parseFrame(deleted)).toMatchObject({ type: "room", action: "deleted" });
   });
 
+  it("parses typing frames", () => {
+    const raw = {
+      data: '{"type":"typing","action":"start","room_id":"r1","user_id":"u1","username":"luan"}',
+    } as MessageEvent;
+
+    expect(parseFrame(raw)).toMatchObject({ type: "typing", action: "start" });
+  });
+
   it("returns null for invalid json", () => {
     const raw = { data: "nope" } as MessageEvent;
     expect(parseFrame(raw)).toBeNull();
@@ -149,5 +242,49 @@ describe("parseFrame", () => {
       data: `{"type":"error","error":"${"x".repeat(MAX_FRAME_BYTES)}"}`,
     } as MessageEvent;
     expect(parseFrame(raw)).toBeNull();
+  });
+});
+
+describe("typing users", () => {
+  const start = {
+    type: "typing" as const,
+    action: "start" as const,
+    room_id: "r1",
+    user_id: "u2",
+    username: "Luan",
+  };
+
+  it("adds, refreshes and removes a typing user", () => {
+    const added = updateTypingUsers({}, start, "u1", 1000);
+    const refreshed = updateTypingUsers(added, start, "u1", 2000);
+    const removed = updateTypingUsers(refreshed, { ...start, action: "stop" }, "u1", 2000);
+
+    expect(added).toMatchObject({ r1: { u2: { lastTypedAt: 1000 } } });
+    expect(refreshed).toMatchObject({ r1: { u2: { lastTypedAt: 2000 } } });
+    expect(removed).toEqual({});
+  });
+
+  it("ignores events from the current user", () => {
+    expect(updateTypingUsers({}, { ...start, user_id: "u1" }, "u1", 1000)).toEqual({});
+  });
+
+  it("expires users after the timeout", () => {
+    const users = updateTypingUsers({}, start, "u1", 1000);
+
+    expect(expireTypingUsers(users, 3999, 3000)).toBe(users);
+    expect(expireTypingUsers(users, 4000, 3000)).toEqual({});
+  });
+
+  it("formats one or multiple names", () => {
+    const luan = { userId: "u1", username: "Luan", lastTypedAt: 1000 };
+    const bia = { userId: "u2", username: "Bia", lastTypedAt: 1000 };
+    const ana = { userId: "u3", username: "Ana", lastTypedAt: 1000 };
+
+    expect(typingIndicatorText([])).toBeNull();
+    expect(typingIndicatorText([luan])).toBe("Luan está digitando...");
+    expect(typingIndicatorText([luan, bia])).toBe("Luan e Bia estão digitando...");
+    expect(typingIndicatorText([luan, bia, ana])).toBe(
+      "Várias pessoas estão digitando ao mesmo tempo...",
+    );
   });
 });

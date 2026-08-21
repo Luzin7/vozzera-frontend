@@ -104,6 +104,7 @@ export function VoiceCallView({
         <Button
           size="icon"
           variant={micEnabled ? "secondary" : "destructive"}
+          className="h-11 w-11"
           onClick={onToggleMic}
           disabled={!isConnected}
         >
@@ -114,6 +115,7 @@ export function VoiceCallView({
         <Button
           size="icon"
           variant={screenShareEnabled ? "default" : "secondary"}
+          className="h-11 w-11"
           onClick={onToggleScreenShare}
           disabled={!isConnected}
         >
@@ -127,7 +129,7 @@ export function VoiceCallView({
           </span>
         </Button>
 
-        <Button size="icon" variant="destructive" onClick={onLeave}>
+        <Button size="icon" variant="destructive" className="h-11 w-11" onClick={onLeave}>
           <PhoneOff className="h-4 w-4" />
           <span className="sr-only">Sair do canal de voz</span>
         </Button>

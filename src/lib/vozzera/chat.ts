@@ -1,5 +1,7 @@
 import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
 import { MAX_FRAME_BYTES, outboundFrameSchema } from "@/lib/vozzera/ws-schema";
+import { format, isSameDay, isValid, subDays } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export function appendMessage(
   messages: Record<string, ChatMessage[]>,
@@ -45,6 +47,45 @@ export function firstTextRoom(rooms: Room[]): Room | undefined {
   return rooms.find((room) => room.type === "text");
 }
 
+export function dateGroupLabelFor(timestamp: string, now = new Date()): string {
+  const date = new Date(timestamp);
+  if (!isValid(date)) return "";
+  if (isSameDay(date, now)) return "Hoje";
+  if (isSameDay(date, subDays(now, 1))) return "Ontem";
+  return format(date, "d 'de' MMMM 'de' yyyy", { locale: ptBR });
+}
+
+export const ACTIVE_ROOM_STORAGE_KEY = "vozzera:active-room-id";
+
+export type ActiveRoomStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export function readActiveRoomId(storage: ActiveRoomStorage | null): string | null {
+  if (storage === null) return null;
+  try {
+    return storage.getItem(ACTIVE_ROOM_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeActiveRoomId(storage: ActiveRoomStorage | null, roomId: string): void {
+  if (storage === null) return;
+  try {
+    storage.setItem(ACTIVE_ROOM_STORAGE_KEY, roomId);
+  } catch {
+    // best-effort: armazenamento pode estar cheio ou desabilitado
+  }
+}
+
+export function clearActiveRoomId(storage: ActiveRoomStorage | null): void {
+  if (storage === null) return;
+  try {
+    storage.removeItem(ACTIVE_ROOM_STORAGE_KEY);
+  } catch {
+    // best-effort
+  }
+}
+
 export function upsertRoom(rooms: Room[], room: Room): Room[] {
   if (!rooms.some((current) => current.id === room.id)) return [...rooms, room];
   return rooms.map((current) => (current.id === room.id ? { ...current, ...room } : current));
@@ -55,6 +96,72 @@ export function removeRoom<T>(state: Record<string, T>, roomId: string): Record<
   const next = { ...state };
   delete next[roomId];
   return next;
+}
+
+export type TypingUser = {
+  userId: string;
+  username: string;
+  lastTypedAt: number;
+};
+
+export type TypingUsers = Record<string, Record<string, TypingUser>>;
+
+export function updateTypingUsers(
+  users: TypingUsers,
+  event: Extract<OutboundEvent, { type: "typing" }>,
+  currentUserId: string | null,
+  now: number,
+): TypingUsers {
+  if (event.user_id === currentUserId) return users;
+
+  const roomUsers = users[event.room_id] ?? {};
+
+  if (event.action === "start") {
+    return {
+      ...users,
+      [event.room_id]: {
+        ...roomUsers,
+        [event.user_id]: {
+          userId: event.user_id,
+          username: event.username,
+          lastTypedAt: now,
+        },
+      },
+    };
+  }
+
+  return removeTypingUser(users, event.room_id, event.user_id);
+}
+
+export function expireTypingUsers(users: TypingUsers, now: number, timeout: number): TypingUsers {
+  let next = users;
+
+  for (const [roomId, roomUsers] of Object.entries(users)) {
+    for (const user of Object.values(roomUsers)) {
+      if (now - user.lastTypedAt < timeout) continue;
+      next = removeTypingUser(next, roomId, user.userId);
+    }
+  }
+
+  return next;
+}
+
+export function typingIndicatorText(users: TypingUser[]): string | null {
+  const [first, second] = users;
+  if (!first) return null;
+  if (!second) return `${first.username} está digitando...`;
+  if (users.length === 2) return `${first.username} e ${second.username} estão digitando...`;
+  return "Várias pessoas estão digitando ao mesmo tempo...";
+}
+
+function removeTypingUser(users: TypingUsers, roomId: string, userId: string): TypingUsers {
+  const roomUsers = users[roomId];
+  if (!roomUsers || !(userId in roomUsers)) return users;
+
+  const nextRoomUsers = { ...roomUsers };
+  delete nextRoomUsers[userId];
+  if (Object.keys(nextRoomUsers).length === 0) return removeRoom(users, roomId);
+  return { ...users, [roomId]: nextRoomUsers };
 }
 
 export function parseFrame(raw: MessageEvent): OutboundEvent | null {

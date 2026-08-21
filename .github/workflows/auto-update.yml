@@ -1,0 +1,35 @@
+name: Auto Update
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Validate summaries
+        run: |
+          if node scripts/validate-summaries.cjs; then
+            echo "Summaries válidos"
+          else
+            echo "Erro: summaries não preenchidos"
+            exit 1
+          fi
+
+      - name: Run changelog
+        run: npm run changelog
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

@@ -37,6 +37,8 @@ describe("authErrorMessageFor", () => {
   });
 
   it("falls back to the server-down message for anything else", () => {
-    expect(authErrorMessageFor(new Error("boom"))).toBe("Servidor indisponível. Ele está rodando?");
+    expect(authErrorMessageFor(new Error("boom"))).toBe(
+      "Não consegui conectar ao servidor. Verifique sua conexão e tente de novo.",
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
@@ -15,48 +16,71 @@ import {
 } from "@/lib/vozzera/api";
 import {
   appendMessage,
+  clearActiveRoomId,
   clearUnread,
+  expireTypingUsers,
   firstTextRoom,
   incrementUnread,
+  readActiveRoomId,
   removeRoom,
   totalUnread,
+  updateTypingUsers,
   upsertRoom,
+  writeActiveRoomId,
 } from "@/lib/vozzera/chat";
+import type { TypingUsers } from "@/lib/vozzera/chat";
 import {
   canNotify,
   initialNotificationsEnabled,
   notificationPermissionGranted,
+  playMessageSound,
+  readSoundEnabled,
   writeNotificationsEnabled,
+  writeSoundEnabled,
 } from "@/lib/vozzera/notifications";
-import { canManageRooms } from "@/lib/vozzera/permissions";
-import type { ChatMessage, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
+import { canManageRooms, canModerateMessages } from "@/lib/vozzera/permissions";
+import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
 
+const TYPING_EVENT_INTERVAL_MS = 1000;
+const TYPING_EXPIRATION_MS = 3000;
+
 export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
+  const queryClient = useQueryClient();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [role, setRole] = useState<UserRole | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [banner, setBanner] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [typingUsers, setTypingUsers] = useState<TypingUsers>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     if (typeof localStorage === "undefined") return false;
     return initialNotificationsEnabled(localStorage);
   });
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof localStorage === "undefined") return false;
+    return readSoundEnabled(localStorage);
+  });
   const activeRoomRef = useRef(activeRoom);
   const roomsRef = useRef(rooms);
   const notificationsEnabledRef = useRef(notificationsEnabled);
+  const soundEnabledRef = useRef(soundEnabled);
   const selectedInitialRoomRef = useRef(false);
+  const typingRoomRef = useRef<string | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
   notificationsEnabledRef.current = notificationsEnabled;
+  soundEnabledRef.current = soundEnabled;
 
   const endSession = useCallback(() => {
     clearUsername();
@@ -64,10 +88,15 @@ export function useChat() {
     setRooms([]);
     setRole(null);
     setEmail(null);
+    setCurrentUserId(null);
     setActiveRoom(null);
     setMessages({});
+    setTypingUsers({});
     selectedInitialRoomRef.current = false;
-  }, [clearUsername]);
+    clearActiveRoomId(typeof localStorage === "undefined" ? null : localStorage);
+    queryClient.removeQueries({ queryKey: ["rooms"] });
+    queryClient.removeQueries({ queryKey: ["me"] });
+  }, [clearUsername, queryClient]);
 
   useEffect(() => {
     setUnauthorizedHandler(endSession);
@@ -77,11 +106,23 @@ export function useChat() {
 
   const loadSession = useCallback(async () => {
     try {
-      const [nextRooms, currentUser] = await Promise.all([listRooms(), getCurrentUser()]);
+      const [nextRooms, currentUser] = await Promise.all([
+        queryClient.ensureQueryData({
+          queryKey: ["rooms"],
+          queryFn: listRooms,
+          staleTime: 30_000,
+        }),
+        queryClient.ensureQueryData({
+          queryKey: ["me"],
+          queryFn: getCurrentUser,
+          staleTime: 5 * 60_000,
+        }),
+      ]);
       setRooms(nextRooms);
       setUsername(currentUser.username);
       setRole(currentUser.role);
       setEmail(currentUser.email);
+      setCurrentUserId(currentUser.id);
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
@@ -90,7 +131,7 @@ export function useChat() {
 
       setBanner("Não consegui falar com o servidor.");
     }
-  }, [setUsername]);
+  }, [queryClient, setUsername]);
 
   useEffect(() => {
     void loadSession();
@@ -100,6 +141,7 @@ export function useChat() {
     setRooms((prev) => prev.filter((room) => room.id !== roomId));
     setMessages((prev) => removeRoom(prev, roomId));
     setUnread((prev) => removeRoom(prev, roomId));
+    setTypingUsers((prev) => removeRoom(prev, roomId));
     setActiveRoom((current) => (current?.id === roomId ? null : current));
   }, []);
 
@@ -107,6 +149,9 @@ export function useChat() {
     (event: Extract<OutboundEvent, { type: "room" }>) => {
       if (event.action === "deleted") {
         removeRoomLocally(event.id);
+        queryClient.setQueryData<Room[]>(["rooms"], (prev) =>
+          prev?.filter((room) => room.id !== event.id),
+        );
         return;
       }
 
@@ -120,9 +165,10 @@ export function useChat() {
       };
 
       setRooms((prev) => upsertRoom(prev, room));
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
       setActiveRoom((active) => (active?.id === room.id ? { ...active, ...room } : active));
     },
-    [removeRoomLocally],
+    [queryClient, removeRoomLocally],
   );
 
   const handleMessageEvent = useCallback((event: Extract<OutboundEvent, { type: "message" }>) => {
@@ -149,6 +195,10 @@ export function useChat() {
           new Notification(`# ${room?.name ?? "Sala"}`, {
             body: `${event.username ?? "Alguém"}: ${event.content ?? ""}`,
           });
+        }
+
+        if (typeof document !== "undefined" && document.hidden && soundEnabledRef.current) {
+          playMessageSound();
         }
       }
 
@@ -183,13 +233,18 @@ export function useChat() {
         return;
       }
 
+      if (event.type === "typing") {
+        setTypingUsers((prev) => updateTypingUsers(prev, event, currentUserId, Date.now()));
+        return;
+      }
+
       if (event.type !== "message" || event.room_id === ZERO_UUID) return;
       handleMessageEvent(event);
     },
-    [handleMessageEvent, handleRoomEvent],
+    [currentUserId, handleMessageEvent, handleRoomEvent],
   );
 
-  const { status, joinRoom, sendMessage } = useSocket({
+  const { status, joinRoom, sendMessage, sendTyping } = useSocket({
     enabled: authed === true,
     onEvent: handleEvent,
     onSessionExpired: () => {
@@ -198,12 +253,52 @@ export function useChat() {
     },
   });
 
+  const setTyping = useCallback(
+    (typing: boolean) => {
+      const roomId = activeRoomRef.current?.id;
+
+      if (!typing) {
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+        if (typingRoomRef.current) sendTyping(typingRoomRef.current, "stop");
+        typingRoomRef.current = null;
+        return;
+      }
+
+      if (!roomId || typingTimerRef.current) return;
+
+      sendTyping(roomId, "start");
+      typingRoomRef.current = roomId;
+      typingTimerRef.current = setTimeout(() => {
+        typingTimerRef.current = null;
+      }, TYPING_EVENT_INTERVAL_MS);
+    },
+    [sendTyping],
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTypingUsers((prev) => expireTypingUsers(prev, Date.now(), TYPING_EXPIRATION_MS));
+    }, TYPING_EVENT_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    },
+    [],
+  );
+
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.type !== "text") return;
       if (room.id === activeRoomRef.current?.id) return;
 
+      setTyping(false);
       setActiveRoom(room);
+      writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
       setUnread((prev) => clearUnread(prev, room.id));
       joinRoom(room.id);
 
@@ -229,17 +324,23 @@ export function useChat() {
         setLoadingHistory(false);
       }
     },
-    [joinRoom, messages],
+    [joinRoom, messages, setTyping],
   );
 
   useEffect(() => {
     if (selectedInitialRoomRef.current || activeRoom || rooms.length === 0) return;
 
-    const first = firstTextRoom(rooms);
+    const storage = typeof localStorage === "undefined" ? null : localStorage;
+    const persistedId = readActiveRoomId(storage);
+    const target = persistedId
+      ? rooms.find((room) => room.id === persistedId && room.type === "text")
+      : undefined;
 
-    if (first) {
+    const room = target ?? firstTextRoom(rooms);
+
+    if (room) {
       selectedInitialRoomRef.current = true;
-      void openRoom(first);
+      void openRoom(room);
     }
   }, [rooms, activeRoom, openRoom]);
 
@@ -248,26 +349,34 @@ export function useChat() {
       const room = await createRoomApi(name, type);
 
       setRooms((prev) => upsertRoom(prev, room));
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
 
       if (room.type === "text") {
         void openRoom(room);
       }
     },
-    [openRoom],
+    [openRoom, queryClient],
   );
 
-  const updateRoom = useCallback(async (roomId: string, name: string) => {
-    const room = await updateRoomApi(roomId, name);
-    setRooms((prev) => upsertRoom(prev, room));
-    setActiveRoom((current) => (current?.id === room.id ? room : current));
-  }, []);
+  const updateRoom = useCallback(
+    async (roomId: string, name: string) => {
+      const room = await updateRoomApi(roomId, name);
+      setRooms((prev) => upsertRoom(prev, room));
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
+      setActiveRoom((current) => (current?.id === room.id ? room : current));
+    },
+    [queryClient],
+  );
 
   const deleteRoom = useCallback(
     async (roomId: string) => {
       await deleteRoomApi(roomId);
       removeRoomLocally(roomId);
+      queryClient.setQueryData<Room[]>(["rooms"], (prev) =>
+        prev?.filter((room) => room.id !== roomId),
+      );
     },
-    [removeRoomLocally],
+    [queryClient, removeRoomLocally],
   );
 
   const deleteMessage = useCallback(
@@ -319,11 +428,18 @@ export function useChat() {
 
   const showBanner = useCallback((message: string) => setBanner(message), []);
 
-  const updateEmail = useCallback(async (next: string) => {
-    const updated = await updateEmailApi(next);
-    setEmail(updated.email);
-    return updated.email;
-  }, []);
+  const updateEmail = useCallback(
+    async (next: string) => {
+      const updated = await updateEmailApi(next);
+      setEmail(updated.email);
+      queryClient.setQueryData<CurrentUser>(["me"], (prev) => {
+        if (!prev) return prev;
+        return { ...prev, email: updated.email };
+      });
+      return updated.email;
+    },
+    [queryClient],
+  );
 
   const toggleNotifications = useCallback(async () => {
     if (typeof Notification === "undefined") return;
@@ -349,6 +465,12 @@ export function useChat() {
 
     writeNotificationsEnabled(typeof localStorage === "undefined" ? null : localStorage, true);
     setNotificationsEnabled(true);
+  }, []);
+
+  const toggleSound = useCallback(async () => {
+    const next = !soundEnabledRef.current;
+    writeSoundEnabled(typeof localStorage === "undefined" ? null : localStorage, next);
+    setSoundEnabled(next);
   }, []);
 
   const baseTitle = "Vozzera — servidor privado de chat e voz";
@@ -378,11 +500,13 @@ export function useChat() {
     authed,
     rooms,
     canManageRooms: canManageRooms(role),
+    canModerateMessages: canModerateMessages(role),
     activeRoom,
     messages,
     banner,
     loadingHistory,
     unread,
+    typingUsers,
     socketStatus: status,
     openRoom,
     createRoom,
@@ -396,6 +520,9 @@ export function useChat() {
     updateEmail,
     notificationsEnabled,
     toggleNotifications,
+    soundEnabled,
+    toggleSound,
     sendMessage,
+    setTyping,
   };
 }

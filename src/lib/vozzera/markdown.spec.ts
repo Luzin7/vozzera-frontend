@@ -44,6 +44,26 @@ describe("parseInline", () => {
   it("keeps unbalanced markers as text", () => {
     expect(parseInline("**oi")).toEqual([{ kind: "text", text: "**oi" }]);
   });
+
+  it("parses a room mention", () => {
+    expect(parseInline("#sala-geral")).toEqual([{ kind: "room", roomName: "sala-geral" }]);
+  });
+
+  it("parses a room mention in the middle of text", () => {
+    expect(parseInline("vamos para #sala-geral agora")).toEqual([
+      { kind: "text", text: "vamos para " },
+      { kind: "room", roomName: "sala-geral" },
+      { kind: "text", text: " agora" },
+    ]);
+  });
+
+  it("does not parse # when attached to a word without space before", () => {
+    expect(parseInline("abc#sala")).toEqual([{ kind: "text", text: "abc#sala" }]);
+  });
+
+  it("does not parse # when no valid room name follows", () => {
+    expect(parseInline("#")).toEqual([{ kind: "text", text: "#" }]);
+  });
 });
 
 describe("parseBlocks", () => {
@@ -75,9 +95,9 @@ describe("parseBlocks", () => {
     ]);
   });
 
-  it("keeps hashes without space as plain text", () => {
+  it("parses #room as a room mention, not heading", () => {
     expect(parseBlocks("#semespaco")).toEqual([
-      { kind: "paragraph", children: [{ kind: "text", text: "#semespaco" }] },
+      { kind: "paragraph", children: [{ kind: "room", roomName: "semespaco" }] },
     ]);
   });
 

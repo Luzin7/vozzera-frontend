@@ -83,7 +83,7 @@ export function authErrorMessageFor(err: unknown): string {
   if (err instanceof ApiError && err.status === 409) return "Esse nome de usuário já está em uso.";
   if (err instanceof ApiError && err.status === 401) return "Usuário ou senha incorretos.";
   if (err instanceof ApiError) return err.message || "Não foi possível concluir.";
-  return "Servidor indisponível. Ele está rodando?";
+  return "Não consegui conectar ao servidor. Verifique sua conexão e tente de novo.";
 }
 ```
 

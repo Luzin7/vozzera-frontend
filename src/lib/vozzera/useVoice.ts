@@ -8,14 +8,23 @@ import {
   muteVolume,
   readMicDeviceId,
   readNoiseFilter,
+  readParticipantVolumes,
   writeMicDeviceId,
   writeNoiseFilter,
+  writeParticipantVolumes,
 } from "./voice";
 import type { MicDevice } from "./voice";
+import {
+  canNotify,
+  initialNotificationsEnabled,
+  playMessageSound,
+  readSoundEnabled,
+} from "./notifications";
 
 export type VoiceStatus = "idle" | "connecting" | "connected";
 
 type LiveKitRoom = import("livekit-client").Room;
+type RemoteParticipant = import("livekit-client").RemoteParticipant;
 type LocalVideoTrack = import("livekit-client").LocalVideoTrack;
 type RemoteVideoTrack = import("livekit-client").RemoteVideoTrack;
 type LocalAudioTrack = import("livekit-client").LocalAudioTrack;
@@ -36,13 +45,27 @@ export type ScreenShare = {
   track: ScreenShareTrack;
 };
 
+type ParticipantVolumeSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
+
+let screenShareAudioSource: ParticipantVolumeSource | null = null;
+
+function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number) {
+  participant.setVolume(volume);
+  if (screenShareAudioSource === null) return;
+  participant.setVolume(volume, screenShareAudioSource);
+}
+
 export type ScreenShareQuality = {
   width: number;
   height: number;
   frameRate: number;
 };
 
-const loadLiveKitClient = () => import("livekit-client");
+async function loadLiveKitClient() {
+  const client = await import("livekit-client");
+  screenShareAudioSource = client.Track.Source.ScreenShareAudio satisfies ParticipantVolumeSource;
+  return client;
+}
 
 async function applyKrispToggle(
   processor: KrispNoiseFilterProcessor,
@@ -61,7 +84,10 @@ export function useVoice() {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<string[]>([]);
   const [micEnabled, setMicEnabledState] = useState(true);
-  const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const [volumes, setVolumes] = useState<Record<string, number>>(() => {
+    if (typeof localStorage === "undefined") return {};
+    return readParticipantVolumes(localStorage);
+  });
   const [screenShareEnabled, setScreenShareEnabledState] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShare[]>([]);
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
@@ -80,15 +106,23 @@ export function useVoice() {
   const [localMicTrack, setLocalMicTrack] = useState<AudioTrack | null>(null);
   const [localPreview, setLocalPreview] = useState<ScreenShare | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deafen, setDeafen] = useState(false);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
-  const volumesRef = useRef<Record<string, number>>({});
+  const volumesRef = useRef(volumes);
   const mutedVolumesRef = useRef<Record<string, number>>({});
   const noiseFilterRef = useRef(noiseFilter);
   const selectedDeviceIdRef = useRef(selectedDeviceId);
   const micPermissionRef = useRef(false);
   const krispProcessorRef = useRef<KrispNoiseFilterProcessor | null>(null);
   const krispSupportedRef = useRef(false);
+  const krispLoadPromiseRef = useRef<Promise<boolean> | null>(null);
+  const notificationsEnabledRef = useRef(
+    typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
+  );
+  const soundEnabledRef = useRef(
+    typeof localStorage === "undefined" ? false : readSoundEnabled(localStorage),
+  );
 
   noiseFilterRef.current = noiseFilter;
   selectedDeviceIdRef.current = selectedDeviceId;
@@ -101,7 +135,7 @@ export function useVoice() {
     for (const p of room.remoteParticipants.values()) {
       const name = p.name || p.identity;
       const volume = volumesRef.current[name];
-      if (volume !== undefined) p.setVolume(volume);
+      if (volume !== undefined) setRemoteParticipantVolume(p, volume);
     }
   }, []);
 
@@ -140,9 +174,31 @@ export function useVoice() {
     setLocalMicTrack((publication?.track ?? null) as AudioTrack | null);
   }, []);
 
+  const ensureKrispLoaded = useCallback(() => {
+    if (krispLoadPromiseRef.current) return krispLoadPromiseRef.current;
+
+    krispLoadPromiseRef.current = import("@livekit/krisp-noise-filter")
+      .then(({ isKrispNoiseFilterSupported }) => {
+        const supported = isKrispNoiseFilterSupported();
+        krispSupportedRef.current = supported;
+        setKrispSupported(supported);
+        return supported;
+      })
+      .catch(() => {
+        krispSupportedRef.current = false;
+        setKrispSupported(false);
+        return false;
+      });
+
+    return krispLoadPromiseRef.current;
+  }, []);
+
   const attachKrispNoiseFilter = useCallback(
     async (track: LocalAudioTrack) => {
-      if (!krispSupportedRef.current || !noiseFilterRef.current) return;
+      if (!noiseFilterRef.current) return;
+
+      const supported = await ensureKrispLoaded();
+      if (!supported) return;
 
       try {
         const { KrispNoiseFilter } = await import("@livekit/krisp-noise-filter");
@@ -154,19 +210,19 @@ export function useVoice() {
         setError("Não consegui ativar o filtro de ruído.");
       }
     },
-    [setError],
+    [ensureKrispLoaded, setError],
   );
 
   const setParticipantVolume = useCallback((name: string, volume: number) => {
-    volumesRef.current[name] = volume;
-    setVolumes((prev) => ({ ...prev, [name]: volume }));
+    const next = { ...volumesRef.current, [name]: volume };
+    volumesRef.current = next;
+    setVolumes(next);
+    writeParticipantVolumes(typeof localStorage === "undefined" ? null : localStorage, next);
 
     const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
       (p) => (p.name || p.identity) === name,
     );
-    if (participant) {
-      participant.setVolume(volume);
-    }
+    if (participant) setRemoteParticipantVolume(participant, volume);
   }, []);
 
   const setLocalMute = useCallback(
@@ -212,15 +268,16 @@ export function useVoice() {
       return;
     }
 
-    const options: ScreenShareCaptureOptions | undefined = quality
+    const options: ScreenShareCaptureOptions = quality
       ? {
+          audio: true,
           resolution: {
             width: quality.width,
             height: quality.height,
             frameRate: quality.frameRate,
           },
         }
-      : undefined;
+      : { audio: true };
 
     const publication = await room.localParticipant.setScreenShareEnabled(true, options);
     const track = publication?.videoTrack;
@@ -327,10 +384,35 @@ export function useVoice() {
           setLocalPreview(null);
         });
 
-        room.on(RoomEvent.ParticipantConnected, () => syncParticipants(room));
-        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-          removeParticipant(participant.name || participant.identity);
+        room.on(RoomEvent.ParticipantConnected, (participant) => {
           syncParticipants(room);
+
+          const name = participant.name || participant.identity;
+          const me = room.localParticipant.name || room.localParticipant.identity;
+          if (name === me) return;
+
+          if (
+            typeof document !== "undefined" &&
+            canNotify(notificationsEnabledRef.current, document.hidden)
+          ) {
+            new Notification("Canal de voz", { body: `${name} entrou no canal` });
+          }
+
+          if (typeof document !== "undefined" && document.hidden && soundEnabledRef.current) {
+            playMessageSound();
+          }
+        });
+        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+          const name = participant.name || participant.identity;
+          removeParticipant(name);
+          syncParticipants(room);
+
+          if (
+            typeof document !== "undefined" &&
+            canNotify(notificationsEnabledRef.current, document.hidden)
+          ) {
+            new Notification("Canal de voz", { body: `${name} saiu do canal` });
+          }
         });
         room.on(RoomEvent.Disconnected, () => {
           roomRef.current = null;
@@ -419,20 +501,35 @@ export function useVoice() {
     [attachKrispNoiseFilter, setError],
   );
 
-  useEffect(() => {
-    let cancelled = false;
+  const savedDeafenStateRef = useRef<{
+    micEnabled: boolean;
+    volumes: Record<string, number>;
+  } | null>(null);
 
-    void import("@livekit/krisp-noise-filter").then(({ isKrispNoiseFilterSupported }) => {
-      if (cancelled) return;
-      const supported = isKrispNoiseFilterSupported();
-      krispSupportedRef.current = supported;
-      setKrispSupported(supported);
-    });
+  const toggleDeafen = useCallback(() => {
+    if (deafen) {
+      const saved = savedDeafenStateRef.current;
+      savedDeafenStateRef.current = null;
+      if (saved) {
+        for (const [name, volume] of Object.entries(saved.volumes)) {
+          setParticipantVolume(name, volume);
+        }
+        if (saved.micEnabled) void setMicEnabled(true);
+      }
+      setDeafen(false);
+      return;
+    }
 
-    return () => {
-      cancelled = true;
+    savedDeafenStateRef.current = {
+      micEnabled,
+      volumes: { ...volumesRef.current },
     };
-  }, []);
+    for (const name of Object.keys(volumesRef.current)) {
+      setParticipantVolume(name, 0);
+    }
+    void setMicEnabled(false);
+    setDeafen(true);
+  }, [deafen, micEnabled, setParticipantVolume, setMicEnabled]);
 
   useEffect(() => {
     if (status !== "connected" && !micPermissionRef.current) return;
@@ -497,8 +594,10 @@ export function useVoice() {
     speakingNames,
     localPreview,
     isTabHidden,
+    deafen,
     error,
     clearError: useCallback(() => setError(null), []),
+    ensureKrispLoaded,
     connect,
     disconnect,
     setMicEnabled,
@@ -509,5 +608,6 @@ export function useVoice() {
     setLocalMute,
     toggleLocalMute,
     setScreenShare,
+    toggleDeafen,
   };
 }

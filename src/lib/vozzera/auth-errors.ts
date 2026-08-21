@@ -35,7 +35,8 @@ function resetValidationMessageFor(err: ApiError): string | null {
 }
 
 export function authErrorMessageFor(err: unknown, mode: AuthMode = "login"): string {
-  if (!(err instanceof ApiError)) return "Servidor indisponível. Ele está rodando?";
+  if (!(err instanceof ApiError))
+    return "Não consegui conectar ao servidor. Verifique sua conexão e tente de novo.";
   if (err.status === 400 && mode === "reset") return resetValidationMessageFor(err) ?? err.message;
   if (err.status === 400) return invalidEmailMessageFor(err, mode) ?? err.message;
   return statusMessageFor(err.status, mode) ?? (err.message || "Não foi possível concluir.");

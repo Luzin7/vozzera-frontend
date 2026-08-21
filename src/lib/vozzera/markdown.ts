@@ -3,7 +3,8 @@ export type Inline =
   | { kind: "bold"; children: Inline[] }
   | { kind: "italic"; children: Inline[] }
   | { kind: "code"; text: string }
-  | { kind: "link"; url: string; children: Inline[] };
+  | { kind: "link"; url: string; children: Inline[] }
+  | { kind: "room"; roomName: string };
 
 export type Block =
   | { kind: "paragraph"; children: Inline[] }
@@ -94,6 +95,18 @@ export function parseInline(input: string): Inline[] {
       text += "[";
       i += 1;
       continue;
+    }
+
+    if (rest.startsWith("#")) {
+      const match = rest.match(/^#([\w-]+)/);
+      const roomName = match?.[1];
+
+      if (roomName && (i === 0 || /\s/.test(input[i - 1] ?? ""))) {
+        flushText();
+        nodes.push({ kind: "room", roomName });
+        i += roomName.length + 1;
+        continue;
+      }
     }
 
     text += input[i];

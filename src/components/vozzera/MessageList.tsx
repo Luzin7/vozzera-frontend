@@ -1,10 +1,9 @@
 import { updateMessage } from "@/lib/vozzera/api";
-import { initials } from "@/lib/vozzera/avatar";
+import { dateGroupLabelFor } from "@/lib/vozzera/chat";
 import { useAuth } from "@/lib/vozzera/useAuth";
-import { memo, useEffect, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/vozzera/types";
-import { Check, Pen, Trash2, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,204 +13,232 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Markdown } from "./Markdown";
-
-function time(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-
-  return d.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+} from "@/components/ui/alert-dialog";
+import { MessageItem } from "@/components/vozzera/MessageItem";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const MessageList = memo(function MessageList({
   messages,
   loading,
   roomId,
   roomName,
+  typingText,
+  canModerateMessages,
   onDelete,
+  onRoomClick,
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
   roomId: string;
   roomName: string;
+  typingText: string | null;
+  canModerateMessages: boolean;
   onDelete: (message: ChatMessage) => void;
+  onRoomClick: ((roomName: string) => void) | undefined;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const editContentRef = useRef(editContent);
   const username = useAuth().username;
 
-  useEffect(() => {
-    const container = bottomRef.current?.parentElement;
+  editContentRef.current = editContent;
+
+  const jumpToLatest = useCallback(() => {
+    const container = scrollRef.current;
     if (!container) return;
 
     container.scrollTop = container.scrollHeight;
-  }, [messages.length]);
+    setShowJumpToLatest(false);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distance < 80) setShowJumpToLatest(false);
+  }, []);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [handleScroll, loading]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || loading) return;
+
+    container.scrollTop = container.scrollHeight;
+  }, [loading]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distance > 80) {
+      setShowJumpToLatest(true);
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }, [messages.length, loading]);
+
+  const startEditing = useCallback((message: ChatMessage) => {
+    setEditingMessageId(message.id);
+    setEditContent(message.content);
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingMessageId(null);
+    setEditContent("");
+  }, []);
+
+  const handleEditContentChange = useCallback((content: string) => {
+    setEditContent(content);
+  }, []);
+
+  const editMessage = useCallback(
+    async (messageId: string) => {
+      const content = editContentRef.current.trim();
+
+      if (!content) return;
+
+      try {
+        await updateMessage(roomId, messageId, content);
+
+        setEditingMessageId(null);
+        setEditContent("");
+      } catch (error) {
+        console.error("Erro ao editar mensagem:", error);
+      }
+    },
+    [roomId],
+  );
+
+  const handleSaveEdit = useCallback(
+    (messageId: string) => {
+      void editMessage(messageId);
+    },
+    [editMessage],
+  );
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Carregando histórico...
+      <div className="min-w-0 flex-1 overflow-hidden px-2 py-4 sm:px-4">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <div key={i} className="mb-4 flex gap-2 px-1 sm:gap-3 sm:px-2">
+            <Skeleton className="h-9 w-9 shrink-0 rounded-md" />
+            <div className="min-w-0 flex-1 space-y-2 pt-1">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-3 w-3/4" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 text-center">
-        <div>
-          <p className="text-sm font-medium text-foreground">Silêncio absoluto em #{roomName}</p>
-          <p className="mt-1 text-sm text-muted-foreground">Manda a primeira mensagem.</p>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 items-center justify-center px-6 text-center">
+          <div>
+            <p className="text-sm font-medium text-foreground">Silêncio absoluto em #{roomName}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Manda a primeira mensagem.</p>
+          </div>
         </div>
+        {typingText && (
+          <p className="px-4 pb-2 text-xs text-muted-foreground" aria-live="polite">
+            {typingText}
+          </p>
+        )}
       </div>
     );
   }
 
-  const startEditing = (message: ChatMessage) => {
-    setEditingMessageId(message.id);
-    setEditContent(message.content);
-  };
-
-  const cancelEditing = () => {
-    setEditingMessageId(null);
-    setEditContent("");
-  };
-
-  const editMessage = async (messageId: string) => {
-    const content = editContent.trim();
-
-    if (!content) return;
-
-    try {
-      await updateMessage(roomId, messageId, content);
-
-      setEditingMessageId(null);
-      setEditContent("");
-    } catch (error) {
-      console.error("Erro ao editar mensagem:", error);
-    }
-  };
-
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4">
-      <ol className="space-y-0.5">
-        {messages.map((message, index) => {
-          const previous = messages[index - 1];
-          const grouped = previous?.userId === message.userId;
-          const isEditing = editingMessageId === message.id;
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        ref={scrollRef}
+        className="relative min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
+      >
+        <ol className="space-y-0.5">
+          {messages.map((message, index) => {
+            const previous = messages[index - 1];
+            const dateLabel = dateGroupLabelFor(message.createdAt);
+            const previousDateLabel = previous ? dateGroupLabelFor(previous.createdAt) : null;
+            const startsDateGroup = dateLabel !== previousDateLabel;
+            const grouped = !startsDateGroup && previous?.userId === message.userId;
+            const isEditing = editingMessageId === message.id;
+            const isOwnMessage = username === message.username;
+            const canDeleteMessage = isOwnMessage || canModerateMessages;
 
-          return (
-            <li
-              key={message.id}
-              className={`${grouped ? "" : "pt-3"} ${index < messages.length - 1 ? "[content-visibility:auto] [contain-intrinsic-size:auto_4rem]" : ""}`}
-            >
-              <div className="group flex gap-3 rounded-md px-2 py-0.5 hover:bg-muted/40">
-                <div className="w-9 shrink-0">
-                  {!grouped && (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold text-foreground">
-                      {initials(message.username)}
-                    </div>
-                  )}
-                </div>
+            return (
+              <Fragment key={message.id}>
+                {startsDateGroup && dateLabel && (
+                  <li
+                    role="separator"
+                    aria-label={dateLabel}
+                    className="flex items-center gap-3 py-4 text-xs text-muted-foreground"
+                  >
+                    <span className="h-px flex-1 bg-border" />
+                    <span>{dateLabel}</span>
+                    <span className="h-px flex-1 bg-border" />
+                  </li>
+                )}
+                <MessageItem
+                  message={message}
+                  grouped={grouped}
+                  isLast={index === messages.length - 1}
+                  isOwnMessage={isOwnMessage}
+                  canDeleteMessage={canDeleteMessage}
+                  isEditing={isEditing}
+                  editContent={isEditing ? editContent : ""}
+                  onStartEdit={startEditing}
+                  onRequestDelete={setDeleteTarget}
+                  onEditContentChange={handleEditContentChange}
+                  onSaveEdit={handleSaveEdit}
+                  onCancelEdit={cancelEditing}
+                  onRoomClick={onRoomClick}
+                />
+              </Fragment>
+            );
+          })}
+        </ol>
 
-                <div className="relative min-w-0 flex-1">
-                  {!grouped && (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-semibold text-foreground">
-                        {message.username}
-                      </span>
+        {showJumpToLatest && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
+          >
+            Ir para a última mensagem
+          </button>
+        )}
+      </div>
 
-                      <span className="text-[11px] text-muted-foreground">
-                        {time(message.createdAt)}
-                      </span>
-                    </div>
-                  )}
-
-                  {username === message.username && !isEditing && (
-                    <div className="absolute right-0 top-0 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                      <Button
-                        variant="secondary"
-                        className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-foreground"
-                        onClick={() => startEditing(message)}
-                      >
-                        <Pen className="h-3.5 w-3.5" />
-                        <span className="sr-only">Editar mensagem</span>
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="h-6 w-6 p-0 text-muted-foreground/40 hover:bg-muted/60 hover:text-destructive"
-                        onClick={() => setDeleteTarget(message)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span className="sr-only">Excluir mensagem</span>
-                      </Button>
-                    </div>
-                  )}
-
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <Input
-                        id={`message-edit-${message.id}`}
-                        type="text"
-                        value={editContent}
-                        autoComplete="off"
-                        onChange={(event) => setEditContent(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            void editMessage(message.id);
-                          }
-
-                          if (event.key === "Escape") {
-                            cancelEditing();
-                          }
-                        }}
-                      />
-
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="h-9 w-9 shrink-0 p-0"
-                        onClick={() => void editMessage(message.id)}
-                      >
-                        <Check />
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="h-9 w-9 shrink-0 p-0"
-                        onClick={cancelEditing}
-                      >
-                        <X />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-sm leading-relaxed text-foreground/90">
-                      <Markdown content={message.content} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-
-      <div ref={bottomRef} />
+      {typingText && (
+        <p className="px-4 pb-2 text-xs text-muted-foreground" aria-live="polite">
+          {typingText}
+        </p>
+      )}
 
       <AlertDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir mensagem?</AlertDialogTitle>
             <AlertDialogDescription>

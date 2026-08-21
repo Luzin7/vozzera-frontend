@@ -58,6 +58,11 @@ export type InboundEvent =
       type: "message";
       room_id: string;
       content: string;
+    }
+  | {
+      type: "typing";
+      room_id: string;
+      action: "start" | "stop";
     };
 
 export type OutboundEvent =
@@ -104,6 +109,13 @@ export type OutboundEvent =
   | {
       type: "presence";
       id: string;
+      room_id: string;
+      user_id: string;
+      username: string;
+    }
+  | {
+      type: "typing";
+      action: "start" | "stop";
       room_id: string;
       user_id: string;
       username: string;

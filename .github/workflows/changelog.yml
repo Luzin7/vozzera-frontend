@@ -1,0 +1,32 @@
+name: Gerar changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão da release (ex.: v1.1.0). Vazio = bump automático de patch."
+        required: false
+        default: ""
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+      - name: Gerar public/changelog.json
+        run: node scripts/changelog.mjs ${{ inputs.version != '' && format('--version {0}', inputs.version) || '' }}
+      - name: Commitar no develop
+        run: |
+          git config user.name "changelog-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/changelog.json
+          if git diff --cached --quiet; then
+            echo "Nada para commitar."
+            exit 0
+          fi
+          git commit -m "chore(changelog): atualizar public/changelog.json"
+          git push origin develop

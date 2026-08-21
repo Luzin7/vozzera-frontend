@@ -139,6 +139,23 @@ Remove uma sala. O front trata qualquer 2xx como sucesso (204 esperado) e limpa 
 
 - `token` é o JWT do LiveKit; `url` é o `wss://` do projeto; `room_name` só pra exibir (a sala real é o UUID, já embutido no token).
 
+#### Áudio no compartilhamento de tela
+
+O frontend passa `audio: true` ao LiveKit. Isso solicita a captura de áudio ao `getDisplayMedia`, mas o navegador decide se oferece o checkbox de áudio e qual fonte pode ser capturada.
+
+| Ambiente           | Aba                | Janela             | Tela inteira       | Validação          |
+| ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
+| Chrome no Windows  | Áudio com opt-in   | Áudio com opt-in   | Áudio com opt-in   | Manual, confirmado |
+| Edge no Windows    | Áudio com opt-in   | Áudio com opt-in   | Áudio com opt-in   | Manual, confirmado |
+| ChromeOS           | Áudio esperado     | Sem áudio esperado | Áudio esperado     | Pendente           |
+| Chrome macOS/Linux | Áudio esperado     | Sem áudio esperado | Sem áudio esperado | Pendente           |
+| Firefox            | Sem áudio esperado | Sem áudio esperado | Sem áudio esperado | Pendente           |
+
+- O receptor anexa e reproduz qualquer trilha `Track.Kind.Audio`, incluindo `Track.Source.ScreenShareAudio`.
+- A UI não adiciona orientação própria por plataforma. O seletor nativo informa se o áudio está disponível e mantém a decisão com o usuário.
+- Parar o compartilhamento pelo LiveKit encerra as trilhas de vídeo e áudio da tela.
+- A validação no Windows foi feita com outro participante recebendo o áudio nas três superfícies.
+
 ### `GET /api/rooms/{id}/messages?limit=50`
 
 ```jsonc
@@ -163,6 +180,7 @@ Endpoint `/ws`, mesma base da API (http→ws, https→wss).
 ```jsonc
 { "type": "join", "room_id": "string" }
 { "type": "message", "room_id": "string", "content": "string" }
+{ "type": "typing", "room_id": "string", "action": "start" | "stop" }
 ```
 
 ### Outbound (server → front)
@@ -187,6 +205,12 @@ Eventos de sala:
 { "type": "room", "action": "deleted", "id": "string" }
 ```
 
+Evento efêmero de digitação:
+
+```jsonc
+{ "type": "typing", "action": "start" | "stop", "room_id": "string", "user_id": "string", "username": "string" }
+```
+
 Regras:
 
 - Campos zerados (`ZERO_UUID = 00000000-0000-0000-0000-000000000000` e `created_at` zero) são ignorados.
@@ -197,6 +221,6 @@ Regras:
 
 ## Limitações conhecidas
 
-- **Presença/online, typing, upload e paginação não existem** no backend.
+- **Presença/online, upload e paginação não existem** no backend.
 - Nenhuma privacidade por sala: qualquer logado lê e escreve em qualquer sala — o invite code é a única barreira.
 - Cookie `SameSite=Lax`: em dev cross-origin (front num domínio diferente de `localhost:8080`) o cookie não viaja; auth funciona rodando o front localmente contra o Go, ou com o build servido pelo próprio Go.
