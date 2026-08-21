@@ -184,6 +184,7 @@ function Index() {
   }, [screenShareEnabled, setScreenShare]);
 
   const handleLogout = useCallback(() => {
+    setSettingsOpen(false);
     void disconnect();
     void logout();
   }, [disconnect, logout]);
