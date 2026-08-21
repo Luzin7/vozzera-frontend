@@ -74,6 +74,8 @@ function Index() {
     updateEmail,
     notificationsEnabled,
     toggleNotifications,
+    soundEnabled,
+    toggleSound,
     sendMessage,
   } = useChat();
   const {
@@ -444,9 +446,11 @@ function Index() {
           noiseFilter={voice.noiseFilter}
           krispSupported={voice.krispSupported}
           selfMonitor={voice.selfMonitor}
+          soundEnabled={soundEnabled}
           onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
           onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
           onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
+          onToggleSound={toggleSound}
           onUpdateEmail={updateEmail}
           onLogout={handleLogout}
         />
