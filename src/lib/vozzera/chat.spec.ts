@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   appendMessage,
   backoffDelay,
+  expireTypingUsers,
   firstTextRoom,
   nextRoomIndex,
   parseFrame,
   removeRoom,
+  typingIndicatorText,
+  updateTypingUsers,
   upsertRoom,
 } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
@@ -129,6 +132,14 @@ describe("parseFrame", () => {
     expect(parseFrame(deleted)).toMatchObject({ type: "room", action: "deleted" });
   });
 
+  it("parses typing frames", () => {
+    const raw = {
+      data: '{"type":"typing","action":"start","room_id":"r1","user_id":"u1","username":"luan"}',
+    } as MessageEvent;
+
+    expect(parseFrame(raw)).toMatchObject({ type: "typing", action: "start" });
+  });
+
   it("returns null for invalid json", () => {
     const raw = { data: "nope" } as MessageEvent;
     expect(parseFrame(raw)).toBeNull();
@@ -149,5 +160,49 @@ describe("parseFrame", () => {
       data: `{"type":"error","error":"${"x".repeat(MAX_FRAME_BYTES)}"}`,
     } as MessageEvent;
     expect(parseFrame(raw)).toBeNull();
+  });
+});
+
+describe("typing users", () => {
+  const start = {
+    type: "typing" as const,
+    action: "start" as const,
+    room_id: "r1",
+    user_id: "u2",
+    username: "Luan",
+  };
+
+  it("adds, refreshes and removes a typing user", () => {
+    const added = updateTypingUsers({}, start, "u1", 1000);
+    const refreshed = updateTypingUsers(added, start, "u1", 2000);
+    const removed = updateTypingUsers(refreshed, { ...start, action: "stop" }, "u1", 2000);
+
+    expect(added).toMatchObject({ r1: { u2: { lastTypedAt: 1000 } } });
+    expect(refreshed).toMatchObject({ r1: { u2: { lastTypedAt: 2000 } } });
+    expect(removed).toEqual({});
+  });
+
+  it("ignores events from the current user", () => {
+    expect(updateTypingUsers({}, { ...start, user_id: "u1" }, "u1", 1000)).toEqual({});
+  });
+
+  it("expires users after the timeout", () => {
+    const users = updateTypingUsers({}, start, "u1", 1000);
+
+    expect(expireTypingUsers(users, 3999, 3000)).toBe(users);
+    expect(expireTypingUsers(users, 4000, 3000)).toEqual({});
+  });
+
+  it("formats one or multiple names", () => {
+    const luan = { userId: "u1", username: "Luan", lastTypedAt: 1000 };
+    const bia = { userId: "u2", username: "Bia", lastTypedAt: 1000 };
+    const ana = { userId: "u3", username: "Ana", lastTypedAt: 1000 };
+
+    expect(typingIndicatorText([])).toBeNull();
+    expect(typingIndicatorText([luan])).toBe("Luan está digitando...");
+    expect(typingIndicatorText([luan, bia])).toBe("Luan e Bia estão digitando...");
+    expect(typingIndicatorText([luan, bia, ana])).toBe(
+      "Várias pessoas estão digitando ao mesmo tempo...",
+    );
   });
 });
