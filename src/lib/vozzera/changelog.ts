@@ -10,6 +10,7 @@ export const changelogSchema = z.object({
       title: z.string(),
       kind: z.string().optional(),
       pr: z.number().optional(),
+      summary: z.string().optional(),
     }),
   ),
 });

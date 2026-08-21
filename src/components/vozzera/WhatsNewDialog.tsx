@@ -39,7 +39,7 @@ export function WhatsNewDialog({ open, items, version, onDismiss }: Readonly<Pro
               className="flex items-start gap-2 text-sm text-foreground"
             >
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <span>{item.title}</span>
+              <span>{item.summary || item.title}</span>
             </li>
           ))}
         </ul>
