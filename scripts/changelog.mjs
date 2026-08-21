@@ -59,7 +59,7 @@ const items = highlights.slice(0, MAX_ITEMS).map((pull) => ({
   title: pull.title,
   kind: kindFromTitle(pull.title),
   pr: pull.number,
-  summary: extractSummary(pull.body) ?? existingSummaries[pull.number] ?? "",
+  summary: existingSummaries[pull.number] ?? "",
 }));
 
 const version = args.version ?? nextVersion(items, lastTag);
@@ -142,14 +142,6 @@ function bumpMinor(tag) {
   if (!match) return null;
 
   return `v${match[1]}.${Number(match[2]) + 1}.0`;
-}
-
-function extractSummary(body) {
-  if (!body) return null;
-
-  const match = body.match(/^## Resumo\s*\n\n([\s\S]*?)(?:\n## |$)/m);
-
-  return match ? match[1].trim() : null;
 }
 
 function readExistingSummaries() {
