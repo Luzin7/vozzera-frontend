@@ -239,7 +239,6 @@ export function useVoice() {
   const attachKrispNoiseFilter = useCallback(
     async (track: LocalAudioTrack) => {
       if (!noiseFilterRef.current) return;
-      if (screenShareRef.current) return;
 
       const supported = await ensureKrispLoaded();
       if (!supported) return;
@@ -357,13 +356,6 @@ export function useVoice() {
       setScreenShareEnabledState(false);
       setLocalPreview(null);
       screenShareRef.current = false;
-      if (noiseFilterRef.current && krispProcessorRef.current) {
-        try {
-          await krispProcessorRef.current.setEnabled(true);
-        } catch {
-          /* silêncio — filtro será reativado na próxima publicação */
-        }
-      }
       return;
     }
 
@@ -385,14 +377,6 @@ export function useVoice() {
     setScreenShareEnabledState(true);
     setLocalPreview(track ? { id: "local", name, track } : null);
     screenShareRef.current = true;
-
-    if (krispProcessorRef.current) {
-      try {
-        await krispProcessorRef.current.setEnabled(false);
-      } catch {
-        /* silêncio */
-      }
-    }
   }, []);
 
   const connect = useCallback(
@@ -502,9 +486,6 @@ export function useVoice() {
           setScreenShareEnabledState(false);
           setLocalPreview(null);
           screenShareRef.current = false;
-          if (noiseFilterRef.current && krispProcessorRef.current) {
-            void krispProcessorRef.current.setEnabled(true).catch(() => {});
-          }
         });
 
         room.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -614,8 +595,6 @@ export function useVoice() {
     async (enabled: boolean) => {
       writeNoiseFilter(typeof localStorage === "undefined" ? null : localStorage, enabled);
       setNoiseFilterState(enabled);
-
-      if (screenShareRef.current) return;
 
       const processor = krispProcessorRef.current;
       if (processor) {
