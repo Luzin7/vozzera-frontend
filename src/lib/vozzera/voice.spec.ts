@@ -4,15 +4,58 @@ import {
   audioCaptureOptions,
   audioInputDevices,
   featuredShareId,
+  isLocalVoiceActive,
+  mergeActiveSpeakerNames,
   muteVolume,
   participantStatusLabelFor,
   readMicDeviceId,
   readNoiseFilter,
   readParticipantVolumes,
+  microphonePublishOptions,
+  screenShareAudioCaptureOptions,
+  screenSharePublishOptions,
+  shouldShowLocalVoiceActivity,
   writeMicDeviceId,
   writeNoiseFilter,
   writeParticipantVolumes,
 } from "./voice";
+
+describe("isLocalVoiceActive", () => {
+  it("starts immediately when voice crosses the activation level", () => {
+    expect(isLocalVoiceActive(0.159, false)).toBe(false);
+    expect(isLocalVoiceActive(0.16, false)).toBe(true);
+  });
+
+  it("uses hysteresis to avoid flickering between syllables", () => {
+    expect(isLocalVoiceActive(0.08, true)).toBe(true);
+    expect(isLocalVoiceActive(0.069, true)).toBe(false);
+  });
+});
+
+describe("shouldShowLocalVoiceActivity", () => {
+  it("keeps the indicator visible during short pauses", () => {
+    expect(shouldShowLocalVoiceActivity(false, true, 149)).toBe(true);
+  });
+
+  it("hides the indicator after 150 milliseconds of continuous silence", () => {
+    expect(shouldShowLocalVoiceActivity(false, true, 150)).toBe(false);
+  });
+
+  it("shows voice immediately and does not delay the initial activation", () => {
+    expect(shouldShowLocalVoiceActivity(true, false, 0)).toBe(true);
+    expect(shouldShowLocalVoiceActivity(false, false, 0)).toBe(false);
+  });
+});
+
+describe("mergeActiveSpeakerNames", () => {
+  it("keeps releasing speakers while adding active speakers without duplicates", () => {
+    expect(mergeActiveSpeakerNames(["ana", "beto"], ["beto", "caio"])).toEqual([
+      "ana",
+      "beto",
+      "caio",
+    ]);
+  });
+});
 
 function fakeStorage(initial: Array<[string, string]> = []): Storage {
   const store = new Map<string, string>(initial);
@@ -34,8 +77,8 @@ describe("readParticipantVolumes / writeParticipantVolumes", () => {
 
     expect(readParticipantVolumes(storage)).toEqual({});
 
-    writeParticipantVolumes(storage, { luan: 0.3, ana: 1 });
-    expect(readParticipantVolumes(storage)).toEqual({ luan: 0.3, ana: 1 });
+    writeParticipantVolumes(storage, { luan: 0.3, ana: 1.5 });
+    expect(readParticipantVolumes(storage)).toEqual({ luan: 0.3, ana: 1.5 });
   });
 
   it("returns an empty map for corrupt data", () => {
@@ -63,6 +106,48 @@ describe("audioCaptureOptions", () => {
   it("adds the device id only when selected", () => {
     expect(audioCaptureOptions("mic-1").deviceId).toBe("mic-1");
     expect(audioCaptureOptions(null).deviceId).toBeUndefined();
+  });
+});
+
+describe("microphonePublishOptions", () => {
+  it("publishes mono voice at 70 kbps with DTX", () => {
+    expect(microphonePublishOptions()).toEqual({
+      audioPreset: { maxBitrate: 70_000 },
+      dtx: true,
+      forceStereo: false,
+    });
+  });
+});
+
+describe("screenShareAudioCaptureOptions", () => {
+  it("captures stereo media without voice processing", () => {
+    expect(screenShareAudioCaptureOptions()).toEqual({
+      channelCount: 2,
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      restrictOwnAudio: true,
+    });
+  });
+});
+
+describe("screenSharePublishOptions", () => {
+  it.each([
+    [{ width: 1280, height: 720, frameRate: 30 }, 4_000_000],
+    [{ width: 1280, height: 720, frameRate: 60 }, 6_000_000],
+    [{ width: 1920, height: 1080, frameRate: 30 }, 6_000_000],
+    [{ width: 1920, height: 1080, frameRate: 60 }, 10_000_000],
+  ])("selects the video bitrate for %o", (quality, maxBitrate) => {
+    expect(screenSharePublishOptions(quality)).toEqual({
+      audioPreset: { maxBitrate: 128_000 },
+      dtx: false,
+      forceStereo: true,
+      degradationPreference: "maintain-framerate",
+      screenShareEncoding: {
+        maxBitrate,
+        maxFramerate: quality.frameRate,
+      },
+    });
   });
 });
 

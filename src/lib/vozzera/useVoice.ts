@@ -5,17 +5,24 @@ import type { VoiceTokenResponse } from "./types";
 import {
   audioCaptureOptions,
   audioInputDevices,
+  isLocalVoiceActive,
+  mergeActiveSpeakerNames,
   muteVolume,
+  microphonePublishOptions,
   readMicDeviceId,
   readNoiseFilter,
   readParticipantVolumes,
   readScreenShareVolumes,
+  screenShareAudioCaptureOptions,
+  screenSharePublishOptions,
+  shouldShowLocalVoiceActivity,
+  VOICE_RELEASE_DELAY_MS,
   writeMicDeviceId,
   writeNoiseFilter,
   writeParticipantVolumes,
   writeScreenShareVolumes,
 } from "./voice";
-import type { MicDevice } from "./voice";
+import type { MicDevice, ScreenShareQuality } from "./voice";
 import {
   canNotify,
   initialNotificationsEnabled,
@@ -30,9 +37,9 @@ type RemoteParticipant = import("livekit-client").RemoteParticipant;
 type LocalVideoTrack = import("livekit-client").LocalVideoTrack;
 type RemoteVideoTrack = import("livekit-client").RemoteVideoTrack;
 type LocalAudioTrack = import("livekit-client").LocalAudioTrack;
-type AudioTrack = import("livekit-client").Track;
 type TrackSource = import("livekit-client").Track.Source;
 type ScreenShareCaptureOptions = import("livekit-client").ScreenShareCaptureOptions;
+type TrackPublishOptions = import("livekit-client").TrackPublishOptions;
 type KrispNoiseFilterProcessor = import("@livekit/krisp-noise-filter").KrispNoiseFilterProcessor;
 type AudioTrackProcessor = import("livekit-client").TrackProcessor<
   import("livekit-client").Track.Kind.Audio,
@@ -61,13 +68,16 @@ function setRemoteParticipantScreenShareVolume(participant: RemoteParticipant, v
   );
 }
 
-export type ScreenShareQuality = {
-  width: number;
-  height: number;
-  frameRate: number;
-};
+export type { ScreenShareQuality } from "./voice";
 
 let screenShareAudioSource: unknown = null;
+
+function createVoiceAudioContext(): AudioContext {
+  const AudioContextConstructor =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  return new AudioContextConstructor();
+}
 
 async function loadLiveKitClient() {
   const client = await import("livekit-client");
@@ -111,14 +121,16 @@ export function useVoice() {
     if (typeof localStorage === "undefined") return true;
     return readNoiseFilter(localStorage);
   });
-  const [krispSupported, setKrispSupported] = useState(false);
+  const [krispSupported, setKrispSupported] = useState<boolean | null>(null);
   const [selfMonitor, setSelfMonitor] = useState(false);
   const [mutedParticipants, setMutedParticipants] = useState<Record<string, boolean>>({});
   const [screenShareMutedParticipants, setScreenShareMutedParticipants] = useState<
     Record<string, boolean>
   >({});
-  const [speakingNames, setSpeakingNames] = useState<string[]>([]);
-  const [localMicTrack, setLocalMicTrack] = useState<AudioTrack | null>(null);
+  const [serverSpeakingNames, setServerSpeakingNames] = useState<string[]>([]);
+  const [localSpeaking, setLocalSpeaking] = useState(false);
+  const [localMicTrack, setLocalMicTrack] = useState<LocalAudioTrack | null>(null);
+  const [micProcessorRevision, setMicProcessorRevision] = useState(0);
   const [localPreview, setLocalPreview] = useState<ScreenShare | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deafen, setDeafen] = useState(false);
@@ -126,6 +138,10 @@ export function useVoice() {
   const screenShareRef = useRef(false);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
+  const voiceAudioContextRef = useRef<AudioContext | null>(null);
+  const connectionAttemptRef = useRef(0);
+  const serverSpeakingNamesRef = useRef<string[]>([]);
+  const speakerReleaseTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const volumesRef = useRef(volumes);
   const screenShareVolumesRef = useRef(screenShareVolumes);
   const mutedVolumesRef = useRef<Record<string, number>>({});
@@ -134,7 +150,7 @@ export function useVoice() {
   const selectedDeviceIdRef = useRef(selectedDeviceId);
   const micPermissionRef = useRef(false);
   const krispProcessorRef = useRef<KrispNoiseFilterProcessor | null>(null);
-  const krispSupportedRef = useRef(false);
+  const krispTrackRef = useRef<LocalAudioTrack | null>(null);
   const krispLoadPromiseRef = useRef<Promise<boolean> | null>(null);
   const notificationsEnabledRef = useRef(
     typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
@@ -185,7 +201,13 @@ export function useVoice() {
       delete next[name];
       return next;
     });
-    setSpeakingNames((prev) => prev.filter((speaker) => speaker !== name));
+    const releaseTimer = speakerReleaseTimersRef.current.get(name);
+    if (releaseTimer) clearTimeout(releaseTimer);
+    speakerReleaseTimersRef.current.delete(name);
+    serverSpeakingNamesRef.current = serverSpeakingNamesRef.current.filter(
+      (speaker) => speaker !== name,
+    );
+    setServerSpeakingNames(serverSpeakingNamesRef.current);
     delete mutedVolumesRef.current[name];
     delete screenShareMutedVolumesRef.current[name];
   }, []);
@@ -194,14 +216,19 @@ export function useVoice() {
     setParticipants([]);
     setMutedParticipants({});
     setScreenShareMutedParticipants({});
-    setSpeakingNames([]);
+    setServerSpeakingNames([]);
+    setLocalSpeaking(false);
     setLocalMicTrack(null);
     setScreenShareEnabledState(false);
     setScreenShares([]);
     setLocalPreview(null);
     mutedVolumesRef.current = {};
     screenShareMutedVolumesRef.current = {};
+    for (const timer of speakerReleaseTimersRef.current.values()) clearTimeout(timer);
+    speakerReleaseTimersRef.current.clear();
+    serverSpeakingNamesRef.current = [];
     krispProcessorRef.current = null;
+    krispTrackRef.current = null;
     screenShareRef.current = false;
   }, []);
 
@@ -214,7 +241,7 @@ export function useVoice() {
 
   const syncLocalMicTrack = useCallback((room: LiveKitRoom) => {
     const publication = room.localParticipant.getTrackPublication("microphone" as TrackSource);
-    setLocalMicTrack((publication?.track ?? null) as AudioTrack | null);
+    setLocalMicTrack((publication?.track ?? null) as LocalAudioTrack | null);
   }, []);
 
   const ensureKrispLoaded = useCallback(() => {
@@ -223,12 +250,10 @@ export function useVoice() {
     krispLoadPromiseRef.current = import("@livekit/krisp-noise-filter")
       .then(({ isKrispNoiseFilterSupported }) => {
         const supported = isKrispNoiseFilterSupported();
-        krispSupportedRef.current = supported;
         setKrispSupported(supported);
         return supported;
       })
       .catch(() => {
-        krispSupportedRef.current = false;
         setKrispSupported(false);
         return false;
       });
@@ -236,8 +261,29 @@ export function useVoice() {
     return krispLoadPromiseRef.current;
   }, []);
 
+  const createKrispProcessor = useCallback(async () => {
+    if (!noiseFilterRef.current) return null;
+
+    const supported = await ensureKrispLoaded();
+    if (!supported) return null;
+
+    try {
+      const { KrispNoiseFilter } = await import("@livekit/krisp-noise-filter");
+      return KrispNoiseFilter();
+    } catch {
+      setError("Não consegui carregar o filtro de ruído.");
+      return null;
+    }
+  }, [ensureKrispLoaded]);
+
   const attachKrispNoiseFilter = useCallback(
     async (track: LocalAudioTrack) => {
+      if (krispTrackRef.current && krispTrackRef.current !== track) {
+        await krispTrackRef.current.stopProcessor().catch(() => undefined);
+        krispProcessorRef.current = null;
+        krispTrackRef.current = null;
+      }
+
       if (!noiseFilterRef.current) return;
 
       const supported = await ensureKrispLoaded();
@@ -246,6 +292,7 @@ export function useVoice() {
       if (krispProcessorRef.current) {
         try {
           await krispProcessorRef.current.setEnabled(true);
+          setMicProcessorRevision((revision) => revision + 1);
         } catch {
           setError("Não consegui ativar o filtro de ruído.");
         }
@@ -257,7 +304,9 @@ export function useVoice() {
         const processor = KrispNoiseFilter();
         await track.setProcessor(processor as AudioTrackProcessor);
         krispProcessorRef.current = processor;
+        krispTrackRef.current = track;
         await processor.setEnabled(true);
+        setMicProcessorRevision((revision) => revision + 1);
       } catch {
         setError("Não consegui ativar o filtro de ruído.");
       }
@@ -339,13 +388,23 @@ export function useVoice() {
     [setLocalScreenShareMute],
   );
 
+  const closeVoiceAudioContext = useCallback(async (context?: AudioContext | null) => {
+    const contextToClose = context === undefined ? voiceAudioContextRef.current : context;
+    if (voiceAudioContextRef.current === contextToClose) voiceAudioContextRef.current = null;
+    const audioContext = contextToClose;
+    if (!audioContext || audioContext.state === "closed") return;
+    await audioContext.close().catch(() => undefined);
+  }, []);
+
   const disconnect = useCallback(async () => {
+    connectionAttemptRef.current += 1;
     await roomRef.current?.disconnect();
+    await closeVoiceAudioContext();
     roomRef.current = null;
     setStatus("idle");
     setActiveRoomId(null);
     resetRoomState();
-  }, [resetRoomState]);
+  }, [closeVoiceAudioContext, resetRoomState]);
 
   const setScreenShare = useCallback(async (enabled: boolean, quality?: ScreenShareQuality) => {
     const room = roomRef.current;
@@ -361,16 +420,22 @@ export function useVoice() {
 
     const options: ScreenShareCaptureOptions = quality
       ? {
-          audio: true,
+          audio: screenShareAudioCaptureOptions(),
           resolution: {
             width: quality.width,
             height: quality.height,
             frameRate: quality.frameRate,
           },
         }
-      : { audio: true };
+      : { audio: screenShareAudioCaptureOptions() };
 
-    const publication = await room.localParticipant.setScreenShareEnabled(true, options);
+    const publishQuality = quality ?? { width: 1920, height: 1080, frameRate: 30 };
+    const publishOptions = screenSharePublishOptions(publishQuality) as TrackPublishOptions;
+    const publication = await room.localParticipant.setScreenShareEnabled(
+      true,
+      options,
+      publishOptions,
+    );
     const track = publication?.videoTrack;
     const name = room.localParticipant.name || room.localParticipant.identity;
 
@@ -379,27 +444,72 @@ export function useVoice() {
     screenShareRef.current = true;
   }, []);
 
+  const syncActiveSpeakerNames = useCallback((activeNames: string[]) => {
+    const activeNameSet = new Set(activeNames);
+
+    for (const name of activeNames) {
+      const releaseTimer = speakerReleaseTimersRef.current.get(name);
+      if (releaseTimer) clearTimeout(releaseTimer);
+      speakerReleaseTimersRef.current.delete(name);
+    }
+
+    for (const name of serverSpeakingNamesRef.current) {
+      if (activeNameSet.has(name)) continue;
+      if (speakerReleaseTimersRef.current.has(name)) continue;
+
+      const releaseTimer = setTimeout(() => {
+        speakerReleaseTimersRef.current.delete(name);
+        serverSpeakingNamesRef.current = serverSpeakingNamesRef.current.filter(
+          (speaker) => speaker !== name,
+        );
+        setServerSpeakingNames(serverSpeakingNamesRef.current);
+      }, VOICE_RELEASE_DELAY_MS);
+      speakerReleaseTimersRef.current.set(name, releaseTimer);
+    }
+
+    serverSpeakingNamesRef.current = mergeActiveSpeakerNames(
+      serverSpeakingNamesRef.current,
+      activeNames,
+    );
+    setServerSpeakingNames(serverSpeakingNamesRef.current);
+  }, []);
+
   const connect = useCallback(
     async (roomId: string) => {
       if (roomRef.current) await disconnect();
+      const attemptId = connectionAttemptRef.current + 1;
+      connectionAttemptRef.current = attemptId;
 
       setError(null);
       setStatus("connecting");
       setActiveRoomId(roomId);
+      let preparedMicTrack: LocalAudioTrack | null = null;
+      let attemptAudioContext: AudioContext | null = null;
+      let connectingRoom: LiveKitRoom | null = null;
 
       try {
-        const { Room, RoomEvent, Track, VideoQuality } = await loadLiveKitClient();
+        const [client, tokenResponse, initialProcessor] = await Promise.all([
+          loadLiveKitClient(),
+          api<VoiceTokenResponse>("/api/voice/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ room_id: roomId }),
+          }),
+          createKrispProcessor(),
+        ]);
+        if (connectionAttemptRef.current !== attemptId) return;
+        const { Room, RoomEvent, Track, VideoQuality } = client;
+        const { token, url } = tokenResponse;
 
-        const { token, url } = await api<VoiceTokenResponse>("/api/voice/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ room_id: roomId }),
-        });
-
+        const voiceAudioContext = createVoiceAudioContext();
+        attemptAudioContext = voiceAudioContext;
+        voiceAudioContextRef.current = voiceAudioContext;
         const room = new Room({
           adaptiveStream: true,
           dynacast: true,
+          webAudioMix: { audioContext: voiceAudioContext },
         });
+        connectingRoom = room;
         roomRef.current = room;
 
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -432,16 +542,7 @@ export function useVoice() {
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
           track.detach().forEach((el) => el.remove());
 
-          setLocalMicTrack((current) => (current === track ? null : current));
           setScreenShares((prev) => prev.filter((share) => share.track !== track));
-        });
-
-        room.on(RoomEvent.LocalTrackPublished, (publication) => {
-          if (publication.source !== Track.Source.Microphone) return;
-
-          const track = publication.track as LocalAudioTrack | undefined;
-          if (!track) return;
-          void attachKrispNoiseFilter(track);
         });
 
         room.on(RoomEvent.TrackMuted, (publication, participant) => {
@@ -470,14 +571,13 @@ export function useVoice() {
 
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
           const localName = room.localParticipant.name || room.localParticipant.identity;
-          setSpeakingNames(
-            speakers
-              .map((p) => p.name || p.identity)
-              .filter((name) => {
-                if (name !== localName) return true;
-                return !screenShareRef.current;
-              }),
-          );
+          const activeNames = speakers
+            .map((p) => p.name || p.identity)
+            .filter((name) => {
+              if (name !== localName) return true;
+              return !screenShareRef.current;
+            });
+          syncActiveSpeakerNames(activeNames);
         });
 
         room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
@@ -526,16 +626,47 @@ export function useVoice() {
           }
         });
         room.on(RoomEvent.Disconnected, () => {
+          void closeVoiceAudioContext(voiceAudioContext);
+          if (roomRef.current !== room) return;
           roomRef.current = null;
           setStatus("idle");
           setActiveRoomId(null);
           resetRoomState();
         });
 
+        const [createdTrack] = await room.localParticipant.createTracks({
+          audio: audioCaptureOptions(selectedDeviceIdRef.current),
+          video: false,
+        });
+        preparedMicTrack = createdTrack ? (createdTrack as LocalAudioTrack) : null;
+        if (!preparedMicTrack) throw new Error("Não consegui preparar o microfone.");
+        preparedMicTrack.setAudioContext(voiceAudioContext);
+
+        if (initialProcessor) {
+          await preparedMicTrack.setProcessor(initialProcessor as AudioTrackProcessor);
+          krispProcessorRef.current = initialProcessor;
+          krispTrackRef.current = preparedMicTrack;
+          await initialProcessor.setEnabled(true);
+          setMicProcessorRevision((revision) => revision + 1);
+        }
+
+        if (connectionAttemptRef.current !== attemptId) {
+          preparedMicTrack.stop();
+          if (roomRef.current === room) roomRef.current = null;
+          await closeVoiceAudioContext(voiceAudioContext);
+          return;
+        }
+
         await room.connect(url, token);
-        await room.localParticipant.setMicrophoneEnabled(
-          true,
-          audioCaptureOptions(selectedDeviceIdRef.current),
+        if (connectionAttemptRef.current !== attemptId) {
+          await room.disconnect();
+          preparedMicTrack.stop();
+          await closeVoiceAudioContext(voiceAudioContext);
+          return;
+        }
+        await room.localParticipant.publishTrack(
+          preparedMicTrack as Parameters<typeof room.localParticipant.publishTrack>[0],
+          microphonePublishOptions(),
         );
 
         setMicEnabledState(true);
@@ -545,6 +676,11 @@ export function useVoice() {
         setActiveRoomId(roomId);
         syncParticipants(room);
       } catch (err) {
+        if (connectingRoom && roomRef.current === connectingRoom) roomRef.current = null;
+        await connectingRoom?.disconnect().catch(() => undefined);
+        preparedMicTrack?.stop();
+        await closeVoiceAudioContext(attemptAudioContext);
+        if (connectionAttemptRef.current !== attemptId) return;
         setError(err instanceof Error ? err.message : "Não consegui entrar no canal");
         setStatus("idle");
         setActiveRoomId(null);
@@ -554,10 +690,12 @@ export function useVoice() {
     },
     [
       applyParticipantVolumes,
-      attachKrispNoiseFilter,
+      closeVoiceAudioContext,
+      createKrispProcessor,
       disconnect,
       removeParticipant,
       resetRoomState,
+      syncActiveSpeakerNames,
       syncLocalMicTrack,
       syncParticipants,
     ],
@@ -571,11 +709,14 @@ export function useVoice() {
 
       const options = enabled ? audioCaptureOptions(selectedDeviceIdRef.current) : undefined;
 
-      await participant.setMicrophoneEnabled(enabled, options);
+      await participant.setMicrophoneEnabled(enabled, options, microphonePublishOptions());
+      const track = participant.getTrackPublication("microphone" as TrackSource)?.track as
+        LocalAudioTrack | undefined;
+      if (enabled && track) await attachKrispNoiseFilter(track);
       syncLocalMicTrack(room);
       setMicEnabledState(enabled);
     },
-    [syncLocalMicTrack],
+    [attachKrispNoiseFilter, syncLocalMicTrack],
   );
 
   const setMicDevice = useCallback(async (deviceId: string) => {
@@ -596,17 +737,17 @@ export function useVoice() {
       writeNoiseFilter(typeof localStorage === "undefined" ? null : localStorage, enabled);
       setNoiseFilterState(enabled);
 
-      const processor = krispProcessorRef.current;
-      if (processor) {
-        await applyKrispToggle(processor, enabled, setError);
-        return;
-      }
-
-      if (!enabled || !krispSupportedRef.current) return;
-
       const track = roomRef.current?.localParticipant.getTrackPublication(
         "microphone" as TrackSource,
       )?.track as LocalAudioTrack | undefined;
+      const processor = krispProcessorRef.current;
+      if (processor && krispTrackRef.current === track) {
+        await applyKrispToggle(processor, enabled, setError);
+        setMicProcessorRevision((revision) => revision + 1);
+        return;
+      }
+
+      if (!enabled) return;
       if (!track) return;
       await attachKrispNoiseFilter(track);
     },
@@ -659,11 +800,65 @@ export function useVoice() {
   }, [selfMonitor, localMicTrack]);
 
   useEffect(() => {
+    if (status !== "connected" || !micEnabled || !localMicTrack) {
+      setLocalSpeaking(false);
+      return;
+    }
+
+    let cancelled = false;
+    let animationFrame = 0;
+    let cleanupAnalyser: (() => Promise<void>) | null = null;
+    let active = false;
+    let silenceStartedAt: number | null = null;
+
+    void import("livekit-client")
+      .then(({ createAudioAnalyser }) => {
+        if (cancelled) return;
+
+        const analyser = createAudioAnalyser(localMicTrack, {
+          fftSize: 256,
+          smoothingTimeConstant: 0.15,
+          minDecibels: -75,
+          maxDecibels: -25,
+        });
+        cleanupAnalyser = analyser.cleanup;
+
+        const readVolume = (timestamp: number) => {
+          if (cancelled) return;
+          const hasVoiceLevel = isLocalVoiceActive(analyser.calculateVolume(), active);
+          if (hasVoiceLevel) silenceStartedAt = null;
+          if (!hasVoiceLevel && silenceStartedAt === null) silenceStartedAt = timestamp;
+          const silenceDuration = silenceStartedAt === null ? 0 : timestamp - silenceStartedAt;
+          const nextActive = shouldShowLocalVoiceActivity(hasVoiceLevel, active, silenceDuration);
+          if (nextActive !== active) {
+            active = nextActive;
+            setLocalSpeaking(nextActive);
+          }
+          animationFrame = requestAnimationFrame(readVolume);
+        };
+
+        animationFrame = requestAnimationFrame(readVolume);
+      })
+      .catch(() => {
+        if (!cancelled) setLocalSpeaking(false);
+      });
+
     return () => {
+      cancelled = true;
+      cancelAnimationFrame(animationFrame);
+      setLocalSpeaking(false);
+      if (cleanupAnalyser) void cleanupAnalyser();
+    };
+  }, [localMicTrack, micEnabled, micProcessorRevision, status]);
+
+  useEffect(() => {
+    return () => {
+      connectionAttemptRef.current += 1;
       void roomRef.current?.disconnect();
+      void closeVoiceAudioContext();
       roomRef.current = null;
     };
-  }, []);
+  }, [closeVoiceAudioContext]);
 
   const [isTabHidden, setIsTabHidden] = useState(false);
 
@@ -677,6 +872,12 @@ export function useVoice() {
 
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
+
+  const localName = participants[0];
+  const speakingNames =
+    localSpeaking && localName
+      ? Array.from(new Set([...serverSpeakingNames, localName]))
+      : serverSpeakingNames;
 
   return {
     status,

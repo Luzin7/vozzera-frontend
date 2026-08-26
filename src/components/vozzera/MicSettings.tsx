@@ -13,7 +13,7 @@ type Props = {
   micDevices: MicDevice[];
   selectedDeviceId: string | null;
   noiseFilter: boolean;
-  krispSupported: boolean;
+  krispSupported: boolean | null;
   selfMonitor: boolean;
   onSelectDevice: (deviceId: string) => void;
   onToggleNoiseFilter: (enabled: boolean) => void;
@@ -61,7 +61,10 @@ export function MicSettings({
       <div className="flex items-center justify-between gap-2">
         <div>
           <Label htmlFor="noise-filter">Filtro de ruído (Krisp)</Label>
-          {!krispSupported && (
+          {krispSupported === null && (
+            <p className="mt-0.5 text-xs text-muted-foreground">Preparando o filtro de ruído…</p>
+          )}
+          {krispSupported === false && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               Seu navegador não suporta o filtro de ruído.
             </p>
@@ -70,7 +73,7 @@ export function MicSettings({
         <Switch
           id="noise-filter"
           checked={noiseFilter}
-          disabled={!krispSupported}
+          disabled={krispSupported !== true}
           onCheckedChange={onToggleNoiseFilter}
         />
       </div>

@@ -141,7 +141,7 @@ Remove uma sala. O front trata qualquer 2xx como sucesso (204 esperado) e limpa 
 
 #### Áudio no compartilhamento de tela
 
-O frontend passa `audio: true` ao LiveKit. Isso solicita a captura de áudio ao `getDisplayMedia`, mas o navegador decide se oferece o checkbox de áudio e qual fonte pode ser capturada.
+O frontend solicita áudio estéreo ao LiveKit sem processamento de voz. A publicação usa bitrate máximo/alvo de 128 kbps, DTX desligado e não recebe Krisp, supressão de ruído, cancelamento de eco nem ganho automático. A captura solicita `restrictOwnAudio` para impedir que a voz remota reproduzida localmente retorne ao participante pelo compartilhamento; navegadores sem suporte podem ignorar essa restrição. O navegador ainda decide se oferece o checkbox de áudio e qual fonte pode ser capturada pelo `getDisplayMedia`.
 
 | Ambiente           | Aba                | Janela             | Tela inteira       | Validação          |
 | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
@@ -152,6 +152,7 @@ O frontend passa `audio: true` ao LiveKit. Isso solicita a captura de áudio ao 
 | Firefox            | Sem áudio esperado | Sem áudio esperado | Sem áudio esperado | Pendente           |
 
 - O receptor anexa e reproduz qualquer trilha `Track.Kind.Audio`, incluindo `Track.Source.ScreenShareAudio`.
+- O microfone usa um perfil separado, mono, com bitrate máximo/alvo de 70 kbps e processamento de voz.
 - A UI não adiciona orientação própria por plataforma. O seletor nativo informa se o áudio está disponível e mantém a decisão com o usuário.
 - Parar o compartilhamento pelo LiveKit encerra as trilhas de vídeo e áudio da tela.
 - A validação no Windows foi feita com outro participante recebendo o áudio nas três superfícies.

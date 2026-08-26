@@ -80,11 +80,7 @@ export function VoiceCallView({
                       isSpeaking ? "border-primary" : "border-border"
                     }`}
                   >
-                    <div
-                      className={`flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground ring-offset-4 ring-offset-card ${
-                        isSpeaking ? "ring-2 ring-primary" : ""
-                      }`}
-                    >
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground">
                       {initials(name)}
                     </div>
 
