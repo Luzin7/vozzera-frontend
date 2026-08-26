@@ -1,7 +1,13 @@
 {
-  "version": "v1.6.0",
-  "releasedAt": "2026-08-21",
+  "version": "v1.7.0",
+  "releasedAt": "2026-08-26",
   "items": [
+    {
+      "title": "fix(voice): melhora qualidade de audio e video da transmissao",
+      "kind": "fix",
+      "pr": 111,
+      "summary": ""
+    },
     {
       "title": "feat(voice): notificar entrada/saída de participantes do canal",
       "kind": "feat",
