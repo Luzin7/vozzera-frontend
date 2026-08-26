@@ -67,8 +67,11 @@ type Props = {
   onLeaveVoice: () => void;
   unread: Record<string, number>;
   volumes: Record<string, number>;
+  screenShareVolumes: Record<string, number>;
   onSetVolume: (name: string, volume: number) => void;
+  onSetScreenShareVolume: (name: string, volume: number) => void;
   onToggleLocalMute: (name: string) => void;
+  onToggleLocalScreenShareMute: (name: string) => void;
   screenShareEnabled: boolean;
   onToggleScreenShare: () => void;
   screenShares: ScreenShare[];
@@ -150,8 +153,11 @@ export const RoomSidebar = memo(function RoomSidebar({
   onLeaveVoice,
   unread,
   volumes,
+  screenShareVolumes,
   onSetVolume,
+  onSetScreenShareVolume,
   onToggleLocalMute,
+  onToggleLocalScreenShareMute,
   screenShareEnabled,
   onToggleScreenShare,
   screenShares,
@@ -325,6 +331,8 @@ export const RoomSidebar = memo(function RoomSidebar({
                           ? screenShareEnabled
                           : screenShares.some((share) => share.name === name);
                       const isLocalMuted = name !== username && volumes[name] === 0;
+                      const isScreenShareLocallyMuted =
+                        name !== username && screenShareVolumes[name] === 0;
 
                       const row = (
                         <span className="flex items-center gap-1.5 truncate">
@@ -354,12 +362,20 @@ export const RoomSidebar = memo(function RoomSidebar({
                             <ParticipantMenu
                               name={name}
                               volume={volumes[name] ?? 1}
+                              screenShareVolume={screenShareVolumes[name] ?? 1}
                               locallyMuted={isLocalMuted}
+                              screenShareLocallyMuted={isScreenShareLocallyMuted}
                               isMuted={isMuted}
                               isStreaming={isStreaming}
                               isSpeaking={isSpeaking}
                               onSetVolume={(volume) => onSetVolume(name, volume)}
+                              onSetScreenShareVolume={(volume) =>
+                                onSetScreenShareVolume(name, volume)
+                              }
                               onToggleLocalMute={() => onToggleLocalMute(name)}
+                              onToggleLocalScreenShareMute={() =>
+                                onToggleLocalScreenShareMute(name)
+                              }
                             >
                               {row}
                             </ParticipantMenu>
