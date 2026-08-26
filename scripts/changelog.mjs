@@ -4,73 +4,61 @@ import { resolve } from "node:path";
 
 const HIGHLIGHT_LABEL = "destaque";
 const MAX_ITEMS = 8;
-
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
 
-const args = parseArgs(process.argv.slice(2));
-
-const repo = process.env.GITHUB_REPOSITORY ?? repoFromRemote();
-
 if (!GITHUB_TOKEN) {
-  throw new Error(
-    "GITHUB_TOKEN não encontrado. " +
-      "No GitHub Actions, configure GITHUB_TOKEN: ${{ github.token }} no env do step.",
-  );
+  throw new Error("GITHUB_TOKEN não encontrado.");
 }
 
-const tokenHeader = {
+const args = parseArgs(process.argv.slice(2));
+const repo = process.env.GITHUB_REPOSITORY || repoFromRemote();
+
+const headers = {
+  Accept: "application/vnd.github+json",
   Authorization: `Bearer ${GITHUB_TOKEN}`,
+  "X-GitHub-Api-Version": "2022-11-28",
 };
 
-const defaultHeaders = {
-  Accept: "application/vnd.github.v3+json",
-  ...tokenHeader,
-};
-
-const release = await ghApiOrNull(`repos/${repo}/releases/latest`);
+const existing = readExistingChangelog();
 
 let baseline = null;
 let lastTag = null;
 
+const release = await ghApiOrNull(`repos/${repo}/releases/latest`);
+
 if (release) {
+  lastTag = release.tag_name;
+
   if (release.published_at) {
     baseline = new Date(release.published_at);
   }
+}
 
-  lastTag = release.tag_name;
-} else {
-  const tags = await ghApiOrNull(`repos/${repo}/tags?per_page=1`);
-
-  if (tags && tags.length > 0) {
-    lastTag = tags[0].name;
-
-    const commit = await ghApiOrNull(`repos/${repo}/commits/${tags[0].name}`);
-
-    if (commit?.commit?.author?.date) {
-      baseline = new Date(commit.commit.author.date);
-    }
-  }
+if (!baseline && existing?.releasedAt) {
+  baseline = new Date(`${existing.releasedAt}T00:00:00Z`);
 }
 
 const highlights = [];
 
 for (let page = 1; page <= 3; page += 1) {
-  const pulls = await ghApiOrNull(`repos/${repo}/pulls?state=closed&per_page=100&page=${page}`);
+  const pulls = await ghApi(`repos/${repo}/pulls?state=closed&per_page=100&page=${page}`);
 
-  if (!pulls || pulls.length === 0) {
+  if (!pulls.length) {
     break;
   }
 
   for (const pull of pulls) {
-    if (pull.merged_at === null) {
+    if (!pull.merged_at) {
       continue;
     }
 
-    if (!pull.labels?.some((label) => label.name === HIGHLIGHT_LABEL)) {
+    const isHighlight = pull.labels?.some((label) => label.name.toLowerCase() === HIGHLIGHT_LABEL);
+
+    if (!isHighlight) {
       continue;
     }
 
-    if (baseline !== null && new Date(pull.merged_at) <= baseline) {
+    if (baseline && new Date(pull.merged_at) <= baseline) {
       continue;
     }
 
@@ -82,17 +70,11 @@ for (let page = 1; page <= 3; page += 1) {
   }
 }
 
-highlights.sort(
-  (left, right) => new Date(right.merged_at).getTime() - new Date(left.merged_at).getTime(),
+highlights.sort((a, b) => new Date(b.merged_at).getTime() - new Date(a.merged_at).getTime());
+
+const existingSummaries = Object.fromEntries(
+  (existing?.items ?? []).filter((item) => item.summary).map((item) => [item.pr, item.summary]),
 );
-
-const existing = readExistingChangelog();
-
-const existingSummaries = existing
-  ? Object.fromEntries(
-      (existing.items ?? []).filter((item) => item.summary).map((item) => [item.pr, item.summary]),
-    )
-  : {};
 
 const items = highlights.slice(0, MAX_ITEMS).map((pull) => ({
   title: pull.title,
@@ -101,14 +83,10 @@ const items = highlights.slice(0, MAX_ITEMS).map((pull) => ({
   summary: existingSummaries[pull.number] ?? "",
 }));
 
-const baseVersion = args.version ?? existing?.version ?? lastTag ?? "v1.0.0";
+const baseVersion = args.version || existing?.version || lastTag || "v1.0.0";
 
-const samePRs =
-  existing &&
-  items.length === (existing.items ?? []).length &&
-  items.every((item, index) => item.pr === existing.items[index].pr);
-
-const version = samePRs ? existing.version : nextVersion(items, baseVersion);
+const version =
+  items.length === 0 ? existing?.version || baseVersion : calculateNextVersion(items, baseVersion);
 
 const payload = {
   version,
@@ -118,104 +96,67 @@ const payload = {
 
 writeFileSync(resolve("public/changelog.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 
-process.stdout.write(
-  `public/changelog.json atualizado: ${version} com ${items.length} destaque(s).\n`,
-);
+console.log(`public/changelog.json atualizado: ${version} com ${items.length} destaque(s).`);
 
-function parseArgs(argv) {
-  const parsed = {
-    version: null,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] === "--version") {
-      parsed.version = argv[index + 1] ?? null;
-      index += 1;
-    }
+function calculateNextVersion(items, base) {
+  if (items.some((item) => item.kind === "breaking")) {
+    return bumpMajor(base);
   }
 
-  return parsed;
+  if (items.some((item) => ["feat", "feature"].includes(item.kind))) {
+    return bumpMinor(base);
+  }
+
+  return bumpPatch(base);
 }
 
-function repoFromRemote() {
-  const url = execFileSync("git", ["remote", "get-url", "origin"], {
-    encoding: "utf8",
-  }).trim();
-
-  const match = /github\.com[:/](.+?)(?:\.git)?$/.exec(url);
+function bumpMajor(version) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
 
   if (!match) {
-    throw new Error(`Não consegui identificar o repositório GitHub em: ${url}`);
+    return "v1.0.0";
   }
 
-  return match[1];
+  return `v${Number(match[1]) + 1}.0.0`;
 }
 
-async function ghApi(path) {
-  const url = `https://api.github.com/${path}`;
-
-  const response = await fetch(url, {
-    headers: defaultHeaders,
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub API ${response.status} em ${url}: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-async function ghApiOrNull(path) {
-  try {
-    return await ghApi(path);
-  } catch (error) {
-    console.warn(
-      `Aviso: falha ao consultar GitHub API em ${path}:`,
-      error instanceof Error ? error.message : error,
-    );
-
-    return null;
-  }
-}
-
-function nextVersion(items, base) {
-  if (items.length === 0) {
-    return bumpPatch(base) ?? "v1.0.0";
-  }
-
-  if (items.some((item) => isMinorKind(item.kind))) {
-    return bumpMinor(base) ?? "v1.0.0";
-  }
-
-  return bumpPatch(base) ?? "v1.0.0";
-}
-
-function isMinorKind(kind) {
-  if (kind === undefined) {
-    return true;
-  }
-
-  return kind.startsWith("feat");
-}
-
-function bumpPatch(tag) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(tag);
+function bumpMinor(version) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
 
   if (!match) {
-    return null;
+    return "v1.0.0";
+  }
+
+  return `v${match[1]}.${Number(match[2]) + 1}.0`;
+}
+
+function bumpPatch(version) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
+
+  if (!match) {
+    return "v1.0.0";
   }
 
   return `v${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
 }
 
-function bumpMinor(tag) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(tag);
+function kindFromTitle(title) {
+  const match = /^([a-zA-Z]+)(\([^)]*\))?[:/]/.exec(title);
 
-  if (!match) {
-    return null;
+  return match ? match[1].toLowerCase() : "fix";
+}
+
+function parseArgs(argv) {
+  const result = { version: null };
+
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === "--version") {
+      result.version = argv[i + 1] || null;
+      i += 1;
+    }
   }
 
-  return `v${match[1]}.${Number(match[2]) + 1}.0`;
+  return result;
 }
 
 function readExistingChangelog() {
@@ -226,8 +167,40 @@ function readExistingChangelog() {
   }
 }
 
-function kindFromTitle(title) {
-  const match = /^([a-zA-Z]+)(\([^)]*\))?[:/]/.exec(title);
+function repoFromRemote() {
+  const url = execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" }).trim();
 
-  return match ? match[1].toLowerCase() : undefined;
+  const match = /github\.com[:/](.+?)(?:\.git)?$/.exec(url);
+
+  if (!match) {
+    throw new Error(`Não consegui identificar o repositório: ${url}`);
+  }
+
+  return match[1];
+}
+
+async function ghApi(path) {
+  const url = `https://api.github.com/${path}`;
+
+  const response = await fetch(url, {
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub API ${response.status}: ${response.statusText} (${url})`);
+  }
+
+  return response.json();
+}
+
+async function ghApiOrNull(path) {
+  try {
+    return await ghApi(path);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("GitHub API 404")) {
+      return null;
+    }
+
+    throw error;
+  }
 }
