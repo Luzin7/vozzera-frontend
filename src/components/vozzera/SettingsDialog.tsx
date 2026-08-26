@@ -19,7 +19,7 @@ type Props = {
   micDevices: MicDevice[];
   selectedDeviceId: string | null;
   noiseFilter: boolean;
-  krispSupported: boolean;
+  krispSupported: boolean | null;
   selfMonitor: boolean;
   soundEnabled: boolean;
   onSelectDevice: (deviceId: string) => void;
