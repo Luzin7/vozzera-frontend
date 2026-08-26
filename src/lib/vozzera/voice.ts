@@ -10,10 +10,52 @@ export type MicCaptureOptions = {
   autoGainControl: boolean;
 };
 
+export type ScreenShareQuality = {
+  width: number;
+  height: number;
+  frameRate: number;
+};
+
+type AudioPublishProfile = {
+  audioPreset: { maxBitrate: number };
+  dtx: boolean;
+  forceStereo: boolean;
+};
+
+type ScreenSharePublishProfile = AudioPublishProfile & {
+  degradationPreference: "maintain-framerate";
+  screenShareEncoding: {
+    maxBitrate: number;
+    maxFramerate: number;
+  };
+};
+
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
 const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
 const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
+const VOICE_START_LEVEL = 0.16;
+const VOICE_CONTINUE_LEVEL = 0.07;
+export const VOICE_RELEASE_DELAY_MS = 150;
+
+export function isLocalVoiceActive(volume: number, wasActive: boolean): boolean {
+  if (wasActive) return volume >= VOICE_CONTINUE_LEVEL;
+  return volume >= VOICE_START_LEVEL;
+}
+
+export function shouldShowLocalVoiceActivity(
+  hasVoiceLevel: boolean,
+  wasVisible: boolean,
+  silenceDurationMs: number,
+): boolean {
+  if (hasVoiceLevel) return true;
+  if (!wasVisible) return false;
+  return silenceDurationMs < VOICE_RELEASE_DELAY_MS;
+}
+
+export function mergeActiveSpeakerNames(currentNames: string[], activeNames: string[]): string[] {
+  return Array.from(new Set([...currentNames, ...activeNames]));
+}
 
 export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions {
   return {
@@ -21,6 +63,49 @@ export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions 
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: true,
+  };
+}
+
+export function microphonePublishOptions(): AudioPublishProfile {
+  return {
+    audioPreset: { maxBitrate: 70_000 },
+    dtx: true,
+    forceStereo: false,
+  };
+}
+
+export function screenShareAudioCaptureOptions(): MicCaptureOptions & {
+  channelCount: number;
+  restrictOwnAudio: boolean;
+} {
+  return {
+    channelCount: 2,
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+    restrictOwnAudio: true,
+  };
+}
+
+function screenShareVideoBitrate(quality: ScreenShareQuality): number {
+  const isHighFrameRate = quality.frameRate > 30;
+  const isFullHd = quality.width > 1280 || quality.height > 720;
+
+  if (isHighFrameRate && isFullHd) return 10_000_000;
+  if (isHighFrameRate || isFullHd) return 6_000_000;
+  return 4_000_000;
+}
+
+export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSharePublishProfile {
+  return {
+    audioPreset: { maxBitrate: 128_000 },
+    dtx: false,
+    forceStereo: true,
+    degradationPreference: "maintain-framerate",
+    screenShareEncoding: {
+      maxBitrate: screenShareVideoBitrate(quality),
+      maxFramerate: quality.frameRate,
+    },
   };
 }
 
@@ -47,7 +132,7 @@ export function writeMicDeviceId(storage: Storage | null, deviceId: string): voi
 function isVolumeMap(value: unknown): value is Record<string, number> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   return Object.values(value).every(
-    (volume) => typeof volume === "number" && volume >= 0 && volume <= 1,
+    (volume) => typeof volume === "number" && volume >= 0 && volume <= 2,
   );
 }
 
