@@ -164,14 +164,27 @@ function removeTypingUser(users: TypingUsers, roomId: string, userId: string): T
   return { ...users, [roomId]: nextRoomUsers };
 }
 
-export function parseFrame(raw: MessageEvent): OutboundEvent | null {
-  const data = raw.data as string;
+export function parseFrame(raw: MessageEvent): OutboundEvent {
+  const data = raw.data;
 
-  if (data.length > MAX_FRAME_BYTES) return null;
+  if (typeof data !== "string") {
+    throw new WebSocketProtocolError("O servidor enviou um frame WebSocket que não é texto.");
+  }
+
+  if (data.length > MAX_FRAME_BYTES) {
+    throw new WebSocketProtocolError("O servidor enviou um frame WebSocket grande demais.");
+  }
 
   try {
-    return outboundFrameSchema.parse(JSON.parse(data)) as OutboundEvent;
+    return outboundFrameSchema.parse(JSON.parse(data));
   } catch {
-    return null;
+    throw new WebSocketProtocolError("O servidor enviou um evento WebSocket incompatível.");
+  }
+}
+
+export class WebSocketProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WebSocketProtocolError";
   }
 }
