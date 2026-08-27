@@ -234,7 +234,8 @@ Regras:
 - Sem otimismo na UI: a mensagem aparece quando o eco volta (não há `client_msg_id` pra deduplicar).
 - Uma inscrição negada não confirma estado local nem produz mensagem otimista; sem eco, o histórico permanece íntegro.
 - `room.created`, `room.updated` e `room.deleted` atualizam a lista local; exclusão também remove o histórico local sem encerrar o WebSocket.
-- `voice.presence.*` já é aceito pelo cliente. O consumo desses eventos pela UI de voz fica separado da migração do protocolo.
+- `voice.presence.*` substitui o snapshot da sala na UI de voz; participantes são deduplicados por `user_id` e exibidos na barra lateral.
+- Ao reconectar o WebSocket, o cliente descarta a presença anterior e aguarda novos snapshots das salas de voz assinadas.
 - **Revogação/expiração de sessão**: o servidor fecha o WS com `CloseMessage` vazio → no browser `CloseEvent.code === 1005`. O front trata como "sessão morta" (desloga e para de reconectar), distinto de queda de rede/crash (`1006`), que tem retry com backoff.
 
 ## Limitações conhecidas
