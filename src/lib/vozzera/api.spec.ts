@@ -211,6 +211,6 @@ describe("wsUrl", () => {
 
   it("derives ws:// from the api base", () => {
     (globalThis as WindowLike).window = { location: { origin: "http://example.com" } };
-    expect(wsUrl()).toBe("ws://localhost:8080/ws");
+    expect(wsUrl()).toBe("ws://localhost:8080/api/ws");
   });
 });

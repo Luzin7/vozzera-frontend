@@ -174,54 +174,72 @@ O frontend solicita áudio estéreo ao LiveKit sem processamento de voz. A publi
 
 ## WebSocket
 
-Endpoint `/ws`, mesma base da API (http→ws, https→wss).
+Endpoint autenticado `GET /api/ws`, na mesma base da API (http→ws, https→wss).
+
+Todos os comandos e eventos usam o envelope versionado:
+
+```jsonc
+{
+  "v": 1,
+  "type": "string",
+  "topic": "room:<uuid>",
+  "ts": "2026-08-27T12:00:00Z",
+  "data": {},
+}
+```
+
+O front rejeita frames sem `v: 1`, tipos desconhecidos e payloads incompatíveis como erro de protocolo.
 
 ### Inbound (front → server)
 
 ```jsonc
-{ "type": "join", "room_id": "string" }
-{ "type": "message", "room_id": "string", "content": "string" }
-{ "type": "typing", "room_id": "string", "action": "start" | "stop" }
+{ "v": 1, "type": "room.subscribe", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
+{ "v": 1, "type": "room.unsubscribe", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
+{ "v": 1, "type": "message", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid", "content": "string" } }
+{ "v": 1, "type": "typing.start", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
+{ "v": 1, "type": "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
 ```
+
+`room.subscribe` é autorizado pelo backend. A ausência de erro depois do envio não confirma a inscrição; uma inscrição negada é silenciosa na versão atual.
 
 ### Outbound (server → front)
 
+Os eventos de uma sala usam o tópico `room:<uuid>`. O evento global `room.created` usa `app:rooms`.
+
+Eventos de mensagem:
+
 ```jsonc
-{
-  "type": "message" | "presence" | "room" | "error",
-  "id": "string",          // sempre presente; ZERO_UUID quando não se aplica
-  "room_id": "string",     // idem
-  "user_id": "string",     // idem
-  "created_at": "string",  // idem ("0001-01-01T00:00:00Z")
-  "username": "string",    // opcional
-  "content": "string",     // opcional
-  "error": "string"        // opcional
-}
+{ "v": 1, "type": "message.created", "topic": "room:<uuid>", "ts": "string", "data": { "id": "uuid", "room_id": "uuid", "user_id": "uuid", "username": "string", "content": "string", "created_at": "string" } }
+{ "v": 1, "type": "message.updated", "topic": "room:<uuid>", "ts": "string", "data": { "content_id": "uuid", "room_id": "uuid", "user_id": "uuid", "content": "string" } }
+{ "v": 1, "type": "message.deleted", "topic": "room:<uuid>", "ts": "string", "data": { "content_id": "uuid", "room_id": "uuid", "user_id": "uuid", "is_mod": true } }
 ```
 
 Eventos de sala:
 
 ```jsonc
-{ "type": "room", "action": "created" | "updated", "id": "string", "name": "string", "room_type": "text" | "voice" }
-{ "type": "room", "action": "deleted", "id": "string" }
+{ "v": 1, "type": "room.created" | "room.updated", "topic": "string", "ts": "string", "data": { "id": "uuid", "name": "string", "type": "text" | "voice", "created_at": "string" } }
+{ "v": 1, "type": "room.deleted", "topic": "room:<uuid>", "ts": "string", "data": { "id": "uuid", "is_mod": true } }
 ```
 
-Evento efêmero de digitação:
+Digitação e presença de voz:
 
 ```jsonc
-{ "type": "typing", "action": "start" | "stop", "room_id": "string", "user_id": "string", "username": "string" }
+{ "v": 1, "type": "typing.start" | "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "user_id": "uuid", "username": "string" } }
+{ "v": 1, "type": "voice.presence.joined" | "voice.presence.left" | "voice.presence.snapshot", "topic": "room:<uuid>", "ts": "string", "data": [{ "sid": "string", "user_id": "string", "username": "string" }] }
 ```
 
 Regras:
 
-- Campos zerados (`ZERO_UUID = 00000000-0000-0000-0000-000000000000` e `created_at` zero) são ignorados.
-- O servidor **esquece as salas a cada conexão** — o front re-envia `join` de todas as salas conhecidas no `open`, e refaz isso a cada reconexão.
+- O servidor esquece as inscrições a cada conexão. O front reenvia `room.subscribe` para as salas desejadas no `open` e em cada reconexão.
 - Sem otimismo na UI: a mensagem aparece quando o eco volta (não há `client_msg_id` pra deduplicar).
-- `room:created` e `room:updated` atualizam a lista local sem recarregar. `room:deleted` remove a sala e seu histórico local; a conexão WebSocket permanece aberta.
+- Uma inscrição negada não confirma estado local nem produz mensagem otimista; sem eco, o histórico permanece íntegro.
+- `room.created`, `room.updated` e `room.deleted` atualizam a lista local; exclusão também remove o histórico local sem encerrar o WebSocket.
+- `voice.presence.*` já é aceito pelo cliente. O consumo desses eventos pela UI de voz fica separado da migração do protocolo.
 - **Revogação/expiração de sessão**: o servidor fecha o WS com `CloseMessage` vazio → no browser `CloseEvent.code === 1005`. O front trata como "sessão morta" (desloga e para de reconectar), distinto de queda de rede/crash (`1006`), que tem retry com backoff.
 
 ## Limitações conhecidas
 
-- **Presença/online, upload e paginação não existem** no backend.
-- Nenhuma privacidade por sala: qualquer logado lê e escreve em qualquer sala — o invite code é a única barreira.
+- **Upload e paginação não existem** no backend.
+- Presença de voz existe via eventos `voice.presence.*`; presença online global ainda não faz parte do contrato.
+- Inscrição em sala é autorizada no backend, e `mod`/`admin` controlam criação, edição e exclusão de salas.
 - Cookie `SameSite=Lax`: em dev cross-origin (front num domínio diferente de `localhost:8080`) o cookie não viaja; auth funciona rodando o front localmente contra o Go, ou com o build servido pelo próprio Go.

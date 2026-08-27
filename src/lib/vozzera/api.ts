@@ -112,7 +112,7 @@ export function wsUrl(): string {
   const base = API_BASE || window.location.origin;
   const url = new URL(base, window.location.origin);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = "/ws";
+  url.pathname = "/api/ws";
   url.search = "";
   return url.toString();
 }

@@ -244,9 +244,10 @@ export function useChat() {
     [currentUserId, handleMessageEvent, handleRoomEvent],
   );
 
-  const { status, joinRoom, sendMessage, sendTyping } = useSocket({
+  const { status, subscribeRoom, sendMessage, sendTyping } = useSocket({
     enabled: authed === true,
     onEvent: handleEvent,
+    onProtocolError: setBanner,
     onSessionExpired: () => {
       endSession();
       setBanner("Sessão encerrada no servidor. Entre novamente.");
@@ -300,7 +301,7 @@ export function useChat() {
       setActiveRoom(room);
       writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
       setUnread((prev) => clearUnread(prev, room.id));
-      joinRoom(room.id);
+      subscribeRoom(room.id);
 
       if (messages[room.id]) return;
 
@@ -324,7 +325,7 @@ export function useChat() {
         setLoadingHistory(false);
       }
     },
-    [joinRoom, messages, setTyping],
+    [messages, setTyping, subscribeRoom],
   );
 
   useEffect(() => {
