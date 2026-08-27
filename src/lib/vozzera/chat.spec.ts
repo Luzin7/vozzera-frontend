@@ -14,6 +14,7 @@ import {
   removeRoom,
   typingIndicatorText,
   updateTypingUsers,
+  updateVoicePresence,
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
@@ -348,6 +349,57 @@ describe("typing users", () => {
     expect(typingIndicatorText([luan, bia])).toBe("Luan e Bia estão digitando...");
     expect(typingIndicatorText([luan, bia, ana])).toBe(
       "Várias pessoas estão digitando ao mesmo tempo...",
+    );
+  });
+});
+
+describe("voice presence", () => {
+  const participant = {
+    sid: "PA_1",
+    user_id: "u1",
+    username: "Luan",
+  };
+  const snapshot = {
+    type: "voice.presence.snapshot" as const,
+    room_id: "r1",
+    participants: [participant],
+  };
+
+  it("stores the latest room snapshot", () => {
+    expect(updateVoicePresence({}, snapshot)).toEqual({ r1: [participant] });
+  });
+
+  it("deduplicates participants by user id", () => {
+    const duplicate = { ...participant, sid: "PA_2" };
+    const presence = updateVoicePresence(
+      {},
+      {
+        ...snapshot,
+        participants: [participant, duplicate],
+      },
+    );
+
+    expect(presence["r1"]).toEqual([duplicate]);
+  });
+
+  it.each(["voice.presence.joined", "voice.presence.left"] as const)(
+    "replaces the snapshot on %s",
+    (type) => {
+      const previous = { r1: [participant], r2: [{ ...participant, user_id: "u2" }] };
+      const next = updateVoicePresence(previous, {
+        ...snapshot,
+        type,
+        participants: [{ ...participant, username: "Luan atualizado" }],
+      });
+
+      expect(next["r1"]?.[0]?.username).toBe("Luan atualizado");
+      expect(next["r2"]).toBe(previous["r2"]);
+    },
+  );
+
+  it("removes an empty room snapshot", () => {
+    expect(updateVoicePresence({ r1: [participant] }, { ...snapshot, participants: [] })).toEqual(
+      {},
     );
   });
 });
