@@ -1,4 +1,4 @@
-import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
+import type { ChatMessage, OutboundEvent, Room, VoiceParticipant } from "@/lib/vozzera/types";
 import { MAX_FRAME_BYTES, outboundFrameSchema } from "@/lib/vozzera/ws-schema";
 import { format, isSameDay, isValid, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -96,6 +96,20 @@ export function removeRoom<T>(state: Record<string, T>, roomId: string): Record<
   const next = { ...state };
   delete next[roomId];
   return next;
+}
+
+export type VoicePresence = Record<string, VoiceParticipant[]>;
+
+export function updateVoicePresence(
+  presence: VoicePresence,
+  event: Extract<OutboundEvent, { participants: VoiceParticipant[] }>,
+): VoicePresence {
+  const participants = Array.from(
+    new Map(event.participants.map((participant) => [participant.user_id, participant])).values(),
+  );
+
+  if (participants.length === 0) return removeRoom(presence, event.room_id);
+  return { ...presence, [event.room_id]: participants };
 }
 
 export type TypingUser = {
