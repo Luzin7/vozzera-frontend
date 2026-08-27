@@ -6,7 +6,13 @@
       "title": "feat(voice): exibir presença nas salas de voz",
       "kind": "feat",
       "pr": 114,
-      "summary": ""
+      "summary": "Agora você consegue saber quem está na chamada de voz antes de entrar!"
+    },
+    {
+      "title": "fix(voice): melhora qualidade de audio e video da transmissao",
+      "kind": "fix",
+      "pr": 111,
+      "summary": "Trouxemos melhorias significativas na qualidade de áudio e vídeo durante transmissões ao vivo. Agora, você pode desfrutar de uma experiência mais clara e estável, com menos interrupções e melhor sincronização entre áudio e vídeo."
     }
   ]
 }
