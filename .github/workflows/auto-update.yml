@@ -5,31 +5,50 @@ on:
     branches:
       - develop
 
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
   update:
+    if: "!contains(github.event.head_commit.message, 'chore(changelog): atualizar public/changelog.json')"
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          node-version: 18
+          ref: develop
+          fetch-depth: 0
 
-      - name: Install dependencies
-        run: npm install
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
 
       - name: Validate summaries
-        run: |
-          if node scripts/validate-summaries.cjs; then
-            echo "Summaries válidos"
-          else
-            echo "Erro: summaries não preenchidos"
-            exit 1
-          fi
+        run: node scripts/validate-summaries.cjs
 
-      - name: Run changelog
-        run: npm run changelog
+      - name: Generate changelog
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: npm run changelog
+
+      - name: Commit changelog
+        run: |
+          git config user.name "changelog-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/changelog.json
+
+          if git diff --cached --quiet; then
+            echo "Nada para commitar."
+            exit 0
+          fi
+
+          git commit -m "chore(changelog): atualizar public/changelog.json"
+          git push origin develop

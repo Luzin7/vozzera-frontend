@@ -25,10 +25,11 @@ import {
   removeRoom,
   totalUnread,
   updateTypingUsers,
+  updateVoicePresence,
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
-import type { TypingUsers } from "@/lib/vozzera/chat";
+import type { TypingUsers, VoicePresence } from "@/lib/vozzera/chat";
 import {
   canNotify,
   initialNotificationsEnabled,
@@ -61,6 +62,7 @@ export function useChat() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [typingUsers, setTypingUsers] = useState<TypingUsers>({});
+  const [voicePresence, setVoicePresence] = useState<VoicePresence>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     if (typeof localStorage === "undefined") return false;
     return initialNotificationsEnabled(localStorage);
@@ -92,6 +94,7 @@ export function useChat() {
     setActiveRoom(null);
     setMessages({});
     setTypingUsers({});
+    setVoicePresence({});
     selectedInitialRoomRef.current = false;
     clearActiveRoomId(typeof localStorage === "undefined" ? null : localStorage);
     queryClient.removeQueries({ queryKey: ["rooms"] });
@@ -142,6 +145,7 @@ export function useChat() {
     setMessages((prev) => removeRoom(prev, roomId));
     setUnread((prev) => removeRoom(prev, roomId));
     setTypingUsers((prev) => removeRoom(prev, roomId));
+    setVoicePresence((prev) => removeRoom(prev, roomId));
     setActiveRoom((current) => (current?.id === roomId ? null : current));
   }, []);
 
@@ -238,20 +242,45 @@ export function useChat() {
         return;
       }
 
+      if (
+        event.type === "voice.presence.joined" ||
+        event.type === "voice.presence.left" ||
+        event.type === "voice.presence.snapshot"
+      ) {
+        setVoicePresence((prev) => updateVoicePresence(prev, event));
+        return;
+      }
+
       if (event.type !== "message" || event.room_id === ZERO_UUID) return;
       handleMessageEvent(event);
     },
     [currentUserId, handleMessageEvent, handleRoomEvent],
   );
 
-  const { status, joinRoom, sendMessage, sendTyping } = useSocket({
+  const { status, subscribeRoom, unsubscribeRoom, sendMessage, sendTyping } = useSocket({
     enabled: authed === true,
     onEvent: handleEvent,
+    onProtocolError: setBanner,
     onSessionExpired: () => {
       endSession();
       setBanner("Sessão encerrada no servidor. Entre novamente.");
     },
   });
+
+  useEffect(() => {
+    const roomIds = rooms.filter((room) => room.type === "voice").map((room) => room.id);
+
+    for (const roomId of roomIds) subscribeRoom(roomId);
+
+    return () => {
+      for (const roomId of roomIds) unsubscribeRoom(roomId);
+    };
+  }, [rooms, subscribeRoom, unsubscribeRoom]);
+
+  useEffect(() => {
+    if (status !== "connecting") return;
+    setVoicePresence({});
+  }, [status]);
 
   const setTyping = useCallback(
     (typing: boolean) => {
@@ -300,7 +329,7 @@ export function useChat() {
       setActiveRoom(room);
       writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
       setUnread((prev) => clearUnread(prev, room.id));
-      joinRoom(room.id);
+      subscribeRoom(room.id);
 
       if (messages[room.id]) return;
 
@@ -324,7 +353,7 @@ export function useChat() {
         setLoadingHistory(false);
       }
     },
-    [joinRoom, messages, setTyping],
+    [messages, setTyping, subscribeRoom],
   );
 
   useEffect(() => {
@@ -497,6 +526,7 @@ export function useChat() {
   return {
     username,
     email,
+    currentUserId,
     authed,
     rooms,
     canManageRooms: canManageRooms(role),
@@ -507,6 +537,7 @@ export function useChat() {
     loadingHistory,
     unread,
     typingUsers,
+    voicePresence,
     socketStatus: status,
     openRoom,
     createRoom,

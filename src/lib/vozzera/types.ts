@@ -49,21 +49,25 @@ export type RegisterRequest = {
 
 export type MessageAction = "created" | "updated" | "deleted";
 
-export type InboundEvent =
-  | {
-      type: "join";
-      room_id: string;
-    }
-  | {
-      type: "message";
-      room_id: string;
-      content: string;
-    }
-  | {
-      type: "typing";
-      room_id: string;
-      action: "start" | "stop";
-    };
+export type InboundEventType =
+  "room.subscribe" | "room.unsubscribe" | "message" | "typing.start" | "typing.stop";
+
+export type InboundEvent = {
+  v: 1;
+  type: InboundEventType;
+  topic: string;
+  ts: string;
+  data: {
+    room_id: string;
+    content?: string;
+  };
+};
+
+export type VoiceParticipant = {
+  sid: string;
+  user_id: string;
+  username: string;
+};
 
 export type OutboundEvent =
   | {
@@ -123,6 +127,11 @@ export type OutboundEvent =
   | {
       type: "error";
       error: string;
+    }
+  | {
+      type: "voice.presence.joined" | "voice.presence.left" | "voice.presence.snapshot";
+      room_id: string;
+      participants: VoiceParticipant[];
     };
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";

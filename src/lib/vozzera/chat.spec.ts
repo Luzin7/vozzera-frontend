@@ -14,6 +14,7 @@ import {
   removeRoom,
   typingIndicatorText,
   updateTypingUsers,
+  updateVoicePresence,
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
@@ -185,63 +186,126 @@ describe("clearActiveRoomId", () => {
   });
 });
 
+const wsRoomId = "00000000-0000-4000-8000-000000000001";
+const wsMessageId = "00000000-0000-4000-8000-000000000002";
+const wsUserId = "00000000-0000-4000-8000-000000000003";
+const wsTimestamp = "2026-08-13T00:00:00Z";
+
+function messageEvent(data: unknown): MessageEvent {
+  return { data: JSON.stringify(data) } as MessageEvent;
+}
+
 describe("parseFrame", () => {
   it("parses a valid json frame", () => {
-    const raw = {
-      data: '{"type":"message","action":"created","id":"m1","room_id":"r1","user_id":"u1","username":"luan","content":"oi","created_at":"2026-08-13T00:00:00Z"}',
-    } as MessageEvent;
-    expect(parseFrame(raw)?.type).toBe("message");
+    const raw = messageEvent({
+      v: 1,
+      type: "message.created",
+      topic: `room:${wsRoomId}`,
+      ts: wsTimestamp,
+      data: {
+        id: wsMessageId,
+        room_id: wsRoomId,
+        user_id: wsUserId,
+        username: "luan",
+        content: "oi",
+        created_at: wsTimestamp,
+      },
+    });
+    expect(parseFrame(raw).type).toBe("message");
   });
 
   it("parses an updated frame without username and created_at", () => {
-    const raw = {
-      data: '{"type":"message","action":"updated","id":"m1","room_id":"r1","user_id":"u1","content":"oi editado","updated_at":"2026-08-13T00:00:00Z"}',
-    } as MessageEvent;
+    const raw = messageEvent({
+      v: 1,
+      type: "message.updated",
+      topic: `room:${wsRoomId}`,
+      ts: wsTimestamp,
+      data: {
+        content_id: wsMessageId,
+        room_id: wsRoomId,
+        user_id: wsUserId,
+        content: "oi editado",
+      },
+    });
     const event = parseFrame(raw);
-    expect(event).not.toBeNull();
     expect(event).toMatchObject({ action: "updated", content: "oi editado" });
   });
 
   it("parses room lifecycle frames", () => {
-    const updated = {
-      data: '{"type":"room","action":"updated","id":"r1","name":"geral","room_type":"text"}',
-    } as MessageEvent;
-    const deleted = {
-      data: '{"type":"room","action":"deleted","id":"r1"}',
-    } as MessageEvent;
+    const updated = messageEvent({
+      v: 1,
+      type: "room.updated",
+      topic: `room:${wsRoomId}`,
+      ts: wsTimestamp,
+      data: { id: wsRoomId, name: "geral", type: "text", created_at: wsTimestamp },
+    });
+    const deleted = messageEvent({
+      v: 1,
+      type: "room.deleted",
+      topic: `room:${wsRoomId}`,
+      ts: wsTimestamp,
+      data: { id: wsRoomId, is_mod: true },
+    });
 
     expect(parseFrame(updated)).toMatchObject({ type: "room", action: "updated" });
     expect(parseFrame(deleted)).toMatchObject({ type: "room", action: "deleted" });
   });
 
   it("parses typing frames", () => {
-    const raw = {
-      data: '{"type":"typing","action":"start","room_id":"r1","user_id":"u1","username":"luan"}',
-    } as MessageEvent;
+    const raw = messageEvent({
+      v: 1,
+      type: "typing.start",
+      topic: `room:${wsRoomId}`,
+      ts: wsTimestamp,
+      data: { user_id: wsUserId, username: "luan" },
+    });
 
     expect(parseFrame(raw)).toMatchObject({ type: "typing", action: "start" });
   });
 
-  it("returns null for invalid json", () => {
+  it("rejects invalid json with an explicit protocol error", () => {
     const raw = { data: "nope" } as MessageEvent;
-    expect(parseFrame(raw)).toBeNull();
+    expect(() => parseFrame(raw)).toThrow("evento WebSocket incompatível");
   });
 
-  it("returns null for an unknown frame type", () => {
-    const raw = { data: '{"type":"bogus"}' } as MessageEvent;
-    expect(parseFrame(raw)).toBeNull();
+  it("rejects the legacy flat protocol", () => {
+    const raw = { data: '{"type":"message","id":"m1"}' } as MessageEvent;
+    expect(() => parseFrame(raw)).toThrow("evento WebSocket incompatível");
   });
 
-  it("returns null for a frame with wrong shape", () => {
-    const raw = { data: '{"type":"message","id":42}' } as MessageEvent;
-    expect(parseFrame(raw)).toBeNull();
+  it.each(["voice.presence.joined", "voice.presence.left", "voice.presence.snapshot"] as const)(
+    "accepts %s frames",
+    (type) => {
+      const raw = messageEvent({
+        v: 1,
+        type,
+        topic: `room:${wsRoomId}`,
+        ts: wsTimestamp,
+        data: [{ sid: "p1", user_id: wsUserId, username: "luan" }],
+      });
+      expect(parseFrame(raw)).toMatchObject({
+        type,
+        room_id: wsRoomId,
+      });
+    },
+  );
+
+  it("rejects a room topic without an UUID", () => {
+    const raw = messageEvent({
+      v: 1,
+      type: "typing.start",
+      topic: "room:r1",
+      ts: wsTimestamp,
+      data: { user_id: wsUserId, username: "luan" },
+    });
+    expect(() => parseFrame(raw)).toThrow("evento WebSocket incompatível");
   });
 
-  it("returns null for a frame larger than the limit", () => {
+  it("rejects a frame larger than the limit", () => {
     const raw = {
-      data: `{"type":"error","error":"${"x".repeat(MAX_FRAME_BYTES)}"}`,
+      data: "x".repeat(MAX_FRAME_BYTES + 1),
     } as MessageEvent;
-    expect(parseFrame(raw)).toBeNull();
+    expect(() => parseFrame(raw)).toThrow("frame WebSocket grande demais");
   });
 });
 
@@ -285,6 +349,57 @@ describe("typing users", () => {
     expect(typingIndicatorText([luan, bia])).toBe("Luan e Bia estão digitando...");
     expect(typingIndicatorText([luan, bia, ana])).toBe(
       "Várias pessoas estão digitando ao mesmo tempo...",
+    );
+  });
+});
+
+describe("voice presence", () => {
+  const participant = {
+    sid: "PA_1",
+    user_id: "u1",
+    username: "Luan",
+  };
+  const snapshot = {
+    type: "voice.presence.snapshot" as const,
+    room_id: "r1",
+    participants: [participant],
+  };
+
+  it("stores the latest room snapshot", () => {
+    expect(updateVoicePresence({}, snapshot)).toEqual({ r1: [participant] });
+  });
+
+  it("deduplicates participants by user id", () => {
+    const duplicate = { ...participant, sid: "PA_2" };
+    const presence = updateVoicePresence(
+      {},
+      {
+        ...snapshot,
+        participants: [participant, duplicate],
+      },
+    );
+
+    expect(presence["r1"]).toEqual([duplicate]);
+  });
+
+  it.each(["voice.presence.joined", "voice.presence.left"] as const)(
+    "replaces the snapshot on %s",
+    (type) => {
+      const previous = { r1: [participant], r2: [{ ...participant, user_id: "u2" }] };
+      const next = updateVoicePresence(previous, {
+        ...snapshot,
+        type,
+        participants: [{ ...participant, username: "Luan atualizado" }],
+      });
+
+      expect(next["r1"]?.[0]?.username).toBe("Luan atualizado");
+      expect(next["r2"]).toBe(previous["r2"]);
+    },
+  );
+
+  it("removes an empty room snapshot", () => {
+    expect(updateVoicePresence({ r1: [participant] }, { ...snapshot, participants: [] })).toEqual(
+      {},
     );
   });
 });

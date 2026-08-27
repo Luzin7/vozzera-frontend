@@ -1,29 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { wsUrl } from "./api";
-import { backoffDelay, parseFrame } from "./chat";
-import type { InboundEvent, OutboundEvent } from "./types";
+import { wsUrl } from "@/lib/vozzera/api";
+import { backoffDelay, parseFrame, WebSocketProtocolError } from "@/lib/vozzera/chat";
+import type { InboundEvent, OutboundEvent } from "@/lib/vozzera/types";
+import { inboundFrame } from "@/lib/vozzera/ws-schema";
 
 export type SocketStatus = "connecting" | "open" | "closed";
 
 type Options = {
   enabled: boolean;
   onEvent: (event: OutboundEvent) => void;
+  onProtocolError?: (message: string) => void;
   onSessionExpired?: () => void;
 };
 
-export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
+export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired }: Options) {
   const [status, setStatus] = useState<SocketStatus>("closed");
   const socketRef = useRef<WebSocket | null>(null);
-  const joinedRooms = useRef<Set<string>>(new Set());
+  const desiredRooms = useRef<Set<string>>(new Set());
   const queue = useRef<InboundEvent[]>([]);
   const attempt = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedByUs = useRef(false);
   const onEventRef = useRef(onEvent);
+  const onProtocolErrorRef = useRef(onProtocolError);
   const onSessionExpiredRef = useRef(onSessionExpired);
 
   onEventRef.current = onEvent;
+  onProtocolErrorRef.current = onProtocolError;
   onSessionExpiredRef.current = onSessionExpired;
 
   const rawSend = useCallback((event: InboundEvent) => {
@@ -41,6 +45,7 @@ export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
     if (!enabled || typeof window === "undefined") return;
 
     closedByUs.current = false;
+    const desiredRoomIds = desiredRooms.current;
 
     const connect = () => {
       setStatus("connecting");
@@ -52,13 +57,8 @@ export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
         attempt.current = 0;
         setStatus("open");
 
-        for (const roomId of joinedRooms.current) {
-          socket.send(
-            JSON.stringify({
-              type: "join",
-              room_id: roomId,
-            }),
-          );
+        for (const roomId of desiredRooms.current) {
+          socket.send(JSON.stringify(inboundFrame("room.subscribe", roomId)));
         }
 
         const pending = queue.current;
@@ -70,10 +70,12 @@ export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
       };
 
       socket.onmessage = (raw) => {
-        const event = parseFrame(raw);
-
-        if (event) {
-          onEventRef.current(event);
+        try {
+          onEventRef.current(parseFrame(raw));
+        } catch (error) {
+          if (error instanceof WebSocketProtocolError) {
+            onProtocolErrorRef.current?.(error.message);
+          }
         }
       };
 
@@ -109,49 +111,48 @@ export function useSocket({ enabled, onEvent, onSessionExpired }: Options) {
 
       socketRef.current?.close();
       socketRef.current = null;
+      desiredRoomIds.clear();
+      queue.current = [];
       setStatus("closed");
     };
   }, [enabled]);
 
-  const joinRoom = useCallback(
-    (roomId: string) => {
-      if (joinedRooms.current.has(roomId)) return;
+  const subscribeRoom = useCallback((roomId: string) => {
+    if (desiredRooms.current.has(roomId)) return;
 
-      joinedRooms.current.add(roomId);
+    desiredRooms.current.add(roomId);
 
-      rawSend({
-        type: "join",
-        room_id: roomId,
-      });
-    },
-    [rawSend],
-  );
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify(inboundFrame("room.subscribe", roomId)));
+  }, []);
+
+  const unsubscribeRoom = useCallback((roomId: string) => {
+    desiredRooms.current.delete(roomId);
+
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify(inboundFrame("room.unsubscribe", roomId)));
+  }, []);
 
   const sendMessage = useCallback(
     (roomId: string, content: string) => {
-      rawSend({
-        type: "message",
-        room_id: roomId,
-        content,
-      });
+      rawSend(inboundFrame("message", roomId, content));
     },
     [rawSend],
   );
 
   const sendTyping = useCallback(
     (roomId: string, action: "start" | "stop") => {
-      rawSend({
-        type: "typing",
-        room_id: roomId,
-        action,
-      });
+      rawSend(inboundFrame(action === "start" ? "typing.start" : "typing.stop", roomId));
     },
     [rawSend],
   );
 
   return {
     status,
-    joinRoom,
+    subscribeRoom,
+    unsubscribeRoom,
     sendMessage,
     sendTyping,
   };

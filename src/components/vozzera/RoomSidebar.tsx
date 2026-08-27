@@ -35,9 +35,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
+import { VoicePresenceList } from "@/components/vozzera/VoicePresenceList";
 import { Skeleton } from "@/components/ui/skeleton";
 import { initials } from "@/lib/vozzera/avatar";
-import { nextRoomIndex } from "@/lib/vozzera/chat";
+import { nextRoomIndex, type VoicePresence } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
 import { cn } from "@/lib/utils";
 import type { ScreenShare } from "@/lib/vozzera/useVoice";
@@ -58,17 +59,22 @@ type Props = {
   onDeleteRoom: (room: Room) => void;
   onOpenSettings: () => void;
   username: string | null;
+  currentUserId: string | null;
   status: SocketStatus;
   voiceStatus: VoiceStatus;
   voiceRoomId: string | null;
   voiceParticipants: string[];
+  voicePresence: VoicePresence;
   micEnabled: boolean;
   onToggleMic: () => void;
   onLeaveVoice: () => void;
   unread: Record<string, number>;
   volumes: Record<string, number>;
+  screenShareVolumes: Record<string, number>;
   onSetVolume: (name: string, volume: number) => void;
+  onSetScreenShareVolume: (name: string, volume: number) => void;
   onToggleLocalMute: (name: string) => void;
+  onToggleLocalScreenShareMute: (name: string) => void;
   screenShareEnabled: boolean;
   onToggleScreenShare: () => void;
   screenShares: ScreenShare[];
@@ -141,17 +147,22 @@ export const RoomSidebar = memo(function RoomSidebar({
   onDeleteRoom,
   onOpenSettings,
   username,
+  currentUserId,
   status,
   voiceStatus,
   voiceRoomId,
   voiceParticipants,
+  voicePresence,
   micEnabled,
   onToggleMic,
   onLeaveVoice,
   unread,
   volumes,
+  screenShareVolumes,
   onSetVolume,
+  onSetScreenShareVolume,
   onToggleLocalMute,
+  onToggleLocalScreenShareMute,
   screenShareEnabled,
   onToggleScreenShare,
   screenShares,
@@ -283,6 +294,7 @@ export const RoomSidebar = memo(function RoomSidebar({
           {voiceRooms.map((room) => {
             const isConnected = room.id === voiceRoomId;
             const isSelected = room.id === visibleVoiceRoomId;
+            const onlineParticipants = voicePresence[room.id] ?? [];
             return (
               <div key={room.id} className="group flex flex-col rounded-md py-0.5">
                 <div className="relative">
@@ -325,6 +337,8 @@ export const RoomSidebar = memo(function RoomSidebar({
                           ? screenShareEnabled
                           : screenShares.some((share) => share.name === name);
                       const isLocalMuted = name !== username && volumes[name] === 0;
+                      const isScreenShareLocallyMuted =
+                        name !== username && screenShareVolumes[name] === 0;
 
                       const row = (
                         <span className="flex items-center gap-1.5 truncate">
@@ -338,6 +352,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                             </span>
                           </span>
                           <span className="truncate">{name}</span>
+                          {name === username && <span className="shrink-0">(você)</span>}
                           {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
                           {isStreaming && <MonitorUp className="h-3 w-3 shrink-0 text-primary" />}
                           {isLocalMuted && (
@@ -354,12 +369,20 @@ export const RoomSidebar = memo(function RoomSidebar({
                             <ParticipantMenu
                               name={name}
                               volume={volumes[name] ?? 1}
+                              screenShareVolume={screenShareVolumes[name] ?? 1}
                               locallyMuted={isLocalMuted}
+                              screenShareLocallyMuted={isScreenShareLocallyMuted}
                               isMuted={isMuted}
                               isStreaming={isStreaming}
                               isSpeaking={isSpeaking}
                               onSetVolume={(volume) => onSetVolume(name, volume)}
+                              onSetScreenShareVolume={(volume) =>
+                                onSetScreenShareVolume(name, volume)
+                              }
                               onToggleLocalMute={() => onToggleLocalMute(name)}
+                              onToggleLocalScreenShareMute={() =>
+                                onToggleLocalScreenShareMute(name)
+                              }
                             >
                               {row}
                             </ParticipantMenu>
@@ -368,6 +391,15 @@ export const RoomSidebar = memo(function RoomSidebar({
                       );
                     })}
                   </ul>
+                )}
+
+                {(!isConnected ||
+                  voiceStatus !== "connected" ||
+                  voiceParticipants.length === 0) && (
+                  <VoicePresenceList
+                    participants={onlineParticipants}
+                    currentUserId={currentUserId}
+                  />
                 )}
               </div>
             );

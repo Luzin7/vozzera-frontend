@@ -1,4 +1,4 @@
-import type { ChatMessage, OutboundEvent, Room } from "@/lib/vozzera/types";
+import type { ChatMessage, OutboundEvent, Room, VoiceParticipant } from "@/lib/vozzera/types";
 import { MAX_FRAME_BYTES, outboundFrameSchema } from "@/lib/vozzera/ws-schema";
 import { format, isSameDay, isValid, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -98,6 +98,20 @@ export function removeRoom<T>(state: Record<string, T>, roomId: string): Record<
   return next;
 }
 
+export type VoicePresence = Record<string, VoiceParticipant[]>;
+
+export function updateVoicePresence(
+  presence: VoicePresence,
+  event: Extract<OutboundEvent, { participants: VoiceParticipant[] }>,
+): VoicePresence {
+  const participants = Array.from(
+    new Map(event.participants.map((participant) => [participant.user_id, participant])).values(),
+  );
+
+  if (participants.length === 0) return removeRoom(presence, event.room_id);
+  return { ...presence, [event.room_id]: participants };
+}
+
 export type TypingUser = {
   userId: string;
   username: string;
@@ -164,14 +178,27 @@ function removeTypingUser(users: TypingUsers, roomId: string, userId: string): T
   return { ...users, [roomId]: nextRoomUsers };
 }
 
-export function parseFrame(raw: MessageEvent): OutboundEvent | null {
-  const data = raw.data as string;
+export function parseFrame(raw: MessageEvent): OutboundEvent {
+  const data = raw.data;
 
-  if (data.length > MAX_FRAME_BYTES) return null;
+  if (typeof data !== "string") {
+    throw new WebSocketProtocolError("O servidor enviou um frame WebSocket que não é texto.");
+  }
+
+  if (data.length > MAX_FRAME_BYTES) {
+    throw new WebSocketProtocolError("O servidor enviou um frame WebSocket grande demais.");
+  }
 
   try {
-    return outboundFrameSchema.parse(JSON.parse(data)) as OutboundEvent;
+    return outboundFrameSchema.parse(JSON.parse(data));
   } catch {
-    return null;
+    throw new WebSocketProtocolError("O servidor enviou um evento WebSocket incompatível.");
+  }
+}
+
+export class WebSocketProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WebSocketProtocolError";
   }
 }
