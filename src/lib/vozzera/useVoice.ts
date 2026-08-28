@@ -526,6 +526,9 @@ export function useVoice() {
             if (publication.source === Track.Source.Microphone) {
               setMutedParticipants((prev) => ({ ...prev, [name]: publication.isMuted }));
             }
+            if (publication.source === Track.Source.ScreenShareAudio) {
+              applyVideoPlaybackDelay(track, VIDEO_PLAYBACK_DELAY_MS);
+            }
             applyParticipantVolumes(participant);
             return;
           }
