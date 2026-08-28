@@ -97,15 +97,42 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+const isDev = import.meta.env.DEV;
+
+const rawApiUrl = import.meta.env["VITE_API_URL"] || "http://localhost:8080";
+
+const wsApiUrl = rawApiUrl.replace(/^http/, "ws");
+
+const connectSrc = [
+  "'self'",
+  "blob:",
+  "https://*.livekit.cloud",
+  "wss://*.livekit.cloud",
+  "https://integrations.livekit.io",
+  rawApiUrl,
+  wsApiUrl,
+  ...(isDev ? ["http://localhost:*", "ws://localhost:*", "ws:"] : []),
+]
+  .filter(Boolean)
+  .join(" ");
+
+const cspContent = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "media-src 'self' blob: https:",
+  `connect-src ${connectSrc}`,
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+].join("; ");
+
 function RootShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="pt-BR">
       <head>
-        {/* script-src 'unsafe-inline' exigido pelo SSR do TanStack Start (scripts inline de hidratação) — não remover */}
-        <meta
-          httpEquiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' blob: ws: wss: http://localhost:* https://vozzera-sha-ae9fd4f.onrender.com https://integrations.livekit.io https://vozzera-qgu7rhfy.livekit.cloud; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
-        />
+        <meta httpEquiv="Content-Security-Policy" content={cspContent} />
         <HeadContent />
       </head>
       <body>
