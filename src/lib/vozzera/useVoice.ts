@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { VoiceTokenResponse } from "./types";
 import {
+  applyVideoPlaybackDelay,
   audioCaptureOptions,
   audioInputDevices,
   isLocalVoiceActive,
@@ -16,6 +17,7 @@ import {
   screenShareAudioCaptureOptions,
   screenSharePublishOptions,
   shouldShowLocalVoiceActivity,
+  VIDEO_PLAYBACK_DELAY_MS,
   VOICE_RELEASE_DELAY_MS,
   writeMicDeviceId,
   writeNoiseFilter,
@@ -530,6 +532,7 @@ export function useVoice() {
 
           if (track.source === Track.Source.ScreenShare) {
             publication.setVideoQuality(VideoQuality.HIGH);
+            applyVideoPlaybackDelay(track, VIDEO_PLAYBACK_DELAY_MS);
 
             const name = participant.name || participant.identity;
             setScreenShares((prev) => [
