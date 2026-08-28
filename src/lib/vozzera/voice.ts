@@ -36,7 +36,8 @@ const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
 const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
 const VOICE_START_LEVEL = 0.16;
 const VOICE_CONTINUE_LEVEL = 0.07;
-export const VOICE_RELEASE_DELAY_MS = 150;
+export const VOICE_RELEASE_DELAY_MS = 70;
+export const VIDEO_PLAYBACK_DELAY_MS = 700;
 
 export function isLocalVoiceActive(volume: number, wasActive: boolean): boolean {
   if (wasActive) return volume >= VOICE_CONTINUE_LEVEL;
@@ -198,6 +199,14 @@ export function featuredShareId(
 
 export function muteVolume(muted: boolean, previousVolume: number | undefined): number {
   return muted ? 0 : (previousVolume ?? 1);
+}
+
+type HasPlayoutDelay = {
+  setPlayoutDelay(delayInSeconds: number): void;
+};
+
+export function applyVideoPlaybackDelay(track: HasPlayoutDelay, delayMs: number): void {
+  track.setPlayoutDelay(delayMs / 1000);
 }
 
 export function participantStatusLabelFor(locallyMuted: boolean, isSpeaking: boolean): string {

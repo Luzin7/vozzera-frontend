@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyVideoPlaybackDelay,
   audioCaptureOptions,
   audioInputDevices,
   featuredShareId,
@@ -15,6 +16,7 @@ import {
   screenShareAudioCaptureOptions,
   screenSharePublishOptions,
   shouldShowLocalVoiceActivity,
+  VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
   writeNoiseFilter,
   writeParticipantVolumes,
@@ -34,11 +36,11 @@ describe("isLocalVoiceActive", () => {
 
 describe("shouldShowLocalVoiceActivity", () => {
   it("keeps the indicator visible during short pauses", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 149)).toBe(true);
+    expect(shouldShowLocalVoiceActivity(false, true, 69)).toBe(true);
   });
 
-  it("hides the indicator after 150 milliseconds of continuous silence", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 150)).toBe(false);
+  it("hides the indicator after 70 milliseconds of continuous silence", () => {
+    expect(shouldShowLocalVoiceActivity(false, true, 70)).toBe(false);
   });
 
   it("shows voice immediately and does not delay the initial activation", () => {
@@ -252,5 +254,33 @@ describe("participantStatusLabelFor", () => {
 
   it("labels a neutral participant", () => {
     expect(participantStatusLabelFor(false, false)).toBe("Volume individual");
+  });
+});
+
+describe("applyVideoPlaybackDelay", () => {
+  it("sets playout delay in seconds on a track", () => {
+    let capturedDelay = 0;
+    const fakeTrack = {
+      setPlayoutDelay(delayInSeconds: number) {
+        capturedDelay = delayInSeconds;
+      },
+    };
+
+    applyVideoPlaybackDelay(fakeTrack, VIDEO_PLAYBACK_DELAY_MS);
+
+    expect(capturedDelay).toBe(VIDEO_PLAYBACK_DELAY_MS / 1000);
+  });
+
+  it("converts 500ms to 0.5 seconds", () => {
+    let capturedDelay = 0;
+    const fakeTrack = {
+      setPlayoutDelay(delayInSeconds: number) {
+        capturedDelay = delayInSeconds;
+      },
+    };
+
+    applyVideoPlaybackDelay(fakeTrack, 500);
+
+    expect(capturedDelay).toBe(0.5);
   });
 });
