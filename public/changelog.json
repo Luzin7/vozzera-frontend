@@ -1,12 +1,5 @@
 {
   "version": "v1.10.0",
   "releasedAt": "2026-08-28",
-  "items": [
-    {
-      "title": "feat(voice): exibir presença nas salas de voz",
-      "kind": "feat",
-      "pr": 114,
-      "summary": "Agora você consegue saber quem está na chamada de voz antes de entrar!"
-    }
-  ]
+  "items": []
 }
