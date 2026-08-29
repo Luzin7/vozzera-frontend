@@ -164,7 +164,7 @@ export function useChat() {
         id: event.id,
         name: event.name,
         type: event.room_type,
-        created_at: current?.created_at ?? "",
+        created_at: event.created_at,
         updated_at: current?.updated_at ?? null,
       };
 
