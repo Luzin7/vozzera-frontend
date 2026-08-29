@@ -231,7 +231,43 @@ describe("parseFrame", () => {
     expect(event).toMatchObject({ action: "updated", content: "oi editado" });
   });
 
-  it("parses room lifecycle frames", () => {
+  it("parses room.created on the global app:rooms topic", () => {
+    const created = messageEvent({
+      v: 1,
+      type: "room.created",
+      topic: "app:rooms",
+      ts: wsTimestamp,
+      data: { id: wsRoomId, name: "nova-sala", type: "voice", created_at: wsTimestamp },
+    });
+
+    expect(parseFrame(created)).toMatchObject({
+      type: "room",
+      action: "created",
+      id: wsRoomId,
+      name: "nova-sala",
+      room_type: "voice",
+      created_at: wsTimestamp,
+    });
+  });
+
+  it("parses room.created on any topic", () => {
+    const created = messageEvent({
+      v: 1,
+      type: "room.created",
+      topic: `room:${wsRoomId}`,
+      ts: wsTimestamp,
+      data: { id: wsRoomId, name: "outra", type: "text", created_at: wsTimestamp },
+    });
+
+    expect(parseFrame(created)).toMatchObject({
+      type: "room",
+      action: "created",
+      id: wsRoomId,
+      created_at: wsTimestamp,
+    });
+  });
+
+  it("parses room.updated on the per-room topic", () => {
     const updated = messageEvent({
       v: 1,
       type: "room.updated",
@@ -239,16 +275,32 @@ describe("parseFrame", () => {
       ts: wsTimestamp,
       data: { id: wsRoomId, name: "geral", type: "text", created_at: wsTimestamp },
     });
-    const deleted = messageEvent({
+
+    expect(parseFrame(updated)).toMatchObject({
+      type: "room",
+      action: "updated",
+      id: wsRoomId,
+      name: "geral",
+      created_at: wsTimestamp,
+    });
+  });
+
+  it("parses room.updated on the global app:rooms topic", () => {
+    const updated = messageEvent({
       v: 1,
-      type: "room.deleted",
-      topic: `room:${wsRoomId}`,
+      type: "room.updated",
+      topic: "app:rooms",
       ts: wsTimestamp,
-      data: { id: wsRoomId, is_mod: true },
+      data: { id: wsRoomId, name: "global-update", type: "voice", created_at: wsTimestamp },
     });
 
-    expect(parseFrame(updated)).toMatchObject({ type: "room", action: "updated" });
-    expect(parseFrame(deleted)).toMatchObject({ type: "room", action: "deleted" });
+    expect(parseFrame(updated)).toMatchObject({
+      type: "room",
+      action: "updated",
+      id: wsRoomId,
+      name: "global-update",
+      created_at: wsTimestamp,
+    });
   });
 
   it("parses typing frames", () => {

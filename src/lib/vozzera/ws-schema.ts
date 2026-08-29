@@ -83,8 +83,8 @@ function roomIdFromTopic(topic: string): string {
 
 const roomChangedFrame = z
   .union([
-    envelope("room.created", z.literal("app:rooms"), roomData),
-    envelope("room.updated", roomTopic, roomData),
+    envelope("room.created", z.string(), roomData),
+    envelope("room.updated", z.string(), roomData),
   ])
   .transform((frame): OutboundEvent => ({
     type: "room",
@@ -92,6 +92,7 @@ const roomChangedFrame = z
     id: frame.data.id,
     name: frame.data.name,
     room_type: frame.data.type,
+    created_at: frame.data.created_at,
   }));
 
 const roomDeletedFrame = envelope("room.deleted", roomTopic, roomDeletedData).transform(

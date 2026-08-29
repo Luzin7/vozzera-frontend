@@ -76,6 +76,7 @@ export type OutboundEvent =
       id: string;
       name: string;
       room_type: "text" | "voice";
+      created_at: string;
     }
   | {
       type: "room";
