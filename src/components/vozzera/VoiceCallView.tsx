@@ -19,7 +19,6 @@ type Props = {
   screenShareEnabled: boolean;
   screenShares: ScreenShare[];
   localPreview: ScreenShare | null;
-  isTabHidden: boolean;
   onToggleMic: () => void;
   onToggleScreenShare: () => void;
   onLeave: () => void;
@@ -44,7 +43,6 @@ export function VoiceCallView({
   screenShareEnabled,
   screenShares,
   localPreview,
-  isTabHidden,
   onToggleMic,
   onToggleScreenShare,
   onLeave,
@@ -56,11 +54,7 @@ export function VoiceCallView({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       {screenShares.length > 0 || localPreview ? (
-        <ScreenShareStage
-          shares={screenShares}
-          localPreview={localPreview}
-          isTabHidden={isTabHidden}
-        />
+        <ScreenShareStage shares={screenShares} localPreview={localPreview} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {status === "connecting" ? (

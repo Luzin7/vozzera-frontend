@@ -19,6 +19,7 @@ import {
   readNoiseFilter,
   readParticipantVolumes,
   microphonePublishOptions,
+  screenShareAdaptiveStreamSettings,
   screenShareAudioCaptureOptions,
   screenSharePublishOptions,
   shouldShowLocalVoiceActivity,
@@ -158,6 +159,12 @@ describe("screenSharePublishOptions", () => {
       videoCodec: "h264",
       simulcast: false,
     });
+  });
+});
+
+describe("screenShareAdaptiveStreamSettings", () => {
+  it("keeps screen share video active while the tab is hidden", () => {
+    expect(screenShareAdaptiveStreamSettings()).toEqual({ pauseVideoInBackground: false });
   });
 });
 

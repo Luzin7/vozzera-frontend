@@ -23,6 +23,7 @@ import {
   microphonePublishOptions,
   participantNamesToMuteForSelectiveListening,
   readMicDeviceId,
+  screenShareAdaptiveStreamSettings,
   VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
 } from "./voice";
@@ -248,7 +249,6 @@ export function useVoice() {
   const [localQuality, setLocalQuality] = useState(ConnectionQuality.Excellent);
   const [remoteQualities, setRemoteQualities] = useState<Record<string, ConnectionQuality>>({});
   const [serverSpeakingNames, setServerSpeakingNames] = useState<string[]>([]);
-  const [isTabHidden, setIsTabHidden] = useState(false);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
   const voiceAudioContextRef = useRef<AudioContext | null>(null);
@@ -465,7 +465,7 @@ export function useVoice() {
         attemptAudioContext = voiceAudioContext;
         voiceAudioContextRef.current = voiceAudioContext;
         const room = new Room({
-          adaptiveStream: true,
+          adaptiveStream: screenShareAdaptiveStreamSettings(),
           dynacast: true,
           webAudioMix: { audioContext: voiceAudioContext },
           publishDefaults: {
@@ -757,17 +757,6 @@ export function useVoice() {
   }, [selfMonitor, localMicTrack]);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsTabHidden(document.hidden);
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    handleVisibilityChange();
-
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
-
-  useEffect(() => {
     return () => {
       connectionAttemptRef.current += 1;
       void roomRef.current?.disconnect();
@@ -811,7 +800,6 @@ export function useVoice() {
     screenShareMutedParticipants,
     speakingNames,
     localPreview,
-    isTabHidden,
     deafen: globalMuteActive,
     error,
     localQuality,

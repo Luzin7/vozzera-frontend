@@ -32,6 +32,10 @@ type ScreenSharePublishProfile = AudioPublishProfile & {
   simulcast: false;
 };
 
+type ScreenShareAdaptiveStreamSettings = {
+  pauseVideoInBackground: false;
+};
+
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
 const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
@@ -111,6 +115,10 @@ export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSh
     videoCodec: "h264",
     simulcast: false,
   };
+}
+
+export function screenShareAdaptiveStreamSettings(): ScreenShareAdaptiveStreamSettings {
+  return { pauseVideoInBackground: false };
 }
 
 export function readNoiseFilter(storage: Storage | null): boolean {
