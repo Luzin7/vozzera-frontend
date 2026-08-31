@@ -273,6 +273,8 @@ function Index() {
     onSetScreenShareVolume: voice.setScreenShareVolume,
     onToggleLocalMute: voice.toggleLocalMute,
     onToggleLocalScreenShareMute: voice.toggleLocalScreenShareMute,
+    onListenToParticipant: voice.listenToParticipant,
+    onListenToParticipantScreenShare: voice.listenToParticipantScreenShare,
     screenShareEnabled: voice.screenShareEnabled,
     onToggleScreenShare: handleToggleScreenShare,
     screenShares: voice.screenShares,
@@ -404,6 +406,8 @@ function Index() {
               participants={voice.participants}
               username={username}
               micEnabled={voice.micEnabled}
+              deafen={voice.deafen}
+              volumes={voice.volumes}
               mutedParticipants={voice.mutedParticipants}
               speakingNames={voice.speakingNames}
               screenShareEnabled={voice.screenShareEnabled}

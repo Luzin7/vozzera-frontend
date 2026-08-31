@@ -17,8 +17,11 @@ import {
   applyVideoPlaybackDelay,
   audioCaptureOptions,
   audioInputDevices,
+  isGlobalMuteActive,
   mergeActiveSpeakerNames,
+  microphoneEnabledAfterDeafenToggle,
   microphonePublishOptions,
+  participantNamesToMuteForSelectiveListening,
   readMicDeviceId,
   screenShareAdaptiveStreamSettings,
   VIDEO_PLAYBACK_DELAY_MS,
@@ -255,7 +258,7 @@ export function useVoice() {
   const micPermissionRef = useRef(false);
   const selectedDeviceIdRef = useRef(selectedMic);
   const screenShareRef = useRef(false);
-  const savedDeafenMicRef = useRef(false);
+  const deafenMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const notificationsEnabledRef = useRef(
     typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
   );
@@ -280,7 +283,9 @@ export function useVoice() {
     setLocalScreenShareMute,
     toggleLocalScreenShareMute,
     setRemoteMuted,
+    getVolumeRef,
     getScreenShareVolumeRef,
+    unmuteAllParticipants,
     resetState: resetParticipantVolumeState,
   } = useParticipantVolume(roomRef);
 
@@ -604,16 +609,116 @@ export function useVoice() {
     [setKrispFilter],
   );
 
+  const queueDeafenMicrophoneState = useCallback(
+    (enabled: boolean) => {
+      const transition = deafenMicTransitionRef.current.then(() => setMicEnabled(enabled));
+      deafenMicTransitionRef.current = transition.then(
+        () => undefined,
+        () => setError("Não consegui alterar o microfone."),
+      );
+    },
+    [setMicEnabled],
+  );
+
+  const globalMuteActive =
+    deafen ||
+    isGlobalMuteActive(
+      micOn,
+      participants.slice(1),
+      volumes,
+      screenShares.map((share) => share.name),
+      screenShareVolumes,
+    );
+
   const toggleDeafen = useCallback(() => {
-    if (deafen) {
-      if (savedDeafenMicRef.current) void setMicEnabled(true);
+    if (globalMuteActive) {
+      unmuteAllParticipants();
       setDeafen(false);
+      queueDeafenMicrophoneState(microphoneEnabledAfterDeafenToggle(true));
       return;
     }
-    savedDeafenMicRef.current = micOn;
-    void setMicEnabled(false);
     setDeafen(true);
-  }, [deafen, micOn, setMicEnabled]);
+    queueDeafenMicrophoneState(microphoneEnabledAfterDeafenToggle(false));
+  }, [globalMuteActive, queueDeafenMicrophoneState, unmuteAllParticipants]);
+
+  const keepMicrophoneMutedAfterDeafen = useCallback(() => {
+    setDeafen(false);
+  }, []);
+
+  const listenToParticipant = useCallback(
+    (name: string, volume?: number) => {
+      const room = roomRef.current;
+      if (!room) return;
+
+      const participantNames = Array.from(room.remoteParticipants.values()).map(
+        (participant) => participant.name || participant.identity,
+      );
+      const namesToMute = participantNamesToMuteForSelectiveListening(participantNames, name);
+
+      for (const participantName of namesToMute) {
+        if (getVolumeRef()[participantName] !== 0) setLocalMute(participantName, true);
+        if (getScreenShareVolumeRef()[participantName] !== 0) {
+          setLocalScreenShareMute(participantName, true);
+        }
+      }
+
+      keepMicrophoneMutedAfterDeafen();
+
+      if (volume !== undefined) {
+        setParticipantVolume(name, volume);
+        return;
+      }
+      if (getVolumeRef()[name] === 0) setLocalMute(name, false);
+    },
+    [
+      getScreenShareVolumeRef,
+      getVolumeRef,
+      keepMicrophoneMutedAfterDeafen,
+      setLocalMute,
+      setLocalScreenShareMute,
+      setParticipantVolume,
+    ],
+  );
+
+  const listenToParticipantScreenShare = useCallback(
+    (name: string, volume?: number) => {
+      const room = roomRef.current;
+      if (!room) return;
+
+      const participantNames = Array.from(room.remoteParticipants.values()).map(
+        (participant) => participant.name || participant.identity,
+      );
+      const screenShareNamesToMute = participantNamesToMuteForSelectiveListening(
+        participantNames,
+        name,
+      );
+
+      for (const participantName of participantNames) {
+        if (getVolumeRef()[participantName] !== 0) setLocalMute(participantName, true);
+      }
+      for (const participantName of screenShareNamesToMute) {
+        if (getScreenShareVolumeRef()[participantName] !== 0) {
+          setLocalScreenShareMute(participantName, true);
+        }
+      }
+
+      keepMicrophoneMutedAfterDeafen();
+
+      if (volume !== undefined) {
+        setScreenShareVolume(name, volume);
+        return;
+      }
+      if (getScreenShareVolumeRef()[name] === 0) setLocalScreenShareMute(name, false);
+    },
+    [
+      getScreenShareVolumeRef,
+      getVolumeRef,
+      keepMicrophoneMutedAfterDeafen,
+      setLocalMute,
+      setLocalScreenShareMute,
+      setScreenShareVolume,
+    ],
+  );
 
   // --- Effects ---
 
@@ -695,7 +800,7 @@ export function useVoice() {
     screenShareMutedParticipants,
     speakingNames,
     localPreview,
-    deafen,
+    deafen: globalMuteActive,
     error,
     localQuality,
     remoteQualities,
@@ -715,5 +820,7 @@ export function useVoice() {
     toggleLocalScreenShareMute,
     setScreenShare,
     toggleDeafen,
+    listenToParticipant,
+    listenToParticipantScreenShare,
   };
 }

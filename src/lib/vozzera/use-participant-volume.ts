@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from "react";
 
 import type { RemoteParticipant } from "livekit-client";
 import {
+  effectiveParticipantVolume,
+  locallyMutedParticipantNames,
   muteVolume,
   readParticipantVolumes,
   readScreenShareVolumes,
@@ -21,17 +23,17 @@ export function setScreenShareAudioSource(source: unknown): void {
   screenShareAudioSource = source;
 }
 
-function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number) {
-  participant.setVolume(deafenVolumeActive ? 0 : volume);
+function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number | undefined) {
+  participant.setVolume(effectiveParticipantVolume(deafenVolumeActive, volume));
 }
 
 export function setRemoteParticipantScreenShareVolume(
   participant: RemoteParticipant,
-  volume: number,
+  volume: number | undefined,
 ) {
   if (screenShareAudioSource === null) return;
   participant.setVolume(
-    deafenVolumeActive ? 0 : volume,
+    effectiveParticipantVolume(deafenVolumeActive, volume),
     screenShareAudioSource as Parameters<RemoteParticipant["setVolume"]>[1],
   );
 }
@@ -54,6 +56,7 @@ export type VolumeResult = {
   setRemoteMuted: (name: string, muted: boolean) => void;
   getScreenShareVolumeRef: () => Record<string, number>;
   getVolumeRef: () => Record<string, number>;
+  unmuteAllParticipants: () => void;
   resetState: () => void;
 };
 
@@ -83,13 +86,8 @@ export function useParticipantVolume(roomRef: RoomRef): VolumeResult {
     const name = p.name || p.identity;
     const volume = volumesRef.current[name];
     const ssVolume = screenShareVolumesRef.current[name];
-    if (volume === undefined && ssVolume === undefined && deafenVolumeActive) {
-      setRemoteParticipantVolume(p, 0);
-      setRemoteParticipantScreenShareVolume(p, 0);
-      return;
-    }
-    if (volume !== undefined) setRemoteParticipantVolume(p, volume);
-    if (ssVolume !== undefined) setRemoteParticipantScreenShareVolume(p, ssVolume);
+    setRemoteParticipantVolume(p, volume);
+    setRemoteParticipantScreenShareVolume(p, ssVolume);
   }, []);
 
   const setParticipantVolume = useCallback(
@@ -197,6 +195,15 @@ export function useParticipantVolume(roomRef: RoomRef): VolumeResult {
 
   const getScreenShareVolumeRef = useCallback(() => screenShareVolumesRef.current, []);
 
+  const unmuteAllParticipants = useCallback(() => {
+    for (const name of locallyMutedParticipantNames(volumesRef.current)) {
+      setLocalMute(name, false);
+    }
+    for (const name of locallyMutedParticipantNames(screenShareVolumesRef.current)) {
+      setLocalScreenShareMute(name, false);
+    }
+  }, [setLocalMute, setLocalScreenShareMute]);
+
   const resetState = useCallback(() => {
     setMutedParticipants({});
     setScreenShareMutedParticipants({});
@@ -220,6 +227,7 @@ export function useParticipantVolume(roomRef: RoomRef): VolumeResult {
     setRemoteMuted,
     getVolumeRef,
     getScreenShareVolumeRef,
+    unmuteAllParticipants,
     resetState,
   };
 }
