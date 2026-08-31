@@ -73,11 +73,15 @@ export const MessageList = memo(function MessageList({
   }, [handleScroll, loading]);
 
   useEffect(() => {
+    if (loading) return;
+
+    setShowJumpToLatest(false);
+
     const container = scrollRef.current;
-    if (!container || loading) return;
+    if (!container) return;
 
     container.scrollTop = container.scrollHeight;
-  }, [loading]);
+  }, [loading, roomId]);
 
   useEffect(() => {
     if (loading) return;
