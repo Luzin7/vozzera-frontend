@@ -4,10 +4,16 @@ import {
   applyVideoPlaybackDelay,
   audioCaptureOptions,
   audioInputDevices,
+  effectiveParticipantVolume,
   featuredShareId,
+  isGlobalMuteActive,
   isLocalVoiceActive,
+  isParticipantLocallyInaudible,
+  locallyMutedParticipantNames,
   mergeActiveSpeakerNames,
+  microphoneEnabledAfterDeafenToggle,
   muteVolume,
+  participantNamesToMuteForSelectiveListening,
   participantStatusLabelFor,
   readMicDeviceId,
   readNoiseFilter,
@@ -242,6 +248,77 @@ describe("muteVolume", () => {
 
   it("restores the previous volume when unmuting", () => {
     expect(muteVolume(false, 0.4)).toBe(0.4);
+  });
+});
+
+describe("effectiveParticipantVolume", () => {
+  it("mutes participant audio while deafen is active", () => {
+    expect(effectiveParticipantVolume(true, 0.4)).toBe(0);
+  });
+
+  it("restores the default volume after deafen without a saved preference", () => {
+    expect(effectiveParticipantVolume(false, undefined)).toBe(1);
+  });
+
+  it("restores the saved participant volume after deafen", () => {
+    expect(effectiveParticipantVolume(false, 0.4)).toBe(0.4);
+  });
+});
+
+describe("isParticipantLocallyInaudible", () => {
+  it("marks remote participants as inaudible while deafen is active", () => {
+    expect(isParticipantLocallyInaudible(false, true, 1)).toBe(true);
+  });
+
+  it("marks an individually muted remote participant as inaudible", () => {
+    expect(isParticipantLocallyInaudible(false, false, 0)).toBe(true);
+  });
+
+  it("does not show the local indicator on the current user", () => {
+    expect(isParticipantLocallyInaudible(true, true, 0)).toBe(false);
+  });
+});
+
+describe("participantNamesToMuteForSelectiveListening", () => {
+  it("keeps only the selected participant audible", () => {
+    expect(participantNamesToMuteForSelectiveListening(["ana", "beto", "caio"], "beto")).toEqual([
+      "ana",
+      "caio",
+    ]);
+  });
+});
+
+describe("microphoneEnabledAfterDeafenToggle", () => {
+  it("mutes the microphone when deafen is activated", () => {
+    expect(microphoneEnabledAfterDeafenToggle(false)).toBe(false);
+  });
+
+  it("always enables the microphone when deafen is disabled globally", () => {
+    expect(microphoneEnabledAfterDeafenToggle(true)).toBe(true);
+  });
+});
+
+describe("locallyMutedParticipantNames", () => {
+  it("selects only participants with volume zero", () => {
+    expect(locallyMutedParticipantNames({ ana: 0, beto: 0.7, caio: 0 })).toEqual(["ana", "caio"]);
+  });
+});
+
+describe("isGlobalMuteActive", () => {
+  it("recognizes locally muted participants and microphone as global mute", () => {
+    expect(isGlobalMuteActive(false, ["ana", "beto"], { ana: 0, beto: 0 }, [], {})).toBe(true);
+  });
+
+  it("stays inactive while the microphone is enabled", () => {
+    expect(isGlobalMuteActive(true, ["ana"], { ana: 0 }, [], {})).toBe(false);
+  });
+
+  it("stays inactive while a participant is audible", () => {
+    expect(isGlobalMuteActive(false, ["ana", "beto"], { ana: 0, beto: 0.8 }, [], {})).toBe(false);
+  });
+
+  it("stays inactive while a screen share is audible", () => {
+    expect(isGlobalMuteActive(false, ["ana"], { ana: 0 }, ["ana"], { ana: 0.8 })).toBe(false);
   });
 });
 
