@@ -409,7 +409,6 @@ function Index() {
               screenShareEnabled={voice.screenShareEnabled}
               screenShares={voice.screenShares}
               localPreview={voice.localPreview}
-              isTabHidden={voice.isTabHidden}
               onToggleMic={handleToggleMic}
               onToggleScreenShare={handleToggleScreenShare}
               onLeave={handleLeaveVoice}
