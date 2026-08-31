@@ -1,9 +1,10 @@
-import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
+import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, VolumeX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScreenShareStage } from "@/components/vozzera/ScreenShareStage";
 import { initials } from "@/lib/vozzera/avatar";
 import type { ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
+import { isParticipantLocallyInaudible } from "@/lib/vozzera/voice";
 
 type Props = {
   roomName: string;
@@ -11,6 +12,8 @@ type Props = {
   participants: string[];
   username: string | null;
   micEnabled: boolean;
+  deafen: boolean;
+  volumes: Record<string, number>;
   mutedParticipants: Record<string, boolean>;
   speakingNames: string[];
   screenShareEnabled: boolean;
@@ -34,6 +37,8 @@ export function VoiceCallView({
   participants,
   username,
   micEnabled,
+  deafen,
+  volumes,
   mutedParticipants,
   speakingNames,
   screenShareEnabled,
@@ -69,6 +74,11 @@ export function VoiceCallView({
               {participants.map((name, index) => {
                 const isSpeaking = speakingNames.includes(name);
                 const isMuted = name === username ? !micEnabled : mutedParticipants[name] === true;
+                const isLocallyInaudible = isParticipantLocallyInaudible(
+                  name === username,
+                  deafen,
+                  volumes[name],
+                );
                 const centersLastParticipant = participants.length === 3 && index === 2;
 
                 return (
@@ -87,6 +97,14 @@ export function VoiceCallView({
                     <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
                       <span className="truncate">{name}</span>
                       {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
+                      {isLocallyInaudible && (
+                        <VolumeX
+                          aria-label={
+                            deafen ? "Silenciado pelo mudo total" : "Silenciado para você"
+                          }
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                        />
+                      )}
                     </div>
                   </article>
                 );
