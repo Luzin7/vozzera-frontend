@@ -12,6 +12,7 @@ import {
   parseFrame,
   readActiveRoomId,
   removeRoom,
+  sortRooms,
   typingIndicatorText,
   updateTypingUsers,
   updateVoicePresence,
@@ -77,6 +78,29 @@ describe("firstTextRoom", () => {
   });
 });
 
+describe("sortRooms", () => {
+  it("orders rooms alphabetically without case sensitivity", () => {
+    const rooms: Room[] = [
+      { id: "1", name: "Zebra", type: "text", created_at: "" },
+      { id: "2", name: "alpha", type: "voice", created_at: "" },
+      { id: "3", name: "Árvore", type: "text", created_at: "" },
+    ];
+
+    expect(sortRooms(rooms).map((room) => room.name)).toEqual(["alpha", "Árvore", "Zebra"]);
+  });
+
+  it("keeps the original room list unchanged", () => {
+    const rooms: Room[] = [
+      { id: "1", name: "Zebra", type: "text", created_at: "" },
+      { id: "2", name: "Alpha", type: "voice", created_at: "" },
+    ];
+
+    sortRooms(rooms);
+
+    expect(rooms.map((room) => room.name)).toEqual(["Zebra", "Alpha"]);
+  });
+});
+
 describe("dateGroupLabelFor", () => {
   const now = new Date(2026, 7, 21, 12);
 
@@ -122,6 +146,17 @@ describe("room state", () => {
     expect(upsertRoom([], room)).toEqual([room]);
     expect(upsertRoom([room], { ...room, name: "bate-papo" })).toEqual([
       { ...room, name: "bate-papo" },
+    ]);
+  });
+
+  it("keeps rooms ordered after an insertion or rename", () => {
+    const alpha = { ...room, id: "r2", name: "alpha" };
+    const zebra = { ...room, id: "r3", name: "zebra" };
+
+    expect(upsertRoom([zebra], alpha)).toEqual([alpha, zebra]);
+    expect(upsertRoom([alpha, zebra], { ...zebra, name: "beta" })).toEqual([
+      alpha,
+      { ...zebra, name: "beta" },
     ]);
   });
 
