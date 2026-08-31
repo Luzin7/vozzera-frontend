@@ -226,7 +226,7 @@ export const MessageList = memo(function MessageList({
         <button
           type="button"
           onClick={jumpToLatest}
-          className="absolute bottom-20 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
+          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
         >
           Ir para a última mensagem
         </button>
