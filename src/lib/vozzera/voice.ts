@@ -23,12 +23,11 @@ type AudioPublishProfile = {
 };
 
 type ScreenSharePublishProfile = AudioPublishProfile & {
-  degradationPreference: "maintain-framerate";
+  degradationPreference: "balanced";
   screenShareEncoding: {
     maxBitrate: number;
     maxFramerate: number;
   };
-  videoCodec: "h264";
   simulcast: false;
 };
 
@@ -96,10 +95,11 @@ export function screenShareAudioCaptureOptions(): MicCaptureOptions & {
 
 function screenShareVideoBitrate(quality: ScreenShareQuality): number {
   const isHighFrameRate = quality.frameRate > 30;
+  const isFullHd = quality.width > 1280 || quality.height > 720;
 
-  if (quality.height >= 1080) return isHighFrameRate ? 6_000_000 : 3_500_000;
-  if (quality.height >= 720) return isHighFrameRate ? 3_000_000 : 1_800_000;
-  return 800_000;
+  if (isHighFrameRate && isFullHd) return 10_000_000;
+  if (isHighFrameRate || isFullHd) return 6_000_000;
+  return 4_000_000;
 }
 
 export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSharePublishProfile {
@@ -107,12 +107,11 @@ export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSh
     audioPreset: { maxBitrate: 128_000 },
     dtx: false,
     forceStereo: true,
-    degradationPreference: "maintain-framerate",
+    degradationPreference: "balanced",
     screenShareEncoding: {
       maxBitrate: screenShareVideoBitrate(quality),
       maxFramerate: quality.frameRate,
     },
-    videoCodec: "h264",
     simulcast: false,
   };
 }

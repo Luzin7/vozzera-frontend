@@ -72,7 +72,7 @@ export function useScreenShare(): ScreenShareResult {
           }
         : { audio: screenShareAudioCaptureOptions() };
 
-      const publishQuality = quality ?? { width: 1920, height: 1080, frameRate: 60 };
+      const publishQuality = quality ?? { width: 1920, height: 1080, frameRate: 30 };
       const publishOptions = screenSharePublishOptions(publishQuality) as TrackPublishOptions;
       const publication = await room.localParticipant.setScreenShareEnabled(
         true,
@@ -80,7 +80,6 @@ export function useScreenShare(): ScreenShareResult {
         publishOptions,
       );
       const track = publication?.videoTrack as LocalVideoTrack | undefined;
-      if (track?.mediaStreamTrack) track.mediaStreamTrack.contentHint = "motion";
       const name = room.localParticipant.name || room.localParticipant.identity;
 
       setSharingEnabled(true);

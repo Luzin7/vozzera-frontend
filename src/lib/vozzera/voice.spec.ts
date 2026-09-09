@@ -142,21 +142,20 @@ describe("screenShareAudioCaptureOptions", () => {
 
 describe("screenSharePublishOptions", () => {
   it.each([
-    [{ width: 1280, height: 720, frameRate: 30 }, 1_800_000],
-    [{ width: 1280, height: 720, frameRate: 60 }, 3_000_000],
-    [{ width: 1920, height: 1080, frameRate: 30 }, 3_500_000],
-    [{ width: 1920, height: 1080, frameRate: 60 }, 6_000_000],
+    [{ width: 1280, height: 720, frameRate: 30 }, 4_000_000],
+    [{ width: 1280, height: 720, frameRate: 60 }, 6_000_000],
+    [{ width: 1920, height: 1080, frameRate: 30 }, 6_000_000],
+    [{ width: 1920, height: 1080, frameRate: 60 }, 10_000_000],
   ])("selects the video bitrate for %o", (quality, maxBitrate) => {
     expect(screenSharePublishOptions(quality)).toEqual({
       audioPreset: { maxBitrate: 128_000 },
       dtx: false,
       forceStereo: true,
-      degradationPreference: "maintain-framerate",
+      degradationPreference: "balanced",
       screenShareEncoding: {
         maxBitrate,
         maxFramerate: quality.frameRate,
       },
-      videoCodec: "h264",
       simulcast: false,
     });
   });
