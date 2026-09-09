@@ -16,13 +16,16 @@ import {
 } from "@/lib/vozzera/api";
 import {
   appendMessage,
+  addOnlineUser,
   clearActiveRoomId,
   clearUnread,
   expireTypingUsers,
   firstTextRoom,
   incrementUnread,
   readActiveRoomId,
+  removeOnlineUser,
   removeRoom,
+  replaceOnlineUsers,
   sortRooms,
   totalUnread,
   updateTypingUsers,
@@ -30,7 +33,7 @@ import {
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
-import type { TypingUsers, VoicePresence } from "@/lib/vozzera/chat";
+import type { OnlineUsers, TypingUsers, VoicePresence } from "@/lib/vozzera/chat";
 import {
   canNotify,
   initialNotificationsEnabled,
@@ -64,6 +67,7 @@ export function useChat() {
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [typingUsers, setTypingUsers] = useState<TypingUsers>({});
   const [voicePresence, setVoicePresence] = useState<VoicePresence>({});
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUsers>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     if (typeof localStorage === "undefined") return false;
     return initialNotificationsEnabled(localStorage);
@@ -96,6 +100,7 @@ export function useChat() {
     setMessages({});
     setTypingUsers({});
     setVoicePresence({});
+    setOnlineUsers({});
     selectedInitialRoomRef.current = false;
     clearActiveRoomId(typeof localStorage === "undefined" ? null : localStorage);
     queryClient.removeQueries({ queryKey: ["rooms"] });
@@ -254,6 +259,23 @@ export function useChat() {
         return;
       }
 
+      if (event.type === "user.online") {
+        setOnlineUsers((prev) =>
+          addOnlineUser(prev, { userId: event.userId, username: event.username }),
+        );
+        return;
+      }
+
+      if (event.type === "user.offline") {
+        setOnlineUsers((prev) => removeOnlineUser(prev, event.userId));
+        return;
+      }
+
+      if (event.type === "presence.snapshot") {
+        setOnlineUsers(replaceOnlineUsers(event.users));
+        return;
+      }
+
       if (event.type !== "message" || event.room_id === ZERO_UUID) return;
       handleMessageEvent(event);
     },
@@ -283,6 +305,7 @@ export function useChat() {
   useEffect(() => {
     if (status !== "connecting") return;
     setVoicePresence({});
+    setOnlineUsers({});
   }, [status]);
 
   const setTyping = useCallback(
@@ -530,6 +553,7 @@ export function useChat() {
     username,
     email,
     currentUserId,
+    onlineUsers,
     authed,
     rooms,
     canManageRooms: canManageRooms(role),

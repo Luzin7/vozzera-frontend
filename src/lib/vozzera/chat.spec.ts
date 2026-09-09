@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ACTIVE_ROOM_STORAGE_KEY,
+  addOnlineUser,
   appendMessage,
   backoffDelay,
   clearActiveRoomId,
@@ -11,7 +12,9 @@ import {
   nextRoomIndex,
   parseFrame,
   readActiveRoomId,
+  removeOnlineUser,
   removeRoom,
+  replaceOnlineUsers,
   sortRooms,
   typingIndicatorText,
   updateTypingUsers,
@@ -388,6 +391,29 @@ describe("parseFrame", () => {
     expect(() => parseFrame(raw)).toThrow("evento WebSocket incompatível");
   });
 
+  it.each(["presence.snapshot", "user.online", "user.offline"] as const)(
+    "accepts %s frame on __presence__ topic",
+    (type) => {
+      const data =
+        type === "presence.snapshot"
+          ? [{ user_id: wsUserId, username: "luan" }]
+          : { user_id: wsUserId, username: "luan" };
+      const raw = messageEvent({
+        v: 1,
+        type,
+        topic: "__presence__",
+        ts: wsTimestamp,
+        data,
+      });
+      expect(parseFrame(raw)).toMatchObject({
+        type,
+        ...(type === "presence.snapshot"
+          ? { users: [{ userId: wsUserId, username: "luan" }] }
+          : { userId: wsUserId, username: "luan" }),
+      });
+    },
+  );
+
   it("rejects a frame larger than the limit", () => {
     const raw = {
       data: "x".repeat(MAX_FRAME_BYTES + 1),
@@ -488,5 +514,48 @@ describe("voice presence", () => {
     expect(updateVoicePresence({ r1: [participant] }, { ...snapshot, participants: [] })).toEqual(
       {},
     );
+  });
+});
+
+describe("online users", () => {
+  const luan = { userId: "u1", username: "Luan" };
+  const bia = { userId: "u2", username: "Bia" };
+
+  it("adds a new online user", () => {
+    expect(addOnlineUser({}, luan)).toEqual({ u1: luan });
+  });
+
+  it("does not duplicate an existing user", () => {
+    const state = { u1: luan };
+    expect(addOnlineUser(state, luan)).toBe(state);
+  });
+
+  it("adds multiple users", () => {
+    const state = addOnlineUser(addOnlineUser({}, luan), bia);
+    expect(state).toEqual({ u1: luan, u2: bia });
+  });
+
+  it("removes an existing online user", () => {
+    const state = { u1: luan, u2: bia };
+    expect(removeOnlineUser(state, "u1")).toEqual({ u2: bia });
+  });
+
+  it("does nothing when removing a non-existent user", () => {
+    const state = { u1: luan };
+    expect(removeOnlineUser(state, "u2")).toBe(state);
+  });
+
+  it("replaces all online users with a snapshot", () => {
+    const state = replaceOnlineUsers([luan, bia]);
+    expect(state).toEqual({ u1: luan, u2: bia });
+  });
+
+  it("returns an empty map for an empty snapshot", () => {
+    expect(replaceOnlineUsers([])).toEqual({});
+  });
+
+  it("keeps the last entry when the snapshot has duplicates", () => {
+    const updated = { ...luan, username: "Luan atualizado" };
+    expect(replaceOnlineUsers([luan, updated])).toEqual({ u1: updated });
   });
 });

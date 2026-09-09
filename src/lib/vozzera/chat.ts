@@ -122,6 +122,29 @@ export function updateVoicePresence(
   return { ...presence, [event.room_id]: participants };
 }
 
+export type OnlineUser = { userId: string; username: string };
+export type OnlineUsers = Record<string, OnlineUser>;
+
+export function addOnlineUser(users: OnlineUsers, user: OnlineUser): OnlineUsers {
+  if (user.userId in users) return users;
+  return { ...users, [user.userId]: user };
+}
+
+export function removeOnlineUser(users: OnlineUsers, userId: string): OnlineUsers {
+  if (!(userId in users)) return users;
+  const next = { ...users };
+  delete next[userId];
+  return next;
+}
+
+export function replaceOnlineUsers(users: OnlineUser[]): OnlineUsers {
+  const map: OnlineUsers = {};
+  for (const user of users) {
+    map[user.userId] = user;
+  }
+  return map;
+}
+
 export type TypingUser = {
   userId: string;
   username: string;

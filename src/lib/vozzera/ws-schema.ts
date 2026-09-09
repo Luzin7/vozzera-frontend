@@ -157,6 +157,34 @@ const systemErrorFrame = envelope(
   z.object({ error: z.string() }),
 ).transform((frame): OutboundEvent => ({ type: "error", error: frame.data.error }));
 
+const presenceTopic = z.literal("__presence__");
+const presenceUserData = z.object({ user_id: z.string(), username: z.string() });
+
+const userOnlineFrame = envelope("user.online", presenceTopic, presenceUserData).transform(
+  (frame): OutboundEvent => ({
+    type: "user.online",
+    userId: frame.data.user_id,
+    username: frame.data.username,
+  }),
+);
+
+const userOfflineFrame = envelope("user.offline", presenceTopic, presenceUserData).transform(
+  (frame): OutboundEvent => ({
+    type: "user.offline",
+    userId: frame.data.user_id,
+    username: frame.data.username,
+  }),
+);
+
+const presenceSnapshotFrame = envelope(
+  "presence.snapshot",
+  presenceTopic,
+  z.array(presenceUserData),
+).transform((frame): OutboundEvent => ({
+  type: "presence.snapshot",
+  users: frame.data.map((u) => ({ userId: u.user_id, username: u.username })),
+}));
+
 export const outboundFrameSchema = z.union([
   roomChangedFrame,
   roomDeletedFrame,
@@ -165,5 +193,8 @@ export const outboundFrameSchema = z.union([
   messageDeletedFrame,
   typingFrame,
   presenceFrame,
+  userOnlineFrame,
+  userOfflineFrame,
+  presenceSnapshotFrame,
   systemErrorFrame,
 ]);
