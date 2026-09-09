@@ -1,12 +1,12 @@
 {
-  "version": "v1.10.4",
+  "version": "v1.11.0",
   "releasedAt": "2026-09-09",
   "items": [
     {
-      "title": "fix(voice): restaura qualidade da transmissão ao voltar à aba",
-      "kind": "fix",
-      "pr": 131,
-      "summary": "Sua experiência ainda mais melhor quando o assunto é screenshare. A qualidade não decai quando você voltar a assistir."
+      "title": "feat(chat): presença online global com evento user.online/offline e snapshot",
+      "kind": "feat",
+      "pr": 136,
+      "summary": ""
     }
   ]
 }
