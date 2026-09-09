@@ -6,7 +6,7 @@
       "title": "feat(chat): presença online global com evento user.online/offline e snapshot",
       "kind": "feat",
       "pr": 136,
-      "summary": ""
+      "summary": "Visualize quem está online no Vozzera!"
     }
   ]
 }
