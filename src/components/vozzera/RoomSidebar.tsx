@@ -215,6 +215,10 @@ export const RoomSidebar = memo(function RoomSidebar({
             <Skeleton className="mb-1.5 h-9 w-full" />
             <Skeleton className="h-9 w-full" />
           </section>
+          <section>
+            <Skeleton className="mb-2 ml-2 mt-1 h-3 w-14" />
+            <Skeleton className="mb-1.5 h-9 w-full" />
+          </section>
         </nav>
         <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center justify-between gap-2">
