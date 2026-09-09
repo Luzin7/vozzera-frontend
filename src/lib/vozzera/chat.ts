@@ -47,6 +47,11 @@ export function firstTextRoom(rooms: Room[]): Room | undefined {
   return rooms.find((room) => room.type === "text");
 }
 
+export function upsertRoom(rooms: Room[], room: Room): Room[] {
+  if (!rooms.some((current) => current.id === room.id)) return [...rooms, room];
+  return rooms.map((current) => (current.id === room.id ? { ...current, ...room } : current));
+}
+
 export function dateGroupLabelFor(timestamp: string, now = new Date()): string {
   const date = new Date(timestamp);
   if (!isValid(date)) return "";
@@ -86,11 +91,6 @@ export function clearActiveRoomId(storage: ActiveRoomStorage | null): void {
   }
 }
 
-export function upsertRoom(rooms: Room[], room: Room): Room[] {
-  if (!rooms.some((current) => current.id === room.id)) return [...rooms, room];
-  return rooms.map((current) => (current.id === room.id ? { ...current, ...room } : current));
-}
-
 export function removeRoom<T>(state: Record<string, T>, roomId: string): Record<string, T> {
   if (!(roomId in state)) return state;
   const next = { ...state };
@@ -110,6 +110,29 @@ export function updateVoicePresence(
 
   if (participants.length === 0) return removeRoom(presence, event.room_id);
   return { ...presence, [event.room_id]: participants };
+}
+
+export type OnlineUser = { userId: string; username: string };
+export type OnlineUsers = Record<string, OnlineUser>;
+
+export function addOnlineUser(users: OnlineUsers, user: OnlineUser): OnlineUsers {
+  if (user.userId in users) return users;
+  return { ...users, [user.userId]: user };
+}
+
+export function removeOnlineUser(users: OnlineUsers, userId: string): OnlineUsers {
+  if (!(userId in users)) return users;
+  const next = { ...users };
+  delete next[userId];
+  return next;
+}
+
+export function replaceOnlineUsers(users: OnlineUser[]): OnlineUsers {
+  const map: OnlineUsers = {};
+  for (const user of users) {
+    map[user.userId] = user;
+  }
+  return map;
 }
 
 export type TypingUser = {

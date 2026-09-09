@@ -5,6 +5,7 @@ import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
+import { MemberList } from "@/components/vozzera/MemberList";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
@@ -65,6 +66,7 @@ function Index() {
     unread,
     typingUsers,
     voicePresence,
+    onlineUsers,
     socketStatus,
     openRoom,
     createRoom,
@@ -273,6 +275,8 @@ function Index() {
     onSetScreenShareVolume: voice.setScreenShareVolume,
     onToggleLocalMute: voice.toggleLocalMute,
     onToggleLocalScreenShareMute: voice.toggleLocalScreenShareMute,
+    onListenToParticipant: voice.listenToParticipant,
+    onListenToParticipantScreenShare: voice.listenToParticipantScreenShare,
     screenShareEnabled: voice.screenShareEnabled,
     onToggleScreenShare: handleToggleScreenShare,
     screenShares: voice.screenShares,
@@ -301,6 +305,14 @@ function Index() {
             onRoomClick={undefined}
           />
         </main>
+        <aside className="hidden w-48 shrink-0 border-l border-border bg-sidebar p-3 md:flex">
+          <Skeleton className="h-3 w-14" />
+          <div className="mt-3 space-y-2">
+            <Skeleton className="h-7 w-full" />
+            <Skeleton className="h-7 w-full" />
+            <Skeleton className="h-7 w-full" />
+          </div>
+        </aside>
       </div>
     );
   }
@@ -404,12 +416,13 @@ function Index() {
               participants={voice.participants}
               username={username}
               micEnabled={voice.micEnabled}
+              deafen={voice.deafen}
+              volumes={voice.volumes}
               mutedParticipants={voice.mutedParticipants}
               speakingNames={voice.speakingNames}
               screenShareEnabled={voice.screenShareEnabled}
               screenShares={voice.screenShares}
               localPreview={voice.localPreview}
-              isTabHidden={voice.isTabHidden}
               onToggleMic={handleToggleMic}
               onToggleScreenShare={handleToggleScreenShare}
               onLeave={handleLeaveVoice}
@@ -448,6 +461,12 @@ function Index() {
           </div>
         )}
       </main>
+
+      <MemberList
+        onlineUsers={onlineUsers}
+        currentUserId={currentUserId}
+        className="hidden md:flex"
+      />
 
       <CreateRoomDialog
         key={editingRoom?.id ?? "create"}

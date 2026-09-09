@@ -226,6 +226,8 @@ Digitação e presença de voz:
 ```jsonc
 { "v": 1, "type": "typing.start" | "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "user_id": "uuid", "username": "string" } }
 { "v": 1, "type": "voice.presence.joined" | "voice.presence.left" | "voice.presence.snapshot", "topic": "room:<uuid>", "ts": "string", "data": [{ "sid": "string", "user_id": "string", "username": "string" }] }
+{ "v": 1, "type": "user.online" | "user.offline", "topic": "__presence__", "ts": "string", "data": { "user_id": "string", "username": "string" } }
+{ "v": 1, "type": "presence.snapshot", "topic": "__presence__", "ts": "string", "data": [{ "user_id": "string", "username": "string" }] }
 ```
 
 Regras:
@@ -235,12 +237,13 @@ Regras:
 - Uma inscrição negada não confirma estado local nem produz mensagem otimista; sem eco, o histórico permanece íntegro.
 - `room.created`, `room.updated` e `room.deleted` atualizam a lista local; exclusão também remove o histórico local sem encerrar o WebSocket.
 - `voice.presence.*` substitui o snapshot da sala na UI de voz; participantes são deduplicados por `user_id` e exibidos na barra lateral.
+- **Presença global** (`__presence__`): todo cliente é automaticamente inscrito no tópico `__presence__` ao conectar. Os eventos `user.online`, `user.offline` e `presence.snapshot` gerenciam a lista de usuários online no servidor. O snapshot inicial chega logo após a inscrição automática.
 - Ao reconectar o WebSocket, o cliente descarta a presença anterior e aguarda novos snapshots das salas de voz assinadas.
 - **Revogação/expiração de sessão**: o servidor fecha o WS com `CloseMessage` vazio → no browser `CloseEvent.code === 1005`. O front trata como "sessão morta" (desloga e para de reconectar), distinto de queda de rede/crash (`1006`), que tem retry com backoff.
 
 ## Limitações conhecidas
 
 - **Upload e paginação não existem** no backend.
-- Presença de voz existe via eventos `voice.presence.*`; presença online global ainda não faz parte do contrato.
+- Presença de voz existe via eventos `voice.presence.*`; presença online global existe via eventos `user.online`, `user.offline` e `presence.snapshot` no tópico `__presence__`.
 - Inscrição em sala é autorizada no backend, e `mod`/`admin` controlam criação, edição e exclusão de salas.
 - Cookie `SameSite=Lax`: em dev cross-origin (front num domínio diferente de `localhost:8080`) o cookie não viaja; auth funciona rodando o front localmente contra o Go, ou com o build servido pelo próprio Go.

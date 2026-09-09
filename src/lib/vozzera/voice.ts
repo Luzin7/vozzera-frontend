@@ -32,6 +32,10 @@ type ScreenSharePublishProfile = AudioPublishProfile & {
   simulcast: false;
 };
 
+type ScreenShareAdaptiveStreamSettings = {
+  pauseVideoInBackground: false;
+};
+
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
 const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
@@ -111,6 +115,10 @@ export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSh
     videoCodec: "h264",
     simulcast: false,
   };
+}
+
+export function screenShareAdaptiveStreamSettings(): ScreenShareAdaptiveStreamSettings {
+  return { pauseVideoInBackground: false };
 }
 
 export function readNoiseFilter(storage: Storage | null): boolean {
@@ -202,6 +210,52 @@ export function featuredShareId(
 
 export function muteVolume(muted: boolean, previousVolume: number | undefined): number {
   return muted ? 0 : (previousVolume ?? 1);
+}
+
+export function effectiveParticipantVolume(
+  deafen: boolean,
+  savedVolume: number | undefined,
+): number {
+  if (deafen) return 0;
+  return savedVolume ?? 1;
+}
+
+export function isParticipantLocallyInaudible(
+  isCurrentUser: boolean,
+  deafen: boolean,
+  savedVolume: number | undefined,
+): boolean {
+  if (isCurrentUser) return false;
+  return deafen || savedVolume === 0;
+}
+
+export function participantNamesToMuteForSelectiveListening(
+  participantNames: string[],
+  selectedName: string,
+): string[] {
+  return participantNames.filter((name) => name !== selectedName);
+}
+
+export function microphoneEnabledAfterDeafenToggle(deafenActive: boolean): boolean {
+  return deafenActive;
+}
+
+export function locallyMutedParticipantNames(volumes: Record<string, number>): string[] {
+  return Object.entries(volumes)
+    .filter(([, volume]) => volume === 0)
+    .map(([name]) => name);
+}
+
+export function isGlobalMuteActive(
+  microphoneEnabled: boolean,
+  participantNames: string[],
+  participantVolumes: Record<string, number>,
+  screenShareNames: string[],
+  screenShareVolumes: Record<string, number>,
+): boolean {
+  if (microphoneEnabled) return false;
+  if (participantNames.some((name) => participantVolumes[name] !== 0)) return false;
+  return screenShareNames.every((name) => screenShareVolumes[name] === 0);
 }
 
 type HasPlayoutDelay = {

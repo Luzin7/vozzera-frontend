@@ -76,6 +76,7 @@ export type OutboundEvent =
       id: string;
       name: string;
       room_type: "text" | "voice";
+      created_at: string;
     }
   | {
       type: "room";
@@ -111,11 +112,18 @@ export type OutboundEvent =
       updated_at?: string;
     }
   | {
-      type: "presence";
-      id: string;
-      room_id: string;
-      user_id: string;
+      type: "user.online";
+      userId: string;
       username: string;
+    }
+  | {
+      type: "user.offline";
+      userId: string;
+      username: string;
+    }
+  | {
+      type: "presence.snapshot";
+      users: Array<{ userId: string; username: string }>;
     }
   | {
       type: "typing";

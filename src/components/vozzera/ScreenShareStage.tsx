@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { featuredShareId } from "@/lib/vozzera/voice";
 import type { ScreenShare } from "@/lib/vozzera/useVoice";
 
-function FeaturedVideo({ share, isTabHidden }: { share: ScreenShare; isTabHidden: boolean }) {
+function FeaturedVideo({ share }: { share: ScreenShare }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -14,17 +14,12 @@ function FeaturedVideo({ share, isTabHidden }: { share: ScreenShare; isTabHidden
     const video = videoRef.current;
     if (!video) return;
 
-    if (isTabHidden) {
-      share.track.detach();
-      return;
-    }
-
     share.track.attach(video);
 
     return () => {
       share.track.detach();
     };
-  }, [share, isTabHidden]);
+  }, [share]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -71,11 +66,9 @@ function FeaturedVideo({ share, isTabHidden }: { share: ScreenShare; isTabHidden
 export function ScreenShareStage({
   shares,
   localPreview,
-  isTabHidden,
 }: Readonly<{
   shares: ScreenShare[];
   localPreview: ScreenShare | null;
-  isTabHidden: boolean;
 }>) {
   const [selectedShareId, setSelectedShareId] = useState<string | null>(null);
   const allShares = localPreview ? [...shares, localPreview] : shares;
@@ -87,7 +80,7 @@ export function ScreenShareStage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      {featured && <FeaturedVideo share={featured} isTabHidden={isTabHidden} />}
+      {featured && <FeaturedVideo share={featured} />}
       {allShares.length > 1 && (
         <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-border bg-muted/30 px-3 py-2">
           {allShares.map((share) => {

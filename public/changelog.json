@@ -1,5 +1,12 @@
 {
-  "version": "v1.10.0",
-  "releasedAt": "2026-08-28",
-  "items": []
+  "version": "v1.12.0",
+  "releasedAt": "2026-09-09",
+  "items": [
+    {
+      "title": "feat(chat): presença online global com evento user.online/offline e snapshot",
+      "kind": "feat",
+      "pr": 136,
+      "summary": "Visualize quem está online no Vozzera!"
+    }
+  ]
 }

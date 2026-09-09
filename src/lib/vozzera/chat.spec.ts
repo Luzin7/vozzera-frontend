@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ACTIVE_ROOM_STORAGE_KEY,
+  addOnlineUser,
   appendMessage,
   backoffDelay,
   clearActiveRoomId,
@@ -11,7 +12,9 @@ import {
   nextRoomIndex,
   parseFrame,
   readActiveRoomId,
+  removeOnlineUser,
   removeRoom,
+  replaceOnlineUsers,
   typingIndicatorText,
   updateTypingUsers,
   updateVoicePresence,
@@ -231,7 +234,43 @@ describe("parseFrame", () => {
     expect(event).toMatchObject({ action: "updated", content: "oi editado" });
   });
 
-  it("parses room lifecycle frames", () => {
+  it("parses room.created on the global app:rooms topic", () => {
+    const created = messageEvent({
+      v: 1,
+      type: "room.created",
+      topic: "app:rooms",
+      ts: wsTimestamp,
+      data: { id: wsRoomId, name: "nova-sala", type: "voice", created_at: wsTimestamp },
+    });
+
+    expect(parseFrame(created)).toMatchObject({
+      type: "room",
+      action: "created",
+      id: wsRoomId,
+      name: "nova-sala",
+      room_type: "voice",
+      created_at: wsTimestamp,
+    });
+  });
+
+  it("parses room.created on any topic", () => {
+    const created = messageEvent({
+      v: 1,
+      type: "room.created",
+      topic: `room:${wsRoomId}`,
+      ts: wsTimestamp,
+      data: { id: wsRoomId, name: "outra", type: "text", created_at: wsTimestamp },
+    });
+
+    expect(parseFrame(created)).toMatchObject({
+      type: "room",
+      action: "created",
+      id: wsRoomId,
+      created_at: wsTimestamp,
+    });
+  });
+
+  it("parses room.updated on the per-room topic", () => {
     const updated = messageEvent({
       v: 1,
       type: "room.updated",
@@ -239,16 +278,32 @@ describe("parseFrame", () => {
       ts: wsTimestamp,
       data: { id: wsRoomId, name: "geral", type: "text", created_at: wsTimestamp },
     });
-    const deleted = messageEvent({
+
+    expect(parseFrame(updated)).toMatchObject({
+      type: "room",
+      action: "updated",
+      id: wsRoomId,
+      name: "geral",
+      created_at: wsTimestamp,
+    });
+  });
+
+  it("parses room.updated on the global app:rooms topic", () => {
+    const updated = messageEvent({
       v: 1,
-      type: "room.deleted",
-      topic: `room:${wsRoomId}`,
+      type: "room.updated",
+      topic: "app:rooms",
       ts: wsTimestamp,
-      data: { id: wsRoomId, is_mod: true },
+      data: { id: wsRoomId, name: "global-update", type: "voice", created_at: wsTimestamp },
     });
 
-    expect(parseFrame(updated)).toMatchObject({ type: "room", action: "updated" });
-    expect(parseFrame(deleted)).toMatchObject({ type: "room", action: "deleted" });
+    expect(parseFrame(updated)).toMatchObject({
+      type: "room",
+      action: "updated",
+      id: wsRoomId,
+      name: "global-update",
+      created_at: wsTimestamp,
+    });
   });
 
   it("parses typing frames", () => {
@@ -300,6 +355,29 @@ describe("parseFrame", () => {
     });
     expect(() => parseFrame(raw)).toThrow("evento WebSocket incompatível");
   });
+
+  it.each(["presence.snapshot", "user.online", "user.offline"] as const)(
+    "accepts %s frame on __presence__ topic",
+    (type) => {
+      const data =
+        type === "presence.snapshot"
+          ? [{ user_id: wsUserId, username: "luan" }]
+          : { user_id: wsUserId, username: "luan" };
+      const raw = messageEvent({
+        v: 1,
+        type,
+        topic: "__presence__",
+        ts: wsTimestamp,
+        data,
+      });
+      expect(parseFrame(raw)).toMatchObject({
+        type,
+        ...(type === "presence.snapshot"
+          ? { users: [{ userId: wsUserId, username: "luan" }] }
+          : { userId: wsUserId, username: "luan" }),
+      });
+    },
+  );
 
   it("rejects a frame larger than the limit", () => {
     const raw = {
@@ -401,5 +479,48 @@ describe("voice presence", () => {
     expect(updateVoicePresence({ r1: [participant] }, { ...snapshot, participants: [] })).toEqual(
       {},
     );
+  });
+});
+
+describe("online users", () => {
+  const luan = { userId: "u1", username: "Luan" };
+  const bia = { userId: "u2", username: "Bia" };
+
+  it("adds a new online user", () => {
+    expect(addOnlineUser({}, luan)).toEqual({ u1: luan });
+  });
+
+  it("does not duplicate an existing user", () => {
+    const state = { u1: luan };
+    expect(addOnlineUser(state, luan)).toBe(state);
+  });
+
+  it("adds multiple users", () => {
+    const state = addOnlineUser(addOnlineUser({}, luan), bia);
+    expect(state).toEqual({ u1: luan, u2: bia });
+  });
+
+  it("removes an existing online user", () => {
+    const state = { u1: luan, u2: bia };
+    expect(removeOnlineUser(state, "u1")).toEqual({ u2: bia });
+  });
+
+  it("does nothing when removing a non-existent user", () => {
+    const state = { u1: luan };
+    expect(removeOnlineUser(state, "u2")).toBe(state);
+  });
+
+  it("replaces all online users with a snapshot", () => {
+    const state = replaceOnlineUsers([luan, bia]);
+    expect(state).toEqual({ u1: luan, u2: bia });
+  });
+
+  it("returns an empty map for an empty snapshot", () => {
+    expect(replaceOnlineUsers([])).toEqual({});
+  });
+
+  it("keeps the last entry when the snapshot has duplicates", () => {
+    const updated = { ...luan, username: "Luan atualizado" };
+    expect(replaceOnlineUsers([luan, updated])).toEqual({ u1: updated });
   });
 });

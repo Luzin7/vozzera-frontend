@@ -10,6 +10,7 @@ type Props = {
   name: string;
   volume: number;
   screenShareVolume: number;
+  deafen: boolean;
   locallyMuted: boolean;
   screenShareLocallyMuted: boolean;
   isMuted: boolean;
@@ -77,6 +78,7 @@ export function ParticipantMenu({
   name,
   volume,
   screenShareVolume,
+  deafen,
   locallyMuted,
   screenShareLocallyMuted,
   isMuted,
@@ -111,7 +113,7 @@ export function ParticipantMenu({
               {isStreaming && <MonitorUp className="h-3.5 w-3.5 shrink-0 text-primary" />}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {participantStatusLabelFor(locallyMuted, isSpeaking)}
+              {participantStatusLabelFor(deafen || locallyMuted, isSpeaking)}
             </p>
           </div>
         </div>
@@ -119,8 +121,8 @@ export function ParticipantMenu({
         <div className="space-y-3 border-t border-border px-3.5 py-3">
           <VolumeControl
             label="Voz"
-            volume={volume}
-            muted={locallyMuted}
+            volume={deafen ? 0 : volume}
+            muted={deafen || locallyMuted}
             onSetVolume={onSetVolume}
             onToggleMute={onToggleLocalMute}
             icon={<Volume2 className="h-4 w-4" />}
@@ -128,8 +130,8 @@ export function ParticipantMenu({
           {isStreaming && (
             <VolumeControl
               label="Transmissão"
-              volume={screenShareVolume}
-              muted={screenShareLocallyMuted}
+              volume={deafen ? 0 : screenShareVolume}
+              muted={deafen || screenShareLocallyMuted}
               onSetVolume={onSetScreenShareVolume}
               onToggleMute={onToggleLocalScreenShareMute}
               icon={<MonitorUp className="h-4 w-4" />}
