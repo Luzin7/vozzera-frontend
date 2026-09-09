@@ -47,12 +47,9 @@ export function firstTextRoom(rooms: Room[]): Room | undefined {
   return rooms.find((room) => room.type === "text");
 }
 
-export function sortRooms(rooms: Room[]): Room[] {
-  return [...rooms].sort((first, second) => {
-    const nameOrder = first.name.localeCompare(second.name, "pt-BR", { sensitivity: "base" });
-    if (nameOrder !== 0) return nameOrder;
-    return first.id.localeCompare(second.id);
-  });
+export function upsertRoom(rooms: Room[], room: Room): Room[] {
+  if (!rooms.some((current) => current.id === room.id)) return [...rooms, room];
+  return rooms.map((current) => (current.id === room.id ? { ...current, ...room } : current));
 }
 
 export function dateGroupLabelFor(timestamp: string, now = new Date()): string {
@@ -92,13 +89,6 @@ export function clearActiveRoomId(storage: ActiveRoomStorage | null): void {
   } catch {
     // best-effort
   }
-}
-
-export function upsertRoom(rooms: Room[], room: Room): Room[] {
-  if (!rooms.some((current) => current.id === room.id)) return sortRooms([...rooms, room]);
-  return sortRooms(
-    rooms.map((current) => (current.id === room.id ? { ...current, ...room } : current)),
-  );
 }
 
 export function removeRoom<T>(state: Record<string, T>, roomId: string): Record<string, T> {

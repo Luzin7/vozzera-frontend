@@ -26,7 +26,6 @@ import {
   removeOnlineUser,
   removeRoom,
   replaceOnlineUsers,
-  sortRooms,
   totalUnread,
   updateTypingUsers,
   updateVoicePresence,
@@ -127,9 +126,7 @@ export function useChat() {
           staleTime: 5 * 60_000,
         }),
       ]);
-      const sortedRooms = sortRooms(nextRooms);
-      setRooms(sortedRooms);
-      queryClient.setQueryData<Room[]>(["rooms"], sortedRooms);
+      setRooms(nextRooms);
       setUsername(currentUser.username);
       setRole(currentUser.role);
       setEmail(currentUser.email);
