@@ -765,12 +765,7 @@ export function useVoice() {
     if (status !== "connected") return;
 
     const updateBackgroundMicrophone = async () => {
-      const shouldRelease = shouldReleaseMicrophoneInBackground(
-        document.hidden,
-        navigator.userAgent,
-        navigator.platform,
-        navigator.maxTouchPoints,
-      );
+      const shouldRelease = shouldReleaseMicrophoneInBackground(document.hidden);
 
       if (!shouldRelease) {
         if (!restoreBackgroundMicRef.current) return;
