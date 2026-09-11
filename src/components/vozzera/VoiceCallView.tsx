@@ -26,6 +26,7 @@ type Props = {
 
 function gridLayoutFor(participantCount: number): string {
   if (participantCount > 4) return "max-w-7xl sm:grid-cols-2 xl:grid-cols-3";
+  if (participantCount === 3) return "max-w-7xl sm:grid-cols-2 md:grid-cols-3";
   if (participantCount > 1) return "max-w-6xl sm:grid-cols-2";
   return "max-w-4xl";
 }
@@ -80,9 +81,11 @@ export function VoiceCallView({
                     key={name}
                     className={`relative flex aspect-video w-full items-center justify-center rounded-xl border bg-card p-6 transition-colors ${
                       isSolo ? "max-w-4xl" : ""
-                    } ${centersLastParticipant ? "sm:col-span-2 sm:mx-auto sm:w-1/2" : ""} ${
-                      isSpeaking ? "border-primary" : "border-border"
-                    }`}
+                    } ${
+                      centersLastParticipant
+                        ? "sm:col-span-2 sm:mx-auto sm:w-1/2 md:col-span-1 md:w-full"
+                        : ""
+                    } ${isSpeaking ? "border-primary" : "border-border"}`}
                   >
                     <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground">
                       {initials(name)}
