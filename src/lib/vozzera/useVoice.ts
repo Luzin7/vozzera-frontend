@@ -41,7 +41,7 @@ type LiveKitRoom = import("livekit-client").Room;
 type LocalAudioTrack = import("livekit-client").LocalAudioTrack;
 type TrackSource = import("livekit-client").Track.Source;
 
-export type { ScreenShareQuality } from "./use-screen-share";
+export type { DegradationPreference, FpsSeverity, ScreenShareQuality } from "./use-screen-share";
 
 export type ScreenShareTrack = import("./use-screen-share").ScreenShareTrack;
 
@@ -294,6 +294,7 @@ export function useVoice() {
     screenShares,
     localPreview,
     setScreenShare: setScreenShareForRoom,
+    changeScreenShareQuality,
     onTrackSubscribed,
     onTrackUnsubscribed,
     onLocalTrackUnpublished,
@@ -782,6 +783,12 @@ export function useVoice() {
     [setScreenShareForRoom],
   );
 
+  const reduceScreenQuality = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    await changeScreenShareQuality(room, { width: 1280, height: 720, frameRate: 30 });
+  }, [changeScreenShareQuality]);
+
   return {
     status,
     activeRoomId,
@@ -819,6 +826,7 @@ export function useVoice() {
     setLocalScreenShareMute,
     toggleLocalScreenShareMute,
     setScreenShare,
+    reduceScreenQuality,
     toggleDeafen,
     listenToParticipant,
     listenToParticipantScreenShare,

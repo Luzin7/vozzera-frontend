@@ -14,7 +14,7 @@ import {
   VIDEO_PLAYBACK_DELAY_MS,
 } from "./voice";
 
-export type { ScreenShareQuality } from "./voice";
+export type { DegradationPreference, FpsSeverity, ScreenShareQuality } from "./voice";
 
 export type ScreenShareTrack = LocalVideoTrack | RemoteVideoTrack;
 
@@ -32,6 +32,10 @@ export type ScreenShareResult = {
     room: import("livekit-client").Room,
     enabled: boolean,
     quality?: import("./voice").ScreenShareQuality,
+  ) => Promise<void>;
+  changeScreenShareQuality: (
+    room: import("livekit-client").Room,
+    quality: import("./voice").ScreenShareQuality,
   ) => Promise<void>;
   onTrackSubscribed: (
     track: import("livekit-client").Track,
@@ -74,6 +78,37 @@ export function useScreenShare(): ScreenShareResult {
 
       const publishQuality = quality ?? { width: 1920, height: 1080, frameRate: 60 };
       const publishOptions = screenSharePublishOptions(publishQuality) as TrackPublishOptions;
+      const publication = await room.localParticipant.setScreenShareEnabled(
+        true,
+        options,
+        publishOptions,
+      );
+      const track = publication?.videoTrack as LocalVideoTrack | undefined;
+      if (track?.mediaStreamTrack) track.mediaStreamTrack.contentHint = "motion";
+      const name = room.localParticipant.name || room.localParticipant.identity;
+
+      setSharingEnabled(true);
+      setLocalPreview(track ? { id: "local", name, track } : null);
+    },
+    [],
+  );
+
+  const changeScreenShareQuality = useCallback(
+    async (room: import("livekit-client").Room, quality: import("./voice").ScreenShareQuality) => {
+      await room.localParticipant.setScreenShareEnabled(false);
+      setSharingEnabled(false);
+      setLocalPreview(null);
+
+      const options: ScreenShareCaptureOptions = {
+        audio: screenShareAudioCaptureOptions(),
+        resolution: {
+          width: quality.width,
+          height: quality.height,
+          frameRate: quality.frameRate,
+        },
+      };
+
+      const publishOptions = screenSharePublishOptions(quality) as TrackPublishOptions;
       const publication = await room.localParticipant.setScreenShareEnabled(
         true,
         options,
@@ -136,6 +171,7 @@ export function useScreenShare(): ScreenShareResult {
     screenShares,
     localPreview,
     setScreenShare,
+    changeScreenShareQuality,
     onTrackSubscribed,
     onTrackUnsubscribed,
     onLocalTrackUnpublished,

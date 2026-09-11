@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ScreenShareQuality } from "@/lib/vozzera/useVoice";
+import type { DegradationPreference, ScreenShareQuality } from "@/lib/vozzera/useVoice";
 
 type Resolution = "720p" | "1080p";
 type FrameRate = "30" | "60";
@@ -38,11 +38,12 @@ export function ScreenShareDialog({
 }>) {
   const [resolution, setResolution] = useState<Resolution>("1080p");
   const [frameRate, setFrameRate] = useState<FrameRate>("30");
+  const [qualityMode, setQualityMode] = useState<DegradationPreference>("maintain-framerate");
 
   const start = () => {
     const size = resolutionSize[resolution];
 
-    onStart({ ...size, frameRate: Number(frameRate) });
+    onStart({ ...size, frameRate: Number(frameRate), degradationPreference: qualityMode });
     onOpenChange(false);
   };
 
@@ -79,6 +80,38 @@ export function ScreenShareDialog({
                 <SelectItem value="60">60 fps</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Modo de qualidade</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setQualityMode("maintain-framerate")}
+                className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-sm transition-colors ${
+                  qualityMode === "maintain-framerate"
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <span className="font-medium">🫸 Fluidez</span>
+                <span className="text-xs">Prioriza FPS sobre nitidez</span>
+                <span className="text-xs text-muted-foreground">Recomendado para jogos</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQualityMode("maintain-resolution")}
+                className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-sm transition-colors ${
+                  qualityMode === "maintain-resolution"
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <span className="font-medium">🎯 Nitidez</span>
+                <span className="text-xs">Prioriza nitidez sobre FPS</span>
+                <span className="text-xs text-muted-foreground">Recomendado para docs/slides</span>
+              </button>
+            </div>
           </div>
         </div>
 

@@ -107,6 +107,7 @@ function Index() {
     disconnect,
     setMicEnabled,
     setScreenShare,
+    reduceScreenQuality,
     ensureKrispLoaded,
     toggleDeafen,
   } = voice;
@@ -425,6 +426,7 @@ function Index() {
               localPreview={voice.localPreview}
               onToggleMic={handleToggleMic}
               onToggleScreenShare={handleToggleScreenShare}
+              onReduceLocalQuality={reduceScreenQuality}
               onLeave={handleLeaveVoice}
             />
           </Suspense>
