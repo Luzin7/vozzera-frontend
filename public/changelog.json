@@ -1,7 +1,13 @@
 {
-  "version": "v1.12.0",
-  "releasedAt": "2026-09-09",
+  "version": "v1.13.0",
+  "releasedAt": "2026-09-11",
   "items": [
+    {
+      "title": "feat(voice): monitoramento de FPS, modo qualidade e sugestão adaptativa no screen share",
+      "kind": "feat",
+      "pr": 146,
+      "summary": ""
+    },
     {
       "title": "feat(chat): presença online global com evento user.online/offline e snapshot",
       "kind": "feat",
