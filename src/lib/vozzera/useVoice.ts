@@ -20,9 +20,14 @@ import {
   microphonePublishOptions,
   participantNamesToMuteForSelectiveListening,
   readMicDeviceId,
+  readPushToTalkBinding,
+  readPushToTalkEnabled,
   screenShareAdaptiveStreamSettings,
+  shouldHandlePushToTalk,
   VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
+  writePushToTalkBinding,
+  writePushToTalkEnabled,
 } from "./voice";
 import type { MicDevice } from "./voice";
 import {
@@ -45,6 +50,13 @@ export type ScreenShareTrack = import("./use-screen-share").ScreenShareTrack;
 export type ScreenShare = ScreenShareType;
 
 const VOICE_RELEASE_DELAY_MS = 40;
+
+function editableDetailsFor(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return { tagName: undefined, contentEditable: false };
+  }
+  return { tagName: target.tagName, contentEditable: target.isContentEditable };
+}
 
 type RoomEventHandlerCtx = {
   room: LiveKitRoom;
@@ -256,6 +268,13 @@ export function useVoice() {
     return readMicDeviceId(localStorage);
   });
   const [selfMonitor, setSelfMonitor] = useState(false);
+  const [pushToTalkEnabled, setPushToTalkEnabledState] = useState(() => {
+    if (typeof localStorage === "undefined") return false;
+    return readPushToTalkEnabled(localStorage);
+  });
+  const [pushToTalkBinding, setPushToTalkBindingState] = useState(() =>
+    readPushToTalkBinding(typeof localStorage === "undefined" ? null : localStorage),
+  );
   const [error, setError] = useState<string | null>(null);
   const [deafen, setDeafen] = useState(false);
   const [localMicTrack, setLocalMicTrack] = useState<LocalAudioTrack | null>(null);
@@ -275,6 +294,10 @@ export function useVoice() {
   deafenRef.current = deafen;
   const screenShareAudioSourceRef = useRef<unknown>(null);
   const deafenMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
+  const pushToTalkTransitionRef = useRef<Promise<void>>(Promise.resolve());
+  const pushToTalkPressedRef = useRef(false);
+  const pushToTalkEnabledRef = useRef(pushToTalkEnabled);
+  const pushToTalkBindingRef = useRef(pushToTalkBinding);
   const notificationsEnabledRef = useRef(
     typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
   );
@@ -283,6 +306,8 @@ export function useVoice() {
   );
 
   selectedDeviceIdRef.current = selectedMic;
+  pushToTalkEnabledRef.current = pushToTalkEnabled;
+  pushToTalkBindingRef.current = pushToTalkBinding;
 
   const {
     volumes,
@@ -551,7 +576,11 @@ export function useVoice() {
           microphonePublishOptions(),
         );
 
-        setMicOn(true);
+        if (pushToTalkEnabledRef.current) {
+          await room.localParticipant.setMicrophoneEnabled(false);
+        }
+
+        setMicOn(!pushToTalkEnabledRef.current);
         syncLocalMicTrack(room);
         micPermissionRef.current = true;
         setStatus("connected");
@@ -637,6 +666,37 @@ export function useVoice() {
     },
     [setMicEnabled],
   );
+
+  const queuePushToTalkMicrophoneState = useCallback(
+    (enabled: boolean) => {
+      const transition = pushToTalkTransitionRef.current.then(() => setMicEnabled(enabled));
+      pushToTalkTransitionRef.current = transition.then(
+        () => undefined,
+        () => setError("Não consegui alterar o microfone."),
+      );
+    },
+    [setMicEnabled],
+  );
+
+  const setPushToTalkEnabled = useCallback(
+    (enabled: boolean) => {
+      pushToTalkEnabledRef.current = enabled;
+      pushToTalkPressedRef.current = false;
+      setPushToTalkEnabledState(enabled);
+      writePushToTalkEnabled(typeof localStorage === "undefined" ? null : localStorage, enabled);
+      if (status === "connected") {
+        queuePushToTalkMicrophoneState(!enabled && !deafenRef.current);
+      }
+    },
+    [queuePushToTalkMicrophoneState, status],
+  );
+
+  const setPushToTalkBinding = useCallback((code: string, label: string) => {
+    const binding = { code, label };
+    pushToTalkBindingRef.current = binding;
+    setPushToTalkBindingState(binding);
+    writePushToTalkBinding(typeof localStorage === "undefined" ? null : localStorage, binding);
+  }, []);
 
   const globalMuteActive =
     deafen ||
@@ -741,6 +801,46 @@ export function useVoice() {
   // --- Effects ---
 
   useEffect(() => {
+    if (!pushToTalkEnabled || status !== "connected") return;
+
+    const releaseMicrophone = () => {
+      if (!pushToTalkPressedRef.current) return;
+      pushToTalkPressedRef.current = false;
+      queuePushToTalkMicrophoneState(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const { tagName, contentEditable } = editableDetailsFor(event.target);
+      if (
+        !shouldHandlePushToTalk(
+          event.code,
+          pushToTalkBindingRef.current.code,
+          event.repeat,
+          tagName,
+          contentEditable,
+        )
+      )
+        return;
+      if (deafenRef.current) return;
+      pushToTalkPressedRef.current = true;
+      queuePushToTalkMicrophoneState(true);
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== pushToTalkBindingRef.current.code) return;
+      releaseMicrophone();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", releaseMicrophone);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", releaseMicrophone);
+      releaseMicrophone();
+    };
+  }, [pushToTalkEnabled, queuePushToTalkMicrophoneState, status]);
+
+  useEffect(() => {
     if (status !== "connected") return;
     const room = roomRef.current;
     if (!room) return;
@@ -820,6 +920,8 @@ export function useVoice() {
     noiseFilter,
     krispSupported,
     selfMonitor,
+    pushToTalkEnabled,
+    pushToTalkBinding,
     mutedParticipants,
     screenShareMutedParticipants,
     speakingNames,
@@ -836,6 +938,8 @@ export function useVoice() {
     setMicDevice,
     setNoiseFilter,
     setSelfMonitor,
+    setPushToTalkEnabled,
+    setPushToTalkBinding,
     setParticipantVolume,
     setScreenShareVolume,
     setLocalMute,
