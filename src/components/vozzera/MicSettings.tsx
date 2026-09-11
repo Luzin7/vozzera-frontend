@@ -1,3 +1,6 @@
+import { useState, type KeyboardEvent } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -7,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import type { MicDevice } from "@/lib/vozzera/voice";
+import { pushToTalkLabelFor, type MicDevice } from "@/lib/vozzera/voice";
 
 type Props = {
   micDevices: MicDevice[];
@@ -15,9 +18,13 @@ type Props = {
   noiseFilter: boolean;
   krispSupported: boolean | null;
   selfMonitor: boolean;
+  pushToTalkEnabled: boolean;
+  pushToTalkKeyLabel: string;
   onSelectDevice: (deviceId: string) => void;
   onToggleNoiseFilter: (enabled: boolean) => void;
   onToggleSelfMonitor: (enabled: boolean) => void;
+  onTogglePushToTalk: (enabled: boolean) => void;
+  onPushToTalkKeyChange: (code: string, label: string) => void;
 };
 
 export function MicSettings({
@@ -26,11 +33,24 @@ export function MicSettings({
   noiseFilter,
   krispSupported,
   selfMonitor,
+  pushToTalkEnabled,
+  pushToTalkKeyLabel,
   onSelectDevice,
   onToggleNoiseFilter,
   onToggleSelfMonitor,
+  onTogglePushToTalk,
+  onPushToTalkKeyChange,
 }: Readonly<Props>) {
   const hasSelectedDevice = micDevices.some((device) => device.deviceId === selectedDeviceId);
+  const [capturingPushToTalkKey, setCapturingPushToTalkKey] = useState(false);
+
+  const capturePushToTalkKey = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!capturingPushToTalkKey || event.repeat) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onPushToTalkKeyChange(event.code, pushToTalkLabelFor(event.key, event.code));
+    setCapturingPushToTalkKey(false);
+  };
 
   return (
     <div className="space-y-5">
@@ -84,6 +104,38 @@ export function MicSettings({
           <p className="mt-0.5 text-xs text-muted-foreground">Use fones para evitar eco.</p>
         </div>
         <Switch id="self-monitor" checked={selfMonitor} onCheckedChange={onToggleSelfMonitor} />
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <Label htmlFor="push-to-talk">Push-to-talk</Label>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Segure {pushToTalkKeyLabel} para falar. Ao soltar, o microfone volta a ficar mudo.
+          </p>
+        </div>
+        <Switch
+          id="push-to-talk"
+          checked={pushToTalkEnabled}
+          onCheckedChange={onTogglePushToTalk}
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <Label>Tecla do push-to-talk</Label>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {capturingPushToTalkKey ? "Pressione qualquer tecla." : "Clique para trocar o atalho."}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-w-24"
+          onClick={() => setCapturingPushToTalkKey(true)}
+          onKeyDown={capturePushToTalkKey}
+        >
+          {capturingPushToTalkKey ? "Aguardando…" : pushToTalkKeyLabel}
+        </Button>
       </div>
     </div>
   );

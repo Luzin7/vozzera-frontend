@@ -20,18 +20,19 @@ import {
   microphonePublishOptions,
   participantNamesToMuteForSelectiveListening,
   readMicDeviceId,
+  readPushToTalkBinding,
+  readPushToTalkEnabled,
   screenShareAdaptiveStreamSettings,
   shouldReleaseMicrophoneInBackground,
+  shouldHandlePushToTalk,
   VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
+  writePushToTalkBinding,
+  writePushToTalkEnabled,
 } from "./voice";
 import type { MicDevice } from "./voice";
-import {
-  canNotify,
-  initialNotificationsEnabled,
-  playMessageSound,
-  readSoundEnabled,
-} from "./notifications";
+import { canNotify, initialNotificationsEnabled } from "./notifications";
+import { playVoiceActionSound } from "./voice-sounds";
 
 export type VoiceStatus = "idle" | "connecting" | "connected";
 
@@ -47,11 +48,17 @@ export type ScreenShare = ScreenShareType;
 
 const VOICE_RELEASE_DELAY_MS = 40;
 
+function editableDetailsFor(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return { tagName: undefined, contentEditable: false };
+  }
+  return { tagName: target.tagName, contentEditable: target.isContentEditable };
+}
+
 type RoomEventHandlerCtx = {
   room: LiveKitRoom;
   RoomEvent: typeof import("livekit-client").RoomEvent;
   Track: typeof import("livekit-client").Track;
-  soundEnabledRef: { readonly current: boolean };
   notificationsEnabledRef: { readonly current: boolean };
   roomRef: { current: LiveKitRoom | null };
   screenShareRef: { current: boolean };
@@ -84,7 +91,6 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     room,
     RoomEvent,
     Track,
-    soundEnabledRef,
     notificationsEnabledRef,
     roomRef,
     screenShareRef,
@@ -111,6 +117,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
     if (track.kind !== Track.Kind.Audio) {
       onTrackSubscribed(track, publication, participant);
+      if (track.source === Track.Source.ScreenShare) playVoiceActionSound("screen-share-start");
       return;
     }
 
@@ -142,6 +149,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       return;
     }
     onTrackUnsubscribed(track);
+    playVoiceActionSound("screen-share-stop");
   });
 
   room.on(RoomEvent.TrackMuted, (publication, participant) => {
@@ -218,15 +226,14 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       new Notification("Canal de voz", { body: `${name} entrou no canal` });
     }
 
-    if (typeof document !== "undefined" && document.hidden && soundEnabledRef.current) {
-      playMessageSound();
-    }
+    playVoiceActionSound("join");
   });
 
   room.on(RoomEvent.ParticipantDisconnected, (participant) => {
     const name = participant.name || participant.identity;
     removeParticipant(name);
     syncParticipants(room);
+    playVoiceActionSound("leave");
 
     if (
       typeof document !== "undefined" &&
@@ -257,6 +264,13 @@ export function useVoice() {
     return readMicDeviceId(localStorage);
   });
   const [selfMonitor, setSelfMonitor] = useState(false);
+  const [pushToTalkEnabled, setPushToTalkEnabledState] = useState(() => {
+    if (typeof localStorage === "undefined") return false;
+    return readPushToTalkEnabled(localStorage);
+  });
+  const [pushToTalkBinding, setPushToTalkBindingState] = useState(() =>
+    readPushToTalkBinding(typeof localStorage === "undefined" ? null : localStorage),
+  );
   const [error, setError] = useState<string | null>(null);
   const [deafen, setDeafen] = useState(false);
   const [localMicTrack, setLocalMicTrack] = useState<LocalAudioTrack | null>(null);
@@ -279,15 +293,18 @@ export function useVoice() {
   const backgroundMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const restoreBackgroundMicRef = useRef(false);
   const micOnRef = useRef(micOn);
+  const pushToTalkTransitionRef = useRef<Promise<void>>(Promise.resolve());
+  const pushToTalkPressedRef = useRef(false);
+  const pushToTalkEnabledRef = useRef(pushToTalkEnabled);
+  const pushToTalkBindingRef = useRef(pushToTalkBinding);
   const notificationsEnabledRef = useRef(
     typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
-  );
-  const soundEnabledRef = useRef(
-    typeof localStorage === "undefined" ? false : readSoundEnabled(localStorage),
   );
 
   selectedDeviceIdRef.current = selectedMic;
   micOnRef.current = micOn;
+  pushToTalkEnabledRef.current = pushToTalkEnabled;
+  pushToTalkBindingRef.current = pushToTalkBinding;
 
   const {
     volumes,
@@ -409,6 +426,7 @@ export function useVoice() {
   }, []);
 
   const disconnect = useCallback(async () => {
+    const wasConnected = roomRef.current !== null;
     connectionAttemptRef.current += 1;
     await roomRef.current?.disconnect();
     await closeVoiceAudioContext();
@@ -416,6 +434,7 @@ export function useVoice() {
     setStatus("idle");
     setActiveRoomId(null);
     resetRoomState();
+    if (wasConnected) playVoiceActionSound("leave");
   }, [closeVoiceAudioContext, resetRoomState]);
 
   const syncActiveSpeakerNames = useCallback((activeNames: string[]) => {
@@ -501,7 +520,6 @@ export function useVoice() {
           room,
           RoomEvent,
           Track,
-          soundEnabledRef,
           notificationsEnabledRef,
           roomRef,
           screenShareRef,
@@ -556,12 +574,17 @@ export function useVoice() {
           microphonePublishOptions(),
         );
 
-        setMicOn(true);
+        if (pushToTalkEnabledRef.current) {
+          await room.localParticipant.setMicrophoneEnabled(false);
+        }
+
+        setMicOn(!pushToTalkEnabledRef.current);
         syncLocalMicTrack(room);
         micPermissionRef.current = true;
         setStatus("connected");
         setActiveRoomId(roomId);
         syncParticipants(room);
+        playVoiceActionSound("join");
       } catch (err) {
         if (connectingRoom && roomRef.current === connectingRoom) roomRef.current = null;
         await connectingRoom?.disconnect().catch(() => undefined);
@@ -608,6 +631,7 @@ export function useVoice() {
       if (enabled && track) await attachKrispNoiseFilter(track);
       syncLocalMicTrack(room);
       setMicOn(enabled);
+      playVoiceActionSound(enabled ? "unmute" : "mute");
     },
     [attachKrispNoiseFilter, syncLocalMicTrack],
   );
@@ -642,6 +666,37 @@ export function useVoice() {
     },
     [setMicEnabled],
   );
+
+  const queuePushToTalkMicrophoneState = useCallback(
+    (enabled: boolean) => {
+      const transition = pushToTalkTransitionRef.current.then(() => setMicEnabled(enabled));
+      pushToTalkTransitionRef.current = transition.then(
+        () => undefined,
+        () => setError("Não consegui alterar o microfone."),
+      );
+    },
+    [setMicEnabled],
+  );
+
+  const setPushToTalkEnabled = useCallback(
+    (enabled: boolean) => {
+      pushToTalkEnabledRef.current = enabled;
+      pushToTalkPressedRef.current = false;
+      setPushToTalkEnabledState(enabled);
+      writePushToTalkEnabled(typeof localStorage === "undefined" ? null : localStorage, enabled);
+      if (status === "connected") {
+        queuePushToTalkMicrophoneState(!enabled && !deafenRef.current);
+      }
+    },
+    [queuePushToTalkMicrophoneState, status],
+  );
+
+  const setPushToTalkBinding = useCallback((code: string, label: string) => {
+    const binding = { code, label };
+    pushToTalkBindingRef.current = binding;
+    setPushToTalkBindingState(binding);
+    writePushToTalkBinding(typeof localStorage === "undefined" ? null : localStorage, binding);
+  }, []);
 
   const globalMuteActive =
     deafen ||
@@ -746,6 +801,46 @@ export function useVoice() {
   // --- Effects ---
 
   useEffect(() => {
+    if (!pushToTalkEnabled || status !== "connected") return;
+
+    const releaseMicrophone = () => {
+      if (!pushToTalkPressedRef.current) return;
+      pushToTalkPressedRef.current = false;
+      queuePushToTalkMicrophoneState(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const { tagName, contentEditable } = editableDetailsFor(event.target);
+      if (
+        !shouldHandlePushToTalk(
+          event.code,
+          pushToTalkBindingRef.current.code,
+          event.repeat,
+          tagName,
+          contentEditable,
+        )
+      )
+        return;
+      if (deafenRef.current) return;
+      pushToTalkPressedRef.current = true;
+      queuePushToTalkMicrophoneState(true);
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== pushToTalkBindingRef.current.code) return;
+      releaseMicrophone();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", releaseMicrophone);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", releaseMicrophone);
+      releaseMicrophone();
+    };
+  }, [pushToTalkEnabled, queuePushToTalkMicrophoneState, status]);
+
+  useEffect(() => {
     if (status !== "connected") return;
     const room = roomRef.current;
     if (!room) return;
@@ -840,6 +935,7 @@ export function useVoice() {
       const room = roomRef.current;
       if (!room) return;
       await setScreenShareForRoom(room, enabled, quality);
+      playVoiceActionSound(enabled ? "screen-share-start" : "screen-share-stop");
     },
     [setScreenShareForRoom],
   );
@@ -864,6 +960,8 @@ export function useVoice() {
     noiseFilter,
     krispSupported,
     selfMonitor,
+    pushToTalkEnabled,
+    pushToTalkBinding,
     mutedParticipants,
     screenShareMutedParticipants,
     speakingNames,
@@ -880,6 +978,8 @@ export function useVoice() {
     setMicDevice,
     setNoiseFilter,
     setSelfMonitor,
+    setPushToTalkEnabled,
+    setPushToTalkBinding,
     setParticipantVolume,
     setScreenShareVolume,
     setLocalMute,

@@ -21,6 +21,7 @@ import {
   clearUnread,
   expireTypingUsers,
   firstTextRoom,
+  firstUnreadMessageId,
   incrementUnread,
   readActiveRoomId,
   removeOnlineUser,
@@ -64,6 +65,10 @@ export function useChat() {
   const [banner, setBanner] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [unreadMarker, setUnreadMarker] = useState<{
+    roomId: string;
+    messageId: string;
+  } | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUsers>({});
   const [voicePresence, setVoicePresence] = useState<VoicePresence>({});
   const [onlineUsers, setOnlineUsers] = useState<OnlineUsers>({});
@@ -97,6 +102,7 @@ export function useChat() {
     setCurrentUserId(null);
     setActiveRoom(null);
     setMessages({});
+    setUnreadMarker(null);
     setTypingUsers({});
     setVoicePresence({});
     setOnlineUsers({});
@@ -152,6 +158,7 @@ export function useChat() {
     setTypingUsers((prev) => removeRoom(prev, roomId));
     setVoicePresence((prev) => removeRoom(prev, roomId));
     setActiveRoom((current) => (current?.id === roomId ? null : current));
+    setUnreadMarker((current) => (current?.roomId === roomId ? null : current));
   }, []);
 
   const handleRoomEvent = useCallback(
@@ -180,55 +187,62 @@ export function useChat() {
     [queryClient, removeRoomLocally],
   );
 
-  const handleMessageEvent = useCallback((event: Extract<OutboundEvent, { type: "message" }>) => {
-    if (event.action === "deleted") {
-      setMessages((prev) => ({
-        ...prev,
-        [event.room_id]: (prev[event.room_id] ?? []).filter((message) => message.id !== event.id),
-      }));
-      return;
-    }
-
-    if (event.action === "created") {
-      setMessages((prev) => appendMessage(prev, fromEvent(event)));
-
-      if (event.room_id !== activeRoomRef.current?.id) {
-        setUnread((prev) => incrementUnread(prev, event.room_id));
-
-        if (
-          typeof document !== "undefined" &&
-          canNotify(notificationsEnabledRef.current, document.hidden)
-        ) {
-          const room = roomsRef.current.find((r) => r.id === event.room_id);
-
-          new Notification(`# ${room?.name ?? "Sala"}`, {
-            body: `${event.username ?? "Alguém"}: ${event.content ?? ""}`,
-          });
-        }
-
-        if (typeof document !== "undefined" && soundEnabledRef.current) {
-          playMessageSound();
-        }
+  const handleMessageEvent = useCallback(
+    (event: Extract<OutboundEvent, { type: "message" }>) => {
+      if (event.action === "deleted") {
+        setMessages((prev) => ({
+          ...prev,
+          [event.room_id]: (prev[event.room_id] ?? []).filter((message) => message.id !== event.id),
+        }));
+        return;
       }
 
-      return;
-    }
+      if (event.action === "created") {
+        setMessages((prev) => appendMessage(prev, fromEvent(event)));
 
-    if (event.action === "updated") {
-      setMessages((prev) => ({
-        ...prev,
-        [event.room_id]: (prev[event.room_id] ?? []).map((message) =>
-          message.id === event.id
-            ? {
-                ...message,
-                content: event.content,
-                updatedAt: event.updated_at ? event.updated_at : message.updatedAt,
-              }
-            : message,
-        ),
-      }));
-    }
-  }, []);
+        if (event.room_id !== activeRoomRef.current?.id) {
+          setUnread((prev) => incrementUnread(prev, event.room_id));
+
+          if (
+            typeof document !== "undefined" &&
+            canNotify(notificationsEnabledRef.current, document.hidden)
+          ) {
+            const room = roomsRef.current.find((r) => r.id === event.room_id);
+
+            new Notification(`# ${room?.name ?? "Sala"}`, {
+              body: `${event.username ?? "Alguém"}: ${event.content ?? ""}`,
+            });
+          }
+
+          if (typeof document !== "undefined" && soundEnabledRef.current) {
+            playMessageSound();
+          }
+        }
+
+        if (event.room_id === activeRoomRef.current?.id && event.user_id === currentUserId) {
+          setUnreadMarker(null);
+        }
+
+        return;
+      }
+
+      if (event.action === "updated") {
+        setMessages((prev) => ({
+          ...prev,
+          [event.room_id]: (prev[event.room_id] ?? []).map((message) =>
+            message.id === event.id
+              ? {
+                  ...message,
+                  content: event.content,
+                  updatedAt: event.updated_at ? event.updated_at : message.updatedAt,
+                }
+              : message,
+          ),
+        }));
+      }
+    },
+    [currentUserId],
+  );
 
   const handleEvent = useCallback(
     (event: OutboundEvent) => {
@@ -264,12 +278,12 @@ export function useChat() {
       }
 
       if (event.type === "user.offline") {
-        setOnlineUsers((prev) => removeOnlineUser(prev, event.userId));
+        setOnlineUsers((prev) => removeOnlineUser(prev, event.userId, event.username));
         return;
       }
 
       if (event.type === "presence.snapshot") {
-        setOnlineUsers(replaceOnlineUsers(event.users));
+        setOnlineUsers((prev) => replaceOnlineUsers(prev, event.users));
         return;
       }
 
@@ -302,7 +316,7 @@ export function useChat() {
   useEffect(() => {
     if (status !== "connecting") return;
     setVoicePresence({});
-    setOnlineUsers({});
+    setOnlineUsers((prev) => replaceOnlineUsers(prev, []));
   }, [status]);
 
   const setTyping = useCallback(
@@ -350,7 +364,14 @@ export function useChat() {
 
       setTyping(false);
       setActiveRoom(room);
+      activeRoomRef.current = room;
       writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
+      const unreadCount = unread[room.id] ?? 0;
+      const cachedMessages = messages[room.id];
+      const cachedMarkerId = cachedMessages
+        ? firstUnreadMessageId(cachedMessages, unreadCount)
+        : null;
+      setUnreadMarker(cachedMarkerId ? { roomId: room.id, messageId: cachedMarkerId } : null);
       setUnread((prev) => clearUnread(prev, room.id));
       subscribeRoom(room.id);
 
@@ -360,11 +381,16 @@ export function useChat() {
 
       try {
         const history = await listMessages(room.id, 50);
+        const nextMessages = history.map((message) => fromHistory(message, room.id));
+        const markerId = firstUnreadMessageId(nextMessages, unreadCount);
 
         setMessages((prev) => ({
           ...prev,
-          [room.id]: history.map((m) => fromHistory(m, room.id)),
+          [room.id]: nextMessages,
         }));
+        if (activeRoomRef.current?.id === room.id && markerId) {
+          setUnreadMarker({ roomId: room.id, messageId: markerId });
+        }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           setAuthed(false);
@@ -376,8 +402,12 @@ export function useChat() {
         setLoadingHistory(false);
       }
     },
-    [messages, setTyping, subscribeRoom],
+    [messages, setTyping, subscribeRoom, unread],
   );
+
+  const dismissUnreadMarker = useCallback((roomId: string) => {
+    setUnreadMarker((current) => (current?.roomId === roomId ? null : current));
+  }, []);
 
   useEffect(() => {
     if (selectedInitialRoomRef.current || activeRoom || rooms.length === 0) return;
@@ -560,6 +590,7 @@ export function useChat() {
     banner,
     loadingHistory,
     unread,
+    unreadMarker,
     typingUsers,
     voicePresence,
     socketStatus: status,
@@ -579,5 +610,6 @@ export function useChat() {
     toggleSound,
     sendMessage,
     setTyping,
+    dismissUnreadMarker,
   };
 }

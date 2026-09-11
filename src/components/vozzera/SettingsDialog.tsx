@@ -21,10 +21,14 @@ type Props = {
   noiseFilter: boolean;
   krispSupported: boolean | null;
   selfMonitor: boolean;
+  pushToTalkEnabled: boolean;
+  pushToTalkKeyLabel: string;
   soundEnabled: boolean;
   onSelectDevice: (deviceId: string) => void;
   onToggleNoiseFilter: (enabled: boolean) => void;
   onToggleSelfMonitor: (enabled: boolean) => void;
+  onTogglePushToTalk: (enabled: boolean) => void;
+  onPushToTalkKeyChange: (code: string, label: string) => void;
   onToggleSound: (enabled: boolean) => void;
   onUpdateEmail: (email: string) => Promise<string>;
   onLogout: () => void;
@@ -45,10 +49,14 @@ export function SettingsDialog({
   noiseFilter,
   krispSupported,
   selfMonitor,
+  pushToTalkEnabled,
+  pushToTalkKeyLabel,
   soundEnabled,
   onSelectDevice,
   onToggleNoiseFilter,
   onToggleSelfMonitor,
+  onTogglePushToTalk,
+  onPushToTalkKeyChange,
   onToggleSound,
   onUpdateEmail,
   onLogout,
@@ -88,9 +96,13 @@ export function SettingsDialog({
                 noiseFilter={noiseFilter}
                 krispSupported={krispSupported}
                 selfMonitor={selfMonitor}
+                pushToTalkEnabled={pushToTalkEnabled}
+                pushToTalkKeyLabel={pushToTalkKeyLabel}
                 onSelectDevice={onSelectDevice}
                 onToggleNoiseFilter={onToggleNoiseFilter}
                 onToggleSelfMonitor={onToggleSelfMonitor}
+                onTogglePushToTalk={onTogglePushToTalk}
+                onPushToTalkKeyChange={onPushToTalkKeyChange}
               />
               <div className="mt-5 flex items-center justify-between gap-2 border-t border-border pt-5">
                 <div>
