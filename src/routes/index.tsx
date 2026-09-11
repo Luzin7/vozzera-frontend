@@ -499,10 +499,14 @@ function Index() {
           noiseFilter={voice.noiseFilter}
           krispSupported={voice.krispSupported}
           selfMonitor={voice.selfMonitor}
+          pushToTalkEnabled={voice.pushToTalkEnabled}
+          pushToTalkKeyLabel={voice.pushToTalkBinding.label}
           soundEnabled={soundEnabled}
           onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
           onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
           onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
+          onTogglePushToTalk={voice.setPushToTalkEnabled}
+          onPushToTalkKeyChange={voice.setPushToTalkBinding}
           onToggleSound={toggleSound}
           onUpdateEmail={updateEmail}
           onLogout={handleLogout}
