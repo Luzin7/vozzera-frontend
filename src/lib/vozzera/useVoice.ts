@@ -25,12 +25,8 @@ import {
   writeMicDeviceId,
 } from "./voice";
 import type { MicDevice } from "./voice";
-import {
-  canNotify,
-  initialNotificationsEnabled,
-  playMessageSound,
-  readSoundEnabled,
-} from "./notifications";
+import { canNotify, initialNotificationsEnabled } from "./notifications";
+import { playVoiceActionSound } from "./voice-sounds";
 
 export type VoiceStatus = "idle" | "connecting" | "connected";
 
@@ -50,7 +46,6 @@ type RoomEventHandlerCtx = {
   room: LiveKitRoom;
   RoomEvent: typeof import("livekit-client").RoomEvent;
   Track: typeof import("livekit-client").Track;
-  soundEnabledRef: { readonly current: boolean };
   notificationsEnabledRef: { readonly current: boolean };
   roomRef: { current: LiveKitRoom | null };
   screenShareRef: { current: boolean };
@@ -83,7 +78,6 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     room,
     RoomEvent,
     Track,
-    soundEnabledRef,
     notificationsEnabledRef,
     roomRef,
     screenShareRef,
@@ -110,6 +104,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
     if (track.kind !== Track.Kind.Audio) {
       onTrackSubscribed(track, publication, participant);
+      if (track.source === Track.Source.ScreenShare) playVoiceActionSound("screen-share-start");
       return;
     }
 
@@ -141,6 +136,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       return;
     }
     onTrackUnsubscribed(track);
+    playVoiceActionSound("screen-share-stop");
   });
 
   room.on(RoomEvent.TrackMuted, (publication, participant) => {
@@ -217,15 +213,14 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       new Notification("Canal de voz", { body: `${name} entrou no canal` });
     }
 
-    if (typeof document !== "undefined" && document.hidden && soundEnabledRef.current) {
-      playMessageSound();
-    }
+    playVoiceActionSound("join");
   });
 
   room.on(RoomEvent.ParticipantDisconnected, (participant) => {
     const name = participant.name || participant.identity;
     removeParticipant(name);
     syncParticipants(room);
+    playVoiceActionSound("leave");
 
     if (
       typeof document !== "undefined" &&
@@ -277,9 +272,6 @@ export function useVoice() {
   const deafenMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const notificationsEnabledRef = useRef(
     typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
-  );
-  const soundEnabledRef = useRef(
-    typeof localStorage === "undefined" ? false : readSoundEnabled(localStorage),
   );
 
   selectedDeviceIdRef.current = selectedMic;
@@ -404,6 +396,7 @@ export function useVoice() {
   }, []);
 
   const disconnect = useCallback(async () => {
+    const wasConnected = roomRef.current !== null;
     connectionAttemptRef.current += 1;
     await roomRef.current?.disconnect();
     await closeVoiceAudioContext();
@@ -411,6 +404,7 @@ export function useVoice() {
     setStatus("idle");
     setActiveRoomId(null);
     resetRoomState();
+    if (wasConnected) playVoiceActionSound("leave");
   }, [closeVoiceAudioContext, resetRoomState]);
 
   const syncActiveSpeakerNames = useCallback((activeNames: string[]) => {
@@ -496,7 +490,6 @@ export function useVoice() {
           room,
           RoomEvent,
           Track,
-          soundEnabledRef,
           notificationsEnabledRef,
           roomRef,
           screenShareRef,
@@ -557,6 +550,7 @@ export function useVoice() {
         setStatus("connected");
         setActiveRoomId(roomId);
         syncParticipants(room);
+        playVoiceActionSound("join");
       } catch (err) {
         if (connectingRoom && roomRef.current === connectingRoom) roomRef.current = null;
         await connectingRoom?.disconnect().catch(() => undefined);
@@ -603,6 +597,7 @@ export function useVoice() {
       if (enabled && track) await attachKrispNoiseFilter(track);
       syncLocalMicTrack(room);
       setMicOn(enabled);
+      playVoiceActionSound(enabled ? "unmute" : "mute");
     },
     [attachKrispNoiseFilter, syncLocalMicTrack],
   );
@@ -796,6 +791,7 @@ export function useVoice() {
       const room = roomRef.current;
       if (!room) return;
       await setScreenShareForRoom(room, enabled, quality);
+      playVoiceActionSound(enabled ? "screen-share-start" : "screen-share-stop");
     },
     [setScreenShareForRoom],
   );
