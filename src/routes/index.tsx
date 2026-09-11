@@ -64,6 +64,7 @@ function Index() {
     banner,
     loadingHistory,
     unread,
+    unreadMarker,
     typingUsers,
     voicePresence,
     onlineUsers,
@@ -84,6 +85,7 @@ function Index() {
     toggleSound,
     sendMessage,
     setTyping,
+    dismissUnreadMarker,
   } = useChat();
   const {
     changelog,
@@ -441,6 +443,10 @@ function Index() {
               canModerateMessages={canModerateMessages}
               onDelete={handleDeleteMessage}
               onRoomClick={handleRoomMention}
+              unreadMarkerMessageId={
+                unreadMarker?.roomId === activeRoom.id ? unreadMarker.messageId : null
+              }
+              onUnreadMarkerRead={dismissUnreadMarker}
             />
             <MessageComposer
               roomId={activeRoom.id}
