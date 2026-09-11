@@ -9,6 +9,7 @@ import {
   dateGroupLabelFor,
   expireTypingUsers,
   firstTextRoom,
+  firstUnreadMessageId,
   nextRoomIndex,
   parseFrame,
   readActiveRoomId,
@@ -99,6 +100,23 @@ describe("dateGroupLabelFor", () => {
 
   it("returns an empty label for an invalid timestamp", () => {
     expect(dateGroupLabelFor("invalid", now)).toBe("");
+  });
+});
+
+describe("firstUnreadMessageId", () => {
+  const messages = [message("a"), message("b"), message("c")];
+
+  it("returns the first message inside the unread tail", () => {
+    expect(firstUnreadMessageId(messages, 2)).toBe("b");
+  });
+
+  it("uses the first loaded message when the unread count exceeds the history", () => {
+    expect(firstUnreadMessageId(messages, 10)).toBe("a");
+  });
+
+  it("returns null without unread or loaded messages", () => {
+    expect(firstUnreadMessageId(messages, 0)).toBeNull();
+    expect(firstUnreadMessageId([], 2)).toBeNull();
   });
 });
 
@@ -485,42 +503,48 @@ describe("voice presence", () => {
 describe("online users", () => {
   const luan = { userId: "u1", username: "Luan" };
   const bia = { userId: "u2", username: "Bia" };
+  const onlineLuan = { ...luan, online: true };
+  const onlineBia = { ...bia, online: true };
 
   it("adds a new online user", () => {
-    expect(addOnlineUser({}, luan)).toEqual({ u1: luan });
+    expect(addOnlineUser({}, luan)).toEqual({ u1: onlineLuan });
   });
 
   it("does not duplicate an existing user", () => {
-    const state = { u1: luan };
+    const state = { u1: onlineLuan };
     expect(addOnlineUser(state, luan)).toBe(state);
   });
 
   it("adds multiple users", () => {
     const state = addOnlineUser(addOnlineUser({}, luan), bia);
-    expect(state).toEqual({ u1: luan, u2: bia });
+    expect(state).toEqual({ u1: onlineLuan, u2: onlineBia });
   });
 
-  it("removes an existing online user", () => {
-    const state = { u1: luan, u2: bia };
-    expect(removeOnlineUser(state, "u1")).toEqual({ u2: bia });
+  it("keeps an existing user as offline", () => {
+    const state = { u1: onlineLuan, u2: onlineBia };
+    expect(removeOnlineUser(state, "u1")).toEqual({
+      u1: { ...luan, online: false },
+      u2: onlineBia,
+    });
   });
 
-  it("does nothing when removing a non-existent user", () => {
-    const state = { u1: luan };
-    expect(removeOnlineUser(state, "u2")).toBe(state);
+  it("records an offline event for a user not present in the snapshot", () => {
+    expect(removeOnlineUser({}, "u2", "Bia")).toEqual({ u2: { ...bia, online: false } });
   });
 
-  it("replaces all online users with a snapshot", () => {
-    const state = replaceOnlineUsers([luan, bia]);
-    expect(state).toEqual({ u1: luan, u2: bia });
+  it("updates presence without forgetting known members", () => {
+    const state = replaceOnlineUsers({ u1: onlineLuan, u2: onlineBia }, [bia]);
+    expect(state).toEqual({ u1: { ...luan, online: false }, u2: onlineBia });
   });
 
   it("returns an empty map for an empty snapshot", () => {
-    expect(replaceOnlineUsers([])).toEqual({});
+    expect(replaceOnlineUsers({}, [])).toEqual({});
   });
 
   it("keeps the last entry when the snapshot has duplicates", () => {
     const updated = { ...luan, username: "Luan atualizado" };
-    expect(replaceOnlineUsers([luan, updated])).toEqual({ u1: updated });
+    expect(replaceOnlineUsers({}, [luan, updated])).toEqual({
+      u1: { ...updated, online: true },
+    });
   });
 });
