@@ -15,6 +15,7 @@ import {
   isParticipantLocallyInaudible,
   locallyMutedParticipantNames,
   mergeActiveSpeakerNames,
+  microphoneEnabledAfterDeafenToggle,
   muteVolume,
   participantNamesToMuteForSelectiveListening,
   participantStatusLabelFor,
@@ -262,6 +263,12 @@ describe("screenShareAdaptiveStreamSettings", () => {
   });
 });
 
+describe("screenShareAdaptiveStreamSettings", () => {
+  it("keeps screen share video active while the tab is hidden", () => {
+    expect(screenShareAdaptiveStreamSettings()).toEqual({ pauseVideoInBackground: false });
+  });
+});
+
 describe("readNoiseFilter / writeNoiseFilter", () => {
   it("defaults to enabled without storage", () => {
     expect(readNoiseFilter(null)).toBe(true);
@@ -386,6 +393,16 @@ describe("participantNamesToMuteForSelectiveListening", () => {
       "ana",
       "caio",
     ]);
+  });
+});
+
+describe("microphoneEnabledAfterDeafenToggle", () => {
+  it("mutes the microphone when deafen is activated", () => {
+    expect(microphoneEnabledAfterDeafenToggle(false)).toBe(false);
+  });
+
+  it("always enables the microphone when deafen is disabled globally", () => {
+    expect(microphoneEnabledAfterDeafenToggle(true)).toBe(true);
   });
 });
 

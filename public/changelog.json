@@ -9,6 +9,36 @@
       "summary": ""
     },
     {
+      "title": "feat(chat): marcador de mensagens não lidas",
+      "kind": "feat",
+      "pr": 148,
+      "summary": ""
+    },
+    {
+      "title": "feat(voice): adicionar sons às ações da chamada",
+      "kind": "feat",
+      "pr": 149,
+      "summary": ""
+    },
+    {
+      "title": "feat(voice): adicionar push-to-talk configuravel",
+      "kind": "feat",
+      "pr": 150,
+      "summary": ""
+    },
+    {
+      "title": "fix(voice): áudio de transmissão mutada vaza ao iniciar transmissão local",
+      "kind": "fix",
+      "pr": 147,
+      "summary": ""
+    },
+    {
+      "title": "fix(voice): liberar microfone quando o Vozzera fica em segundo plano",
+      "kind": "fix",
+      "pr": 144,
+      "summary": ""
+    },
+    {
       "title": "feat(chat): presença online global com evento user.online/offline e snapshot",
       "kind": "feat",
       "pr": 136,

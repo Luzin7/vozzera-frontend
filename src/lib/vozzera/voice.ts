@@ -294,6 +294,10 @@ export function participantNamesToMuteForSelectiveListening(
   return participantNames.filter((name) => name !== selectedName);
 }
 
+export function microphoneEnabledAfterDeafenToggle(deafenActive: boolean): boolean {
+  return deafenActive;
+}
+
 export function locallyMutedParticipantNames(volumes: Record<string, number>): string[] {
   return Object.entries(volumes)
     .filter(([, volume]) => volume === 0)
