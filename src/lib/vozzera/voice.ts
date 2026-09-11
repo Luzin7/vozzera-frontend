@@ -10,10 +10,13 @@ export type MicCaptureOptions = {
   autoGainControl: boolean;
 };
 
+export type DegradationPreference = "maintain-framerate" | "maintain-resolution";
+
 export type ScreenShareQuality = {
   width: number;
   height: number;
   frameRate: number;
+  degradationPreference?: DegradationPreference;
 };
 
 type AudioPublishProfile = {
@@ -23,7 +26,7 @@ type AudioPublishProfile = {
 };
 
 type ScreenSharePublishProfile = AudioPublishProfile & {
-  degradationPreference: "maintain-framerate";
+  degradationPreference: "maintain-framerate" | "maintain-resolution";
   screenShareEncoding: {
     maxBitrate: number;
     maxFramerate: number;
@@ -42,8 +45,8 @@ const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
 const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
 const VOICE_START_LEVEL = 0.16;
 const VOICE_CONTINUE_LEVEL = 0.07;
-export const VOICE_RELEASE_DELAY_MS = 70;
-export const VIDEO_PLAYBACK_DELAY_MS = 700;
+export const VOICE_RELEASE_DELAY_MS = 40;
+export const VIDEO_PLAYBACK_DELAY_MS = 200;
 
 export function isLocalVoiceActive(volume: number, wasActive: boolean): boolean {
   if (wasActive) return volume >= VOICE_CONTINUE_LEVEL;
@@ -111,7 +114,7 @@ export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSh
     audioPreset: { maxBitrate: 128_000 },
     dtx: false,
     forceStereo: true,
-    degradationPreference: "maintain-framerate",
+    degradationPreference: quality.degradationPreference ?? "maintain-framerate",
     screenShareEncoding: {
       maxBitrate: screenShareVideoBitrate(quality),
       maxFramerate: quality.frameRate,
@@ -240,10 +243,6 @@ export function participantNamesToMuteForSelectiveListening(
   return participantNames.filter((name) => name !== selectedName);
 }
 
-export function microphoneEnabledAfterDeafenToggle(deafenActive: boolean): boolean {
-  return deafenActive;
-}
-
 export function locallyMutedParticipantNames(volumes: Record<string, number>): string[] {
   return Object.entries(volumes)
     .filter(([, volume]) => volume === 0)
@@ -274,4 +273,47 @@ export function participantStatusLabelFor(locallyMuted: boolean, isSpeaking: boo
   if (locallyMuted) return "Silenciado para você";
   if (isSpeaking) return "Falando agora";
   return "Volume individual";
+}
+
+export function applyVolumeWithElementMuted(
+  element: HTMLAudioElement,
+  applyVolume: () => void,
+): void {
+  element.volume = 0;
+  applyVolume();
+  element.volume = 1;
+}
+
+export type FpsSeverity = "excellent" | "good" | "poor" | "critical";
+
+export function fpsSeverityFor(measuredFps: number, targetFps: number): FpsSeverity {
+  if (measuredFps >= targetFps * 0.8) return "excellent";
+  if (measuredFps >= targetFps * 0.5) return "good";
+  if (measuredFps >= Math.min(targetFps * 0.3, 20)) return "poor";
+  return "critical";
+}
+
+export function fpsLabelFor(measuredFps: number, targetFps: number): string | null {
+  if (measuredFps >= targetFps * 0.8) return null;
+  if (measuredFps >= targetFps * 0.5) return `${measuredFps} fps`;
+  return `${measuredFps} fps · Baixe a qualidade`;
+}
+
+export function remoteFpsLabelFor(measuredFps: number): string | null {
+  if (measuredFps >= 30) return null;
+  if (measuredFps >= 15) return "Qualidade instável";
+  return "Streamer com dificuldades";
+}
+
+export function fpsColorFor(severity: FpsSeverity): string {
+  switch (severity) {
+    case "excellent":
+      return "bg-green-600/80 text-white";
+    case "good":
+      return "bg-amber-500/80 text-white";
+    case "poor":
+      return "bg-orange-600/80 text-white";
+    case "critical":
+      return "bg-red-600/80 text-white";
+  }
 }

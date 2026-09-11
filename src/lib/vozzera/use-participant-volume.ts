@@ -11,30 +11,24 @@ import {
   writeScreenShareVolumes,
 } from "./voice";
 
-let deafenVolumeActive = false;
-
-export function setDeafenVolumeActive(value: boolean): void {
-  deafenVolumeActive = value;
-}
-
-let screenShareAudioSource: unknown = null;
-
-export function setScreenShareAudioSource(source: unknown): void {
-  screenShareAudioSource = source;
-}
-
-function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number | undefined) {
-  participant.setVolume(effectiveParticipantVolume(deafenVolumeActive, volume));
+function setRemoteParticipantVolume(
+  participant: RemoteParticipant,
+  volume: number | undefined,
+  deafenActive: boolean,
+) {
+  participant.setVolume(effectiveParticipantVolume(deafenActive, volume));
 }
 
 export function setRemoteParticipantScreenShareVolume(
   participant: RemoteParticipant,
   volume: number | undefined,
+  deafenActive: boolean,
+  ssAudioSource: unknown,
 ) {
-  if (screenShareAudioSource === null) return;
+  if (ssAudioSource === null) return;
   participant.setVolume(
-    effectiveParticipantVolume(deafenVolumeActive, volume),
-    screenShareAudioSource as Parameters<RemoteParticipant["setVolume"]>[1],
+    effectiveParticipantVolume(deafenActive, volume),
+    ssAudioSource as Parameters<RemoteParticipant["setVolume"]>[1],
   );
 }
 
@@ -60,7 +54,14 @@ export type VolumeResult = {
   resetState: () => void;
 };
 
-export function useParticipantVolume(roomRef: RoomRef): VolumeResult {
+type MustRef = { readonly current: boolean };
+type ScreenShareAudioSourceRef = { readonly current: unknown };
+
+export function useParticipantVolume(
+  roomRef: RoomRef,
+  deafenRef: MustRef,
+  screenShareAudioSourceRef: ScreenShareAudioSourceRef,
+): VolumeResult {
   const [volumes, setVolumes] = useState<Record<string, number>>(() => {
     if (typeof localStorage === "undefined") return {};
     return readParticipantVolumes(localStorage);
@@ -82,13 +83,21 @@ export function useParticipantVolume(roomRef: RoomRef): VolumeResult {
   volumesRef.current = volumes;
   screenShareVolumesRef.current = screenShareVolumes;
 
-  const applyParticipantVolumes = useCallback((p: RemoteParticipant) => {
-    const name = p.name || p.identity;
-    const volume = volumesRef.current[name];
-    const ssVolume = screenShareVolumesRef.current[name];
-    setRemoteParticipantVolume(p, volume);
-    setRemoteParticipantScreenShareVolume(p, ssVolume);
-  }, []);
+  const applyParticipantVolumes = useCallback(
+    (p: RemoteParticipant) => {
+      const name = p.name || p.identity;
+      const volume = volumesRef.current[name];
+      const ssVolume = screenShareVolumesRef.current[name];
+      setRemoteParticipantVolume(p, volume, deafenRef.current);
+      setRemoteParticipantScreenShareVolume(
+        p,
+        ssVolume,
+        deafenRef.current,
+        screenShareAudioSourceRef.current,
+      );
+    },
+    [deafenRef, screenShareAudioSourceRef],
+  );
 
   const setParticipantVolume = useCallback(
     (name: string, volume: number) => {
@@ -100,9 +109,9 @@ export function useParticipantVolume(roomRef: RoomRef): VolumeResult {
       const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
         (p) => (p.name || p.identity) === name,
       );
-      if (participant) setRemoteParticipantVolume(participant, volume);
+      if (participant) setRemoteParticipantVolume(participant, volume, deafenRef.current);
     },
-    [roomRef],
+    [roomRef, deafenRef],
   );
 
   const setScreenShareVolume = useCallback(
@@ -115,9 +124,15 @@ export function useParticipantVolume(roomRef: RoomRef): VolumeResult {
       const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
         (p) => (p.name || p.identity) === name,
       );
-      if (participant) setRemoteParticipantScreenShareVolume(participant, volume);
+      if (participant)
+        setRemoteParticipantScreenShareVolume(
+          participant,
+          volume,
+          deafenRef.current,
+          screenShareAudioSourceRef.current,
+        );
     },
-    [roomRef],
+    [roomRef, deafenRef, screenShareAudioSourceRef],
   );
 
   const setLocalMute = useCallback(

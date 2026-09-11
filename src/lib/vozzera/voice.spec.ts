@@ -2,16 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyVideoPlaybackDelay,
+  applyVolumeWithElementMuted,
   audioCaptureOptions,
   audioInputDevices,
   effectiveParticipantVolume,
   featuredShareId,
+  fpsColorFor,
+  fpsLabelFor,
+  fpsSeverityFor,
   isGlobalMuteActive,
   isLocalVoiceActive,
   isParticipantLocallyInaudible,
   locallyMutedParticipantNames,
   mergeActiveSpeakerNames,
-  microphoneEnabledAfterDeafenToggle,
   muteVolume,
   participantNamesToMuteForSelectiveListening,
   participantStatusLabelFor,
@@ -19,10 +22,11 @@ import {
   readNoiseFilter,
   readParticipantVolumes,
   microphonePublishOptions,
-  shouldReleaseMicrophoneInBackground,
+  remoteFpsLabelFor,
   screenShareAdaptiveStreamSettings,
   screenShareAudioCaptureOptions,
   screenSharePublishOptions,
+  shouldReleaseMicrophoneInBackground,
   shouldShowLocalVoiceActivity,
   VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
@@ -44,11 +48,11 @@ describe("isLocalVoiceActive", () => {
 
 describe("shouldShowLocalVoiceActivity", () => {
   it("keeps the indicator visible during short pauses", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 69)).toBe(true);
+    expect(shouldShowLocalVoiceActivity(false, true, 39)).toBe(true);
   });
 
-  it("hides the indicator after 70 milliseconds of continuous silence", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 70)).toBe(false);
+  it("hides the indicator after 40 milliseconds of continuous silence", () => {
+    expect(shouldShowLocalVoiceActivity(false, true, 40)).toBe(false);
   });
 
   it("shows voice immediately and does not delay the initial activation", () => {
@@ -170,6 +174,31 @@ describe("screenSharePublishOptions", () => {
       videoCodec: "h264",
       simulcast: false,
     });
+  });
+
+  it("defaults degradation preference to maintain-framerate when not specified", () => {
+    const result = screenSharePublishOptions({ width: 1920, height: 1080, frameRate: 30 });
+    expect(result.degradationPreference).toBe("maintain-framerate");
+  });
+
+  it("accepts explicit maintain-resolution degradation preference", () => {
+    const result = screenSharePublishOptions({
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      degradationPreference: "maintain-resolution",
+    });
+    expect(result.degradationPreference).toBe("maintain-resolution");
+  });
+
+  it("accepts explicit maintain-framerate degradation preference", () => {
+    const result = screenSharePublishOptions({
+      width: 1280,
+      height: 720,
+      frameRate: 60,
+      degradationPreference: "maintain-framerate",
+    });
+    expect(result.degradationPreference).toBe("maintain-framerate");
   });
 });
 
@@ -306,16 +335,6 @@ describe("participantNamesToMuteForSelectiveListening", () => {
   });
 });
 
-describe("microphoneEnabledAfterDeafenToggle", () => {
-  it("mutes the microphone when deafen is activated", () => {
-    expect(microphoneEnabledAfterDeafenToggle(false)).toBe(false);
-  });
-
-  it("always enables the microphone when deafen is disabled globally", () => {
-    expect(microphoneEnabledAfterDeafenToggle(true)).toBe(true);
-  });
-});
-
 describe("locallyMutedParticipantNames", () => {
   it("selects only participants with volume zero", () => {
     expect(locallyMutedParticipantNames({ ana: 0, beto: 0.7, caio: 0 })).toEqual(["ana", "caio"]);
@@ -379,5 +398,84 @@ describe("applyVideoPlaybackDelay", () => {
     applyVideoPlaybackDelay(fakeTrack, 500);
 
     expect(capturedDelay).toBe(0.5);
+  });
+});
+
+describe("applyVolumeWithElementMuted", () => {
+  it("sets element volume to 0 before applyVolume and restores to 1 after", () => {
+    const volumes: number[] = [];
+    const element = { volume: 0.5 } as HTMLAudioElement;
+
+    applyVolumeWithElementMuted(element, () => {
+      volumes.push(element.volume);
+    });
+
+    expect(volumes).toEqual([0]);
+    expect(element.volume).toBe(1);
+  });
+});
+
+describe("fpsSeverityFor", () => {
+  it("returns excellent when fps is near target", () => {
+    expect(fpsSeverityFor(55, 60)).toBe("excellent");
+  });
+
+  it("returns good when fps is between half and most of target", () => {
+    expect(fpsSeverityFor(35, 60)).toBe("good");
+  });
+
+  it("returns poor when fps is below half but above 20", () => {
+    expect(fpsSeverityFor(21, 60)).toBe("poor");
+  });
+
+  it("returns critical when fps is very low", () => {
+    expect(fpsSeverityFor(10, 60)).toBe("critical");
+  });
+});
+
+describe("fpsLabelFor", () => {
+  it("returns null when fps is excellent for the target", () => {
+    expect(fpsLabelFor(55, 60)).toBeNull();
+  });
+
+  it("shows the fps when it is good but not excellent", () => {
+    expect(fpsLabelFor(35, 60)).toBe("35 fps");
+  });
+
+  it("shows the fps with a tip when it is poor", () => {
+    expect(fpsLabelFor(15, 60)).toBe("15 fps · Baixe a qualidade");
+  });
+});
+
+describe("remoteFpsLabelFor", () => {
+  it("returns null when fps is at least 30", () => {
+    expect(remoteFpsLabelFor(30)).toBeNull();
+    expect(remoteFpsLabelFor(45)).toBeNull();
+  });
+
+  it("warns about instability between 15 and 30 fps", () => {
+    expect(remoteFpsLabelFor(20)).toBe("Qualidade instável");
+  });
+
+  it("warns about difficulty below 15 fps", () => {
+    expect(remoteFpsLabelFor(10)).toBe("Streamer com dificuldades");
+  });
+});
+
+describe("fpsColorFor", () => {
+  it("returns green for excellent", () => {
+    expect(fpsColorFor("excellent")).toContain("green");
+  });
+
+  it("returns amber for good", () => {
+    expect(fpsColorFor("good")).toContain("amber");
+  });
+
+  it("returns orange for poor", () => {
+    expect(fpsColorFor("poor")).toContain("orange");
+  });
+
+  it("returns red for critical", () => {
+    expect(fpsColorFor("critical")).toContain("red");
   });
 });

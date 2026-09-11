@@ -3,8 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConnectionQuality } from "livekit-client";
 import { api } from "./api";
 import {
-  setDeafenVolumeActive,
-  setScreenShareAudioSource,
   setRemoteParticipantScreenShareVolume,
   useParticipantVolume,
 } from "./use-participant-volume";
@@ -19,7 +17,6 @@ import {
   audioInputDevices,
   isGlobalMuteActive,
   mergeActiveSpeakerNames,
-  microphoneEnabledAfterDeafenToggle,
   microphonePublishOptions,
   participantNamesToMuteForSelectiveListening,
   readMicDeviceId,
@@ -42,13 +39,13 @@ type LiveKitRoom = import("livekit-client").Room;
 type LocalAudioTrack = import("livekit-client").LocalAudioTrack;
 type TrackSource = import("livekit-client").Track.Source;
 
-export type { ScreenShareQuality } from "./use-screen-share";
+export type { DegradationPreference, FpsSeverity, ScreenShareQuality } from "./use-screen-share";
 
 export type ScreenShareTrack = import("./use-screen-share").ScreenShareTrack;
 
 export type ScreenShare = ScreenShareType;
 
-const VOICE_RELEASE_DELAY_MS = 70;
+const VOICE_RELEASE_DELAY_MS = 40;
 
 type RoomEventHandlerCtx = {
   room: LiveKitRoom;
@@ -58,6 +55,8 @@ type RoomEventHandlerCtx = {
   notificationsEnabledRef: { readonly current: boolean };
   roomRef: { current: LiveKitRoom | null };
   screenShareRef: { current: boolean };
+  deafenRef: { readonly current: boolean };
+  screenShareAudioSourceRef: { readonly current: unknown };
   setRemoteMuted: (name: string, muted: boolean) => void;
   applyParticipantVolumes: (p: import("livekit-client").RemoteParticipant) => void;
   onTrackSubscribed: (
@@ -89,6 +88,8 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     notificationsEnabledRef,
     roomRef,
     screenShareRef,
+    deafenRef,
+    screenShareAudioSourceRef,
     setRemoteMuted,
     applyParticipantVolumes,
     onTrackSubscribed,
@@ -122,9 +123,15 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const name = participant.name || participant.identity;
     if (publication.source === Track.Source.Microphone) {
       setRemoteMuted(name, publication.isMuted);
+      applyParticipantVolumes(participant);
+      return;
     }
     if (publication.source === Track.Source.ScreenShareAudio) {
       applyVideoPlaybackDelay(track, VIDEO_PLAYBACK_DELAY_MS);
+      el.volume = 0;
+      applyParticipantVolumes(participant);
+      el.volume = 1;
+      return;
     }
     applyParticipantVolumes(participant);
   });
@@ -195,7 +202,13 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const ssVolume = getScreenShareVolumeRef()[name];
     if (ssVolume !== undefined) {
       const remoteParticipant = room.remoteParticipants.get(participant.sid);
-      if (remoteParticipant) setRemoteParticipantScreenShareVolume(remoteParticipant, ssVolume);
+      if (remoteParticipant)
+        setRemoteParticipantScreenShareVolume(
+          remoteParticipant,
+          ssVolume,
+          deafenRef.current,
+          screenShareAudioSourceRef.current,
+        );
     }
 
     if (
@@ -259,6 +272,9 @@ export function useVoice() {
   const micPermissionRef = useRef(false);
   const selectedDeviceIdRef = useRef(selectedMic);
   const screenShareRef = useRef(false);
+  const deafenRef = useRef(deafen);
+  deafenRef.current = deafen;
+  const screenShareAudioSourceRef = useRef<unknown>(null);
   const deafenMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const backgroundMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const restoreBackgroundMicRef = useRef(false);
@@ -272,7 +288,6 @@ export function useVoice() {
 
   selectedDeviceIdRef.current = selectedMic;
   micOnRef.current = micOn;
-  setDeafenVolumeActive(deafen);
 
   const {
     volumes,
@@ -292,13 +307,14 @@ export function useVoice() {
     getScreenShareVolumeRef,
     unmuteAllParticipants,
     resetState: resetParticipantVolumeState,
-  } = useParticipantVolume(roomRef);
+  } = useParticipantVolume(roomRef, deafenRef, screenShareAudioSourceRef);
 
   const {
     screenShareEnabled,
     screenShares,
     localPreview,
     setScreenShare: setScreenShareForRoom,
+    changeScreenShareQuality,
     onTrackSubscribed,
     onTrackUnsubscribed,
     onLocalTrackUnpublished,
@@ -449,7 +465,7 @@ export function useVoice() {
         const [client, tokenResponse, initialProcessor] = await Promise.all([
           (async () => {
             const c = await import("livekit-client");
-            setScreenShareAudioSource(c.Track.Source.ScreenShareAudio);
+            screenShareAudioSourceRef.current = c.Track.Source.ScreenShareAudio;
             return c;
           })(),
           api<VoiceTokenResponse>("/api/voice/token", {
@@ -489,6 +505,8 @@ export function useVoice() {
           notificationsEnabledRef,
           roomRef,
           screenShareRef,
+          deafenRef,
+          screenShareAudioSourceRef,
           setRemoteMuted,
           applyParticipantVolumes,
           onTrackSubscribed,
@@ -639,11 +657,11 @@ export function useVoice() {
     if (globalMuteActive) {
       unmuteAllParticipants();
       setDeafen(false);
-      queueDeafenMicrophoneState(microphoneEnabledAfterDeafenToggle(true));
+      queueDeafenMicrophoneState(true);
       return;
     }
     setDeafen(true);
-    queueDeafenMicrophoneState(microphoneEnabledAfterDeafenToggle(false));
+    queueDeafenMicrophoneState(false);
   }, [globalMuteActive, queueDeafenMicrophoneState, unmuteAllParticipants]);
 
   const keepMicrophoneMutedAfterDeafen = useCallback(() => {
@@ -826,6 +844,12 @@ export function useVoice() {
     [setScreenShareForRoom],
   );
 
+  const reduceScreenQuality = useCallback(async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    await changeScreenShareQuality(room, { width: 1280, height: 720, frameRate: 30 });
+  }, [changeScreenShareQuality]);
+
   return {
     status,
     activeRoomId,
@@ -863,6 +887,7 @@ export function useVoice() {
     setLocalScreenShareMute,
     toggleLocalScreenShareMute,
     setScreenShare,
+    reduceScreenQuality,
     toggleDeafen,
     listenToParticipant,
     listenToParticipantScreenShare,
