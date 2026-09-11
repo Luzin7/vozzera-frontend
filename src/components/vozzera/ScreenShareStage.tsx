@@ -167,12 +167,6 @@ function FeaturedVideo({
         </span>
       )}
 
-      {isLocal && fps < targetFps && (
-        <span className="absolute left-2 top-2 rounded bg-black/60 px-2 py-0.5 text-xs text-muted-foreground">
-          {fps} de {targetFps} fps
-        </span>
-      )}
-
       {isLocal && showSuggestion && (
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 rounded-lg bg-background/95 px-4 py-3 shadow-lg">
           <p className="text-xs text-muted-foreground">

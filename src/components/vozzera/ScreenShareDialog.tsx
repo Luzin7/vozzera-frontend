@@ -94,7 +94,7 @@ export function ScreenShareDialog({
                     : "border-border text-muted-foreground hover:bg-muted"
                 }`}
               >
-                <span className="font-medium">🫸 Fluidez</span>
+                <span className="font-medium">Fluidez</span>
                 <span className="text-xs">Prioriza FPS sobre nitidez</span>
                 <span className="text-xs text-muted-foreground">Recomendado para jogos</span>
               </button>
@@ -107,7 +107,7 @@ export function ScreenShareDialog({
                     : "border-border text-muted-foreground hover:bg-muted"
                 }`}
               >
-                <span className="font-medium">🎯 Nitidez</span>
+                <span className="font-medium">Nitidez</span>
                 <span className="text-xs">Prioriza nitidez sobre FPS</span>
                 <span className="text-xs text-muted-foreground">Recomendado para docs/slides</span>
               </button>
