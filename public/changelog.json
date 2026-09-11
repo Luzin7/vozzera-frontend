@@ -6,37 +6,37 @@
       "title": "feat(voice): monitoramento de FPS, modo qualidade e sugestão adaptativa no screen share",
       "kind": "feat",
       "pr": 146,
-      "summary": ""
+      "summary": "Compartilhe sua tela com a melhor qualidade possível! Monitoramento de FPS em tempo real e sugestão adaptativa pra você nunca perder detalhes."
     },
     {
       "title": "feat(chat): marcador de mensagens não lidas",
       "kind": "feat",
       "pr": 148,
-      "summary": ""
+      "summary": "Nunca mais perca uma mensagem importante! Agora você vê tudo que não leu no chat de um jeito claro e rápido."
     },
     {
       "title": "feat(voice): adicionar sons às ações da chamada",
       "kind": "feat",
       "pr": 149,
-      "summary": ""
+      "summary": "Cada ação da chamada ganhou vida! Sons que tornam a experiência mais imersiva — você sabe exatamente o que aconteceu só de ouvir."
     },
     {
       "title": "feat(voice): adicionar push-to-talk configuravel",
       "kind": "feat",
       "pr": 150,
-      "summary": ""
+      "summary": "Fale só quando quiser! Push-to-talk configurável chegou pra dar controle total sobre o seu microfone — do seu jeito."
     },
     {
       "title": "fix(voice): áudio de transmissão mutada vaza ao iniciar transmissão local",
       "kind": "fix",
       "pr": 147,
-      "summary": ""
+      "summary": "Silêncio absoluto quando você muta a transmissão! Corrigimos o vazamento de áudio ao iniciar o compartilhamento de tela."
     },
     {
       "title": "fix(voice): liberar microfone quando o Vozzera fica em segundo plano",
       "kind": "fix",
       "pr": 144,
-      "summary": ""
+      "summary": "Privacidade em primeiro lugar! O microfone é liberado automaticamente quando o Vozzera vai pra segundo plano — sem sustos."
     },
     {
       "title": "feat(chat): presença online global com evento user.online/offline e snapshot",
