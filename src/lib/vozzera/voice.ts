@@ -41,12 +41,63 @@ type ScreenShareAdaptiveStreamSettings = {
 
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
+const PUSH_TO_TALK_KEY = "vozzera.pushToTalk";
+const PUSH_TO_TALK_CODE_KEY = "vozzera.pushToTalkCode";
+const PUSH_TO_TALK_LABEL_KEY = "vozzera.pushToTalkLabel";
 const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
 const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
 const VOICE_START_LEVEL = 0.16;
 const VOICE_CONTINUE_LEVEL = 0.07;
 export const VOICE_RELEASE_DELAY_MS = 40;
 export const VIDEO_PLAYBACK_DELAY_MS = 200;
+export const DEFAULT_PUSH_TO_TALK_BINDING = { code: "KeyV", label: "V" } as const;
+
+export type PushToTalkBinding = { code: string; label: string };
+
+export function shouldHandlePushToTalk(
+  code: string,
+  bindingCode: string,
+  repeat: boolean,
+  tagName: string | undefined,
+  contentEditable: boolean,
+): boolean {
+  if (code !== bindingCode || repeat || contentEditable) return false;
+  return tagName !== "INPUT" && tagName !== "TEXTAREA" && tagName !== "SELECT";
+}
+
+export function pushToTalkLabelFor(key: string, code: string): string {
+  if (code === "Space") return "Espaço";
+  if (key.length === 1) return key.toLocaleUpperCase("pt-BR");
+  return key;
+}
+
+export function readPushToTalkBinding(storage: Storage | null): PushToTalkBinding {
+  if (!storage) return DEFAULT_PUSH_TO_TALK_BINDING;
+  const code = storage.getItem(PUSH_TO_TALK_CODE_KEY);
+  const label = storage.getItem(PUSH_TO_TALK_LABEL_KEY);
+  if (!code || !label) return DEFAULT_PUSH_TO_TALK_BINDING;
+  return { code, label };
+}
+
+export function writePushToTalkBinding(storage: Storage | null, binding: PushToTalkBinding): void {
+  if (!storage) return;
+  storage.setItem(PUSH_TO_TALK_CODE_KEY, binding.code);
+  storage.setItem(PUSH_TO_TALK_LABEL_KEY, binding.label);
+}
+
+export function readPushToTalkEnabled(storage: Storage | null): boolean {
+  if (!storage) return false;
+  return storage.getItem(PUSH_TO_TALK_KEY) === "1";
+}
+
+export function writePushToTalkEnabled(storage: Storage | null, enabled: boolean): void {
+  if (!storage) return;
+  if (enabled) {
+    storage.setItem(PUSH_TO_TALK_KEY, "1");
+    return;
+  }
+  storage.removeItem(PUSH_TO_TALK_KEY);
+}
 
 export function isLocalVoiceActive(volume: number, wasActive: boolean): boolean {
   if (wasActive) return volume >= VOICE_CONTINUE_LEVEL;
