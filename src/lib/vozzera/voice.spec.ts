@@ -19,6 +19,7 @@ import {
   readNoiseFilter,
   readParticipantVolumes,
   microphonePublishOptions,
+  shouldReleaseMicrophoneInBackground,
   screenShareAdaptiveStreamSettings,
   screenShareAudioCaptureOptions,
   screenSharePublishOptions,
@@ -125,6 +126,28 @@ describe("microphonePublishOptions", () => {
       dtx: true,
       forceStereo: false,
     });
+  });
+});
+
+describe("shouldReleaseMicrophoneInBackground", () => {
+  it("releases the microphone when an Android app goes to the background", () => {
+    expect(
+      shouldReleaseMicrophoneInBackground(true, "Mozilla/5.0 Android", "Linux armv8l", 5),
+    ).toBe(true);
+  });
+
+  it("recognizes iPadOS when Safari reports a desktop platform", () => {
+    expect(shouldReleaseMicrophoneInBackground(true, "Mozilla/5.0", "MacIntel", 5)).toBe(true);
+  });
+
+  it("keeps the microphone while the mobile page is visible", () => {
+    expect(shouldReleaseMicrophoneInBackground(false, "Mozilla/5.0 iPhone", "iPhone", 5)).toBe(
+      false,
+    );
+  });
+
+  it("keeps background microphone capture on desktop", () => {
+    expect(shouldReleaseMicrophoneInBackground(true, "Mozilla/5.0", "Win32", 0)).toBe(false);
   });
 });
 

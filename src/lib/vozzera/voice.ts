@@ -73,6 +73,17 @@ export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions 
   };
 }
 
+export function shouldReleaseMicrophoneInBackground(
+  hidden: boolean,
+  userAgent: string,
+  platform: string,
+  maxTouchPoints: number,
+): boolean {
+  if (!hidden) return false;
+  if (/Android|iPhone|iPad|iPod/i.test(userAgent)) return true;
+  return platform === "MacIntel" && maxTouchPoints > 1;
+}
+
 export function microphonePublishOptions(): AudioPublishProfile {
   return {
     audioPreset: { maxBitrate: 70_000 },

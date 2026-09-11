@@ -24,6 +24,7 @@ import {
   participantNamesToMuteForSelectiveListening,
   readMicDeviceId,
   screenShareAdaptiveStreamSettings,
+  shouldReleaseMicrophoneInBackground,
   VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
 } from "./voice";
@@ -259,6 +260,9 @@ export function useVoice() {
   const selectedDeviceIdRef = useRef(selectedMic);
   const screenShareRef = useRef(false);
   const deafenMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
+  const backgroundMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
+  const restoreBackgroundMicRef = useRef(false);
+  const micOnRef = useRef(micOn);
   const notificationsEnabledRef = useRef(
     typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
   );
@@ -267,6 +271,7 @@ export function useVoice() {
   );
 
   selectedDeviceIdRef.current = selectedMic;
+  micOnRef.current = micOn;
   setDeafenVolumeActive(deafen);
 
   const {
@@ -755,6 +760,50 @@ export function useVoice() {
       element.remove();
     };
   }, [selfMonitor, localMicTrack]);
+
+  useEffect(() => {
+    if (status !== "connected") return;
+
+    const updateBackgroundMicrophone = async () => {
+      const shouldRelease = shouldReleaseMicrophoneInBackground(
+        document.hidden,
+        navigator.userAgent,
+        navigator.platform,
+        navigator.maxTouchPoints,
+      );
+
+      if (!shouldRelease) {
+        if (!restoreBackgroundMicRef.current) return;
+        restoreBackgroundMicRef.current = false;
+        await setMicEnabled(true);
+        return;
+      }
+
+      const participant = roomRef.current?.localParticipant;
+      const publication = participant?.getTrackPublication("microphone" as TrackSource);
+      const track = publication?.track;
+      if (!participant || !track) return;
+
+      restoreBackgroundMicRef.current = micOnRef.current;
+      await participant.unpublishTrack(track, true);
+      micOnRef.current = false;
+      setMicOn(false);
+      setLocalMicTrack(null);
+    };
+
+    const queueBackgroundMicrophoneUpdate = () => {
+      const transition = backgroundMicTransitionRef.current.then(updateBackgroundMicrophone);
+      backgroundMicTransitionRef.current = transition.catch(() => {
+        setError("Não consegui liberar o microfone para outro aplicativo.");
+      });
+    };
+
+    document.addEventListener("visibilitychange", queueBackgroundMicrophoneUpdate);
+    return () => {
+      document.removeEventListener("visibilitychange", queueBackgroundMicrophoneUpdate);
+      restoreBackgroundMicRef.current = false;
+    };
+  }, [setMicEnabled, status]);
 
   useEffect(() => {
     return () => {
