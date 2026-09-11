@@ -21,17 +21,68 @@ import {
   readMicDeviceId,
   readNoiseFilter,
   readParticipantVolumes,
+  readPushToTalkBinding,
+  readPushToTalkEnabled,
   microphonePublishOptions,
   remoteFpsLabelFor,
   screenShareAdaptiveStreamSettings,
   screenShareAudioCaptureOptions,
   screenSharePublishOptions,
   shouldShowLocalVoiceActivity,
+  shouldHandlePushToTalk,
+  pushToTalkLabelFor,
   VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
   writeNoiseFilter,
   writeParticipantVolumes,
+  writePushToTalkBinding,
+  writePushToTalkEnabled,
 } from "./voice";
+
+describe("push to talk", () => {
+  it("handles V outside editable fields", () => {
+    expect(shouldHandlePushToTalk("KeyV", "KeyV", false, "DIV", false)).toBe(true);
+    expect(shouldHandlePushToTalk("KeyV", "KeyV", false, undefined, false)).toBe(true);
+  });
+
+  it("ignores repeats, other keys and editable fields", () => {
+    expect(shouldHandlePushToTalk("KeyV", "KeyV", true, "DIV", false)).toBe(false);
+    expect(shouldHandlePushToTalk("Space", "KeyV", false, "DIV", false)).toBe(false);
+    expect(shouldHandlePushToTalk("KeyV", "KeyV", false, "INPUT", false)).toBe(false);
+    expect(shouldHandlePushToTalk("KeyV", "KeyV", false, "TEXTAREA", false)).toBe(false);
+    expect(shouldHandlePushToTalk("KeyV", "KeyV", false, "SELECT", false)).toBe(false);
+    expect(shouldHandlePushToTalk("KeyV", "KeyV", false, "DIV", true)).toBe(false);
+  });
+
+  it("handles a custom binding", () => {
+    expect(shouldHandlePushToTalk("Space", "Space", false, "DIV", false)).toBe(true);
+  });
+
+  it("formats a readable key label", () => {
+    expect(pushToTalkLabelFor("v", "KeyV")).toBe("V");
+    expect(pushToTalkLabelFor(" ", "Space")).toBe("Espaço");
+    expect(pushToTalkLabelFor("Shift", "ShiftLeft")).toBe("Shift");
+  });
+
+  it("persists the selected mode", () => {
+    const storage = fakeStorage();
+    expect(readPushToTalkEnabled(storage)).toBe(false);
+
+    writePushToTalkEnabled(storage, true);
+    expect(readPushToTalkEnabled(storage)).toBe(true);
+
+    writePushToTalkEnabled(storage, false);
+    expect(readPushToTalkEnabled(storage)).toBe(false);
+  });
+
+  it("persists a custom binding and defaults to V", () => {
+    const storage = fakeStorage();
+    expect(readPushToTalkBinding(storage)).toEqual({ code: "KeyV", label: "V" });
+
+    writePushToTalkBinding(storage, { code: "Space", label: "Espaço" });
+    expect(readPushToTalkBinding(storage)).toEqual({ code: "Space", label: "Espaço" });
+  });
+});
 
 describe("isLocalVoiceActive", () => {
   it("starts immediately when voice crosses the activation level", () => {
@@ -76,6 +127,9 @@ function fakeStorage(initial: Array<[string, string]> = []): Storage {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => {
       store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
     },
   } as Storage;
 }
