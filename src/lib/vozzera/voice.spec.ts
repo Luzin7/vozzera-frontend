@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyVideoPlaybackDelay,
+  applyVolumeWithElementMuted,
   audioCaptureOptions,
   audioInputDevices,
   effectiveParticipantVolume,
@@ -14,7 +15,6 @@ import {
   isParticipantLocallyInaudible,
   locallyMutedParticipantNames,
   mergeActiveSpeakerNames,
-  microphoneEnabledAfterDeafenToggle,
   muteVolume,
   participantNamesToMuteForSelectiveListening,
   participantStatusLabelFor,
@@ -324,16 +324,6 @@ describe("participantNamesToMuteForSelectiveListening", () => {
   });
 });
 
-describe("microphoneEnabledAfterDeafenToggle", () => {
-  it("mutes the microphone when deafen is activated", () => {
-    expect(microphoneEnabledAfterDeafenToggle(false)).toBe(false);
-  });
-
-  it("always enables the microphone when deafen is disabled globally", () => {
-    expect(microphoneEnabledAfterDeafenToggle(true)).toBe(true);
-  });
-});
-
 describe("locallyMutedParticipantNames", () => {
   it("selects only participants with volume zero", () => {
     expect(locallyMutedParticipantNames({ ana: 0, beto: 0.7, caio: 0 })).toEqual(["ana", "caio"]);
@@ -397,6 +387,20 @@ describe("applyVideoPlaybackDelay", () => {
     applyVideoPlaybackDelay(fakeTrack, 500);
 
     expect(capturedDelay).toBe(0.5);
+  });
+});
+
+describe("applyVolumeWithElementMuted", () => {
+  it("sets element volume to 0 before applyVolume and restores to 1 after", () => {
+    const volumes: number[] = [];
+    const element = { volume: 0.5 } as HTMLAudioElement;
+
+    applyVolumeWithElementMuted(element, () => {
+      volumes.push(element.volume);
+    });
+
+    expect(volumes).toEqual([0]);
+    expect(element.volume).toBe(1);
   });
 });
 
