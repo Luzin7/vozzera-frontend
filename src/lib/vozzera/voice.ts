@@ -127,6 +127,10 @@ export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions 
   };
 }
 
+export function shouldReleaseMicrophoneInBackground(hidden: boolean): boolean {
+  return hidden;
+}
+
 export function microphonePublishOptions(): AudioPublishProfile {
   return {
     audioPreset: { maxBitrate: 70_000 },
