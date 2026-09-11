@@ -43,6 +43,12 @@ export function totalUnread(unread: Record<string, number>): number {
   return Object.values(unread).reduce((sum, count) => sum + count, 0);
 }
 
+export function firstUnreadMessageId(messages: ChatMessage[], unreadCount: number): string | null {
+  if (unreadCount <= 0 || messages.length === 0) return null;
+  const firstUnreadIndex = Math.max(0, messages.length - unreadCount);
+  return messages[firstUnreadIndex]?.id ?? null;
+}
+
 export function firstTextRoom(rooms: Room[]): Room | undefined {
   return rooms.find((room) => room.type === "text");
 }
@@ -112,27 +118,39 @@ export function updateVoicePresence(
   return { ...presence, [event.room_id]: participants };
 }
 
-export type OnlineUser = { userId: string; username: string };
+export type OnlineUser = { userId: string; username: string; online: boolean };
 export type OnlineUsers = Record<string, OnlineUser>;
 
-export function addOnlineUser(users: OnlineUsers, user: OnlineUser): OnlineUsers {
-  if (user.userId in users) return users;
-  return { ...users, [user.userId]: user };
+type UserIdentity = Omit<OnlineUser, "online">;
+
+export function addOnlineUser(users: OnlineUsers, user: UserIdentity): OnlineUsers {
+  const current = users[user.userId];
+  if (current?.online && current.username === user.username) return users;
+  return { ...users, [user.userId]: { ...user, online: true } };
 }
 
-export function removeOnlineUser(users: OnlineUsers, userId: string): OnlineUsers {
-  if (!(userId in users)) return users;
-  const next = { ...users };
-  delete next[userId];
-  return next;
+export function removeOnlineUser(
+  users: OnlineUsers,
+  userId: string,
+  username?: string,
+): OnlineUsers {
+  const current = users[userId];
+  if (!current && !username) return users;
+  if (current && !current.online) return users;
+  return {
+    ...users,
+    [userId]: { userId, username: current?.username ?? username ?? "Usuário", online: false },
+  };
 }
 
-export function replaceOnlineUsers(users: OnlineUser[]): OnlineUsers {
-  const map: OnlineUsers = {};
-  for (const user of users) {
-    map[user.userId] = user;
+export function replaceOnlineUsers(users: OnlineUsers, onlineUsers: UserIdentity[]): OnlineUsers {
+  const next = Object.fromEntries(
+    Object.entries(users).map(([userId, user]) => [userId, { ...user, online: false }]),
+  );
+  for (const user of onlineUsers) {
+    next[user.userId] = { ...user, online: true };
   }
-  return map;
+  return next;
 }
 
 export type TypingUser = {
