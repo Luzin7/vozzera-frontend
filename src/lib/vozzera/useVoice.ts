@@ -47,7 +47,7 @@ export type ScreenShareTrack = import("./use-screen-share").ScreenShareTrack;
 
 export type ScreenShare = ScreenShareType;
 
-const VOICE_RELEASE_DELAY_MS = 70;
+const VOICE_RELEASE_DELAY_MS = 40;
 
 type RoomEventHandlerCtx = {
   room: LiveKitRoom;

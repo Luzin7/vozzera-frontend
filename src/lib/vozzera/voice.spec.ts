@@ -47,11 +47,11 @@ describe("isLocalVoiceActive", () => {
 
 describe("shouldShowLocalVoiceActivity", () => {
   it("keeps the indicator visible during short pauses", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 69)).toBe(true);
+    expect(shouldShowLocalVoiceActivity(false, true, 39)).toBe(true);
   });
 
-  it("hides the indicator after 70 milliseconds of continuous silence", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 70)).toBe(false);
+  it("hides the indicator after 40 milliseconds of continuous silence", () => {
+    expect(shouldShowLocalVoiceActivity(false, true, 40)).toBe(false);
   });
 
   it("shows voice immediately and does not delay the initial activation", () => {
