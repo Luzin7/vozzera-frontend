@@ -3,8 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConnectionQuality } from "livekit-client";
 import { api } from "./api";
 import {
-  setDeafenVolumeActive,
-  setScreenShareAudioSource,
   setRemoteParticipantScreenShareVolume,
   useParticipantVolume,
 } from "./use-participant-volume";
@@ -19,7 +17,6 @@ import {
   audioInputDevices,
   isGlobalMuteActive,
   mergeActiveSpeakerNames,
-  microphoneEnabledAfterDeafenToggle,
   microphonePublishOptions,
   participantNamesToMuteForSelectiveListening,
   readMicDeviceId,
@@ -57,6 +54,8 @@ type RoomEventHandlerCtx = {
   notificationsEnabledRef: { readonly current: boolean };
   roomRef: { current: LiveKitRoom | null };
   screenShareRef: { current: boolean };
+  deafenRef: { readonly current: boolean };
+  screenShareAudioSourceRef: { readonly current: unknown };
   setRemoteMuted: (name: string, muted: boolean) => void;
   applyParticipantVolumes: (p: import("livekit-client").RemoteParticipant) => void;
   onTrackSubscribed: (
@@ -88,6 +87,8 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     notificationsEnabledRef,
     roomRef,
     screenShareRef,
+    deafenRef,
+    screenShareAudioSourceRef,
     setRemoteMuted,
     applyParticipantVolumes,
     onTrackSubscribed,
@@ -121,9 +122,15 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const name = participant.name || participant.identity;
     if (publication.source === Track.Source.Microphone) {
       setRemoteMuted(name, publication.isMuted);
+      applyParticipantVolumes(participant);
+      return;
     }
     if (publication.source === Track.Source.ScreenShareAudio) {
       applyVideoPlaybackDelay(track, VIDEO_PLAYBACK_DELAY_MS);
+      el.volume = 0;
+      applyParticipantVolumes(participant);
+      el.volume = 1;
+      return;
     }
     applyParticipantVolumes(participant);
   });
@@ -194,7 +201,13 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const ssVolume = getScreenShareVolumeRef()[name];
     if (ssVolume !== undefined) {
       const remoteParticipant = room.remoteParticipants.get(participant.sid);
-      if (remoteParticipant) setRemoteParticipantScreenShareVolume(remoteParticipant, ssVolume);
+      if (remoteParticipant)
+        setRemoteParticipantScreenShareVolume(
+          remoteParticipant,
+          ssVolume,
+          deafenRef.current,
+          screenShareAudioSourceRef.current,
+        );
     }
 
     if (
@@ -258,6 +271,9 @@ export function useVoice() {
   const micPermissionRef = useRef(false);
   const selectedDeviceIdRef = useRef(selectedMic);
   const screenShareRef = useRef(false);
+  const deafenRef = useRef(deafen);
+  deafenRef.current = deafen;
+  const screenShareAudioSourceRef = useRef<unknown>(null);
   const deafenMicTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const notificationsEnabledRef = useRef(
     typeof localStorage === "undefined" ? false : initialNotificationsEnabled(localStorage),
@@ -267,7 +283,6 @@ export function useVoice() {
   );
 
   selectedDeviceIdRef.current = selectedMic;
-  setDeafenVolumeActive(deafen);
 
   const {
     volumes,
@@ -287,7 +302,7 @@ export function useVoice() {
     getScreenShareVolumeRef,
     unmuteAllParticipants,
     resetState: resetParticipantVolumeState,
-  } = useParticipantVolume(roomRef);
+  } = useParticipantVolume(roomRef, deafenRef, screenShareAudioSourceRef);
 
   const {
     screenShareEnabled,
@@ -445,7 +460,7 @@ export function useVoice() {
         const [client, tokenResponse, initialProcessor] = await Promise.all([
           (async () => {
             const c = await import("livekit-client");
-            setScreenShareAudioSource(c.Track.Source.ScreenShareAudio);
+            screenShareAudioSourceRef.current = c.Track.Source.ScreenShareAudio;
             return c;
           })(),
           api<VoiceTokenResponse>("/api/voice/token", {
@@ -485,6 +500,8 @@ export function useVoice() {
           notificationsEnabledRef,
           roomRef,
           screenShareRef,
+          deafenRef,
+          screenShareAudioSourceRef,
           setRemoteMuted,
           applyParticipantVolumes,
           onTrackSubscribed,
@@ -635,11 +652,11 @@ export function useVoice() {
     if (globalMuteActive) {
       unmuteAllParticipants();
       setDeafen(false);
-      queueDeafenMicrophoneState(microphoneEnabledAfterDeafenToggle(true));
+      queueDeafenMicrophoneState(true);
       return;
     }
     setDeafen(true);
-    queueDeafenMicrophoneState(microphoneEnabledAfterDeafenToggle(false));
+    queueDeafenMicrophoneState(false);
   }, [globalMuteActive, queueDeafenMicrophoneState, unmuteAllParticipants]);
 
   const keepMicrophoneMutedAfterDeafen = useCallback(() => {

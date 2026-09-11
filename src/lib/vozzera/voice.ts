@@ -239,10 +239,6 @@ export function participantNamesToMuteForSelectiveListening(
   return participantNames.filter((name) => name !== selectedName);
 }
 
-export function microphoneEnabledAfterDeafenToggle(deafenActive: boolean): boolean {
-  return deafenActive;
-}
-
 export function locallyMutedParticipantNames(volumes: Record<string, number>): string[] {
   return Object.entries(volumes)
     .filter(([, volume]) => volume === 0)
@@ -273,6 +269,15 @@ export function participantStatusLabelFor(locallyMuted: boolean, isSpeaking: boo
   if (locallyMuted) return "Silenciado para você";
   if (isSpeaking) return "Falando agora";
   return "Volume individual";
+}
+
+export function applyVolumeWithElementMuted(
+  element: HTMLAudioElement,
+  applyVolume: () => void,
+): void {
+  element.volume = 0;
+  applyVolume();
+  element.volume = 1;
 }
 
 export type FpsSeverity = "excellent" | "good" | "poor" | "critical";
