@@ -21,6 +21,7 @@ type Props = {
   localPreview: ScreenShare | null;
   onToggleMic: () => void;
   onToggleScreenShare: () => void;
+  onReduceLocalQuality: (() => void) | undefined;
   onLeave: () => void;
 };
 
@@ -45,6 +46,7 @@ export function VoiceCallView({
   localPreview,
   onToggleMic,
   onToggleScreenShare,
+  onReduceLocalQuality,
   onLeave,
 }: Readonly<Props>) {
   const isConnected = status === "connected";
@@ -54,7 +56,11 @@ export function VoiceCallView({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       {screenShares.length > 0 || localPreview ? (
-        <ScreenShareStage shares={screenShares} localPreview={localPreview} />
+        <ScreenShareStage
+          shares={screenShares}
+          localPreview={localPreview}
+          onReduceLocalQuality={onReduceLocalQuality}
+        />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {status === "connecting" ? (
