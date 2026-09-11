@@ -10,10 +10,13 @@ export type MicCaptureOptions = {
   autoGainControl: boolean;
 };
 
+export type DegradationPreference = "maintain-framerate" | "maintain-resolution";
+
 export type ScreenShareQuality = {
   width: number;
   height: number;
   frameRate: number;
+  degradationPreference?: DegradationPreference;
 };
 
 type AudioPublishProfile = {
@@ -23,7 +26,7 @@ type AudioPublishProfile = {
 };
 
 type ScreenSharePublishProfile = AudioPublishProfile & {
-  degradationPreference: "maintain-framerate";
+  degradationPreference: "maintain-framerate" | "maintain-resolution";
   screenShareEncoding: {
     maxBitrate: number;
     maxFramerate: number;
@@ -38,12 +41,63 @@ type ScreenShareAdaptiveStreamSettings = {
 
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
 const MIC_DEVICE_KEY = "vozzera.micDeviceId";
+const PUSH_TO_TALK_KEY = "vozzera.pushToTalk";
+const PUSH_TO_TALK_CODE_KEY = "vozzera.pushToTalkCode";
+const PUSH_TO_TALK_LABEL_KEY = "vozzera.pushToTalkLabel";
 const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
 const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
 const VOICE_START_LEVEL = 0.16;
 const VOICE_CONTINUE_LEVEL = 0.07;
-export const VOICE_RELEASE_DELAY_MS = 70;
-export const VIDEO_PLAYBACK_DELAY_MS = 700;
+export const VOICE_RELEASE_DELAY_MS = 40;
+export const VIDEO_PLAYBACK_DELAY_MS = 200;
+export const DEFAULT_PUSH_TO_TALK_BINDING = { code: "KeyV", label: "V" } as const;
+
+export type PushToTalkBinding = { code: string; label: string };
+
+export function shouldHandlePushToTalk(
+  code: string,
+  bindingCode: string,
+  repeat: boolean,
+  tagName: string | undefined,
+  contentEditable: boolean,
+): boolean {
+  if (code !== bindingCode || repeat || contentEditable) return false;
+  return tagName !== "INPUT" && tagName !== "TEXTAREA" && tagName !== "SELECT";
+}
+
+export function pushToTalkLabelFor(key: string, code: string): string {
+  if (code === "Space") return "Espaço";
+  if (key.length === 1) return key.toLocaleUpperCase("pt-BR");
+  return key;
+}
+
+export function readPushToTalkBinding(storage: Storage | null): PushToTalkBinding {
+  if (!storage) return DEFAULT_PUSH_TO_TALK_BINDING;
+  const code = storage.getItem(PUSH_TO_TALK_CODE_KEY);
+  const label = storage.getItem(PUSH_TO_TALK_LABEL_KEY);
+  if (!code || !label) return DEFAULT_PUSH_TO_TALK_BINDING;
+  return { code, label };
+}
+
+export function writePushToTalkBinding(storage: Storage | null, binding: PushToTalkBinding): void {
+  if (!storage) return;
+  storage.setItem(PUSH_TO_TALK_CODE_KEY, binding.code);
+  storage.setItem(PUSH_TO_TALK_LABEL_KEY, binding.label);
+}
+
+export function readPushToTalkEnabled(storage: Storage | null): boolean {
+  if (!storage) return false;
+  return storage.getItem(PUSH_TO_TALK_KEY) === "1";
+}
+
+export function writePushToTalkEnabled(storage: Storage | null, enabled: boolean): void {
+  if (!storage) return;
+  if (enabled) {
+    storage.setItem(PUSH_TO_TALK_KEY, "1");
+    return;
+  }
+  storage.removeItem(PUSH_TO_TALK_KEY);
+}
 
 export function isLocalVoiceActive(volume: number, wasActive: boolean): boolean {
   if (wasActive) return volume >= VOICE_CONTINUE_LEVEL;
@@ -71,6 +125,10 @@ export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions 
     noiseSuppression: true,
     autoGainControl: true,
   };
+}
+
+export function shouldReleaseMicrophoneInBackground(hidden: boolean): boolean {
+  return hidden;
 }
 
 export function microphonePublishOptions(): AudioPublishProfile {
@@ -107,7 +165,7 @@ export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSh
     audioPreset: { maxBitrate: 128_000 },
     dtx: false,
     forceStereo: true,
-    degradationPreference: "maintain-framerate",
+    degradationPreference: quality.degradationPreference ?? "maintain-framerate",
     screenShareEncoding: {
       maxBitrate: screenShareVideoBitrate(quality),
       maxFramerate: quality.frameRate,
@@ -270,4 +328,47 @@ export function participantStatusLabelFor(locallyMuted: boolean, isSpeaking: boo
   if (locallyMuted) return "Silenciado para você";
   if (isSpeaking) return "Falando agora";
   return "Volume individual";
+}
+
+export function applyVolumeWithElementMuted(
+  element: HTMLAudioElement,
+  applyVolume: () => void,
+): void {
+  element.volume = 0;
+  applyVolume();
+  element.volume = 1;
+}
+
+export type FpsSeverity = "excellent" | "good" | "poor" | "critical";
+
+export function fpsSeverityFor(measuredFps: number, targetFps: number): FpsSeverity {
+  if (measuredFps >= targetFps * 0.8) return "excellent";
+  if (measuredFps >= targetFps * 0.5) return "good";
+  if (measuredFps >= Math.min(targetFps * 0.3, 20)) return "poor";
+  return "critical";
+}
+
+export function fpsLabelFor(measuredFps: number, targetFps: number): string | null {
+  if (measuredFps >= targetFps * 0.8) return null;
+  if (measuredFps >= targetFps * 0.5) return `${measuredFps} fps`;
+  return `${measuredFps} fps · Baixe a qualidade`;
+}
+
+export function remoteFpsLabelFor(measuredFps: number): string | null {
+  if (measuredFps >= 30) return null;
+  if (measuredFps >= 15) return "Qualidade instável";
+  return "Streamer com dificuldades";
+}
+
+export function fpsColorFor(severity: FpsSeverity): string {
+  switch (severity) {
+    case "excellent":
+      return "bg-green-600/80 text-white";
+    case "good":
+      return "bg-amber-500/80 text-white";
+    case "poor":
+      return "bg-orange-600/80 text-white";
+    case "critical":
+      return "bg-red-600/80 text-white";
+  }
 }

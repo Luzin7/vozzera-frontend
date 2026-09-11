@@ -26,6 +26,8 @@ export const MessageList = memo(function MessageList({
   canModerateMessages,
   onDelete,
   onRoomClick,
+  unreadMarkerMessageId,
+  onUnreadMarkerRead,
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
@@ -35,6 +37,8 @@ export const MessageList = memo(function MessageList({
   canModerateMessages: boolean;
   onDelete: (message: ChatMessage) => void;
   onRoomClick: ((roomName: string) => void) | undefined;
+  unreadMarkerMessageId?: string | null;
+  onUnreadMarkerRead?: (roomId: string) => void;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -42,6 +46,7 @@ export const MessageList = memo(function MessageList({
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const unreadMarkerRef = useRef<HTMLLIElement>(null);
   const editContentRef = useRef(editContent);
   const username = useAuth().username;
 
@@ -59,9 +64,14 @@ export const MessageList = memo(function MessageList({
     const container = scrollRef.current;
     if (!container) return;
 
+    const marker = unreadMarkerRef.current;
+    if (marker && marker.getBoundingClientRect().bottom <= container.getBoundingClientRect().top) {
+      onUnreadMarkerRead?.(roomId);
+    }
+
     const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (distance < 80) setShowJumpToLatest(false);
-  }, []);
+  }, [onUnreadMarkerRead, roomId]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -89,6 +99,13 @@ export const MessageList = memo(function MessageList({
     const container = scrollRef.current;
     if (!container) return;
 
+    const latestMessage = messages[messages.length - 1];
+    if (latestMessage?.username === username) {
+      container.scrollTop = container.scrollHeight;
+      setShowJumpToLatest(false);
+      return;
+    }
+
     const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (distance > 80) {
       setShowJumpToLatest(true);
@@ -96,7 +113,16 @@ export const MessageList = memo(function MessageList({
     }
 
     container.scrollTop = container.scrollHeight;
-  }, [messages.length, loading]);
+  }, [messages, loading, username]);
+
+  useEffect(() => {
+    if (loading || !unreadMarkerMessageId || !onUnreadMarkerRead) return;
+    const container = scrollRef.current;
+    const marker = unreadMarkerRef.current;
+    if (!container || !marker) return;
+
+    marker.scrollIntoView({ block: "center" });
+  }, [loading, onUnreadMarkerRead, unreadMarkerMessageId]);
 
   const startEditing = useCallback((message: ChatMessage) => {
     setEditingMessageId(message.id);
@@ -183,7 +209,9 @@ export const MessageList = memo(function MessageList({
             const dateLabel = dateGroupLabelFor(message.createdAt);
             const previousDateLabel = previous ? dateGroupLabelFor(previous.createdAt) : null;
             const startsDateGroup = dateLabel !== previousDateLabel;
-            const grouped = !startsDateGroup && previous?.userId === message.userId;
+            const startsUnreadGroup = message.id === unreadMarkerMessageId;
+            const grouped =
+              !startsDateGroup && !startsUnreadGroup && previous?.userId === message.userId;
             const isEditing = editingMessageId === message.id;
             const isOwnMessage = username === message.username;
             const canDeleteMessage = isOwnMessage || canModerateMessages;
@@ -199,6 +227,18 @@ export const MessageList = memo(function MessageList({
                     <span className="h-px flex-1 bg-border" />
                     <span>{dateLabel}</span>
                     <span className="h-px flex-1 bg-border" />
+                  </li>
+                )}
+                {startsUnreadGroup && (
+                  <li
+                    ref={unreadMarkerRef}
+                    role="separator"
+                    aria-label="Mensagens não lidas"
+                    className="flex items-center gap-3 py-4 text-xs font-medium text-primary"
+                  >
+                    <span className="h-px flex-1 bg-primary" />
+                    <span>Não lidas desde a sua última visita</span>
+                    <span className="h-px flex-1 bg-primary" />
                   </li>
                 )}
                 <MessageItem

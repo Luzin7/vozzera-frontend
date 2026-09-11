@@ -64,6 +64,7 @@ function Index() {
     banner,
     loadingHistory,
     unread,
+    unreadMarker,
     typingUsers,
     voicePresence,
     onlineUsers,
@@ -84,6 +85,7 @@ function Index() {
     toggleSound,
     sendMessage,
     setTyping,
+    dismissUnreadMarker,
   } = useChat();
   const {
     changelog,
@@ -107,6 +109,7 @@ function Index() {
     disconnect,
     setMicEnabled,
     setScreenShare,
+    reduceScreenQuality,
     ensureKrispLoaded,
     toggleDeafen,
   } = voice;
@@ -425,6 +428,7 @@ function Index() {
               localPreview={voice.localPreview}
               onToggleMic={handleToggleMic}
               onToggleScreenShare={handleToggleScreenShare}
+              onReduceLocalQuality={reduceScreenQuality}
               onLeave={handleLeaveVoice}
             />
           </Suspense>
@@ -439,6 +443,10 @@ function Index() {
               canModerateMessages={canModerateMessages}
               onDelete={handleDeleteMessage}
               onRoomClick={handleRoomMention}
+              unreadMarkerMessageId={
+                unreadMarker?.roomId === activeRoom.id ? unreadMarker.messageId : null
+              }
+              onUnreadMarkerRead={dismissUnreadMarker}
             />
             <MessageComposer
               roomId={activeRoom.id}
@@ -497,10 +505,14 @@ function Index() {
           noiseFilter={voice.noiseFilter}
           krispSupported={voice.krispSupported}
           selfMonitor={voice.selfMonitor}
+          pushToTalkEnabled={voice.pushToTalkEnabled}
+          pushToTalkKeyLabel={voice.pushToTalkBinding.label}
           soundEnabled={soundEnabled}
           onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
           onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
           onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
+          onTogglePushToTalk={voice.setPushToTalkEnabled}
+          onPushToTalkKeyChange={voice.setPushToTalkBinding}
           onToggleSound={toggleSound}
           onUpdateEmail={updateEmail}
           onLogout={handleLogout}
