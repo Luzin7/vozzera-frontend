@@ -7,6 +7,7 @@ import {
   deleteMessage as deleteMessageApi,
   deleteRoom as deleteRoomApi,
   getCurrentUser,
+  getPresence,
   listMessages,
   listRooms,
   logout as logoutApi,
@@ -120,7 +121,7 @@ export function useChat() {
 
   const loadSession = useCallback(async () => {
     try {
-      const [nextRooms, currentUser] = await Promise.all([
+      const [nextRooms, currentUser, presence] = await Promise.all([
         queryClient.ensureQueryData({
           queryKey: ["rooms"],
           queryFn: listRooms,
@@ -131,6 +132,7 @@ export function useChat() {
           queryFn: getCurrentUser,
           staleTime: 5 * 60_000,
         }),
+        getPresence().catch(() => null),
       ]);
       setRooms(nextRooms);
       setUsername(currentUser.username);
@@ -138,7 +140,15 @@ export function useChat() {
       setEmail(currentUser.email);
       setCurrentUserId(currentUser.id);
       setOnlineUsers((prev) =>
-        addOnlineUser(prev, { userId: currentUser.id, username: currentUser.username }),
+        presence
+          ? replaceOnlineUsers(
+              prev,
+              (presence.online_users ?? []).map((u) => ({
+                userId: u.user_id,
+                username: u.username,
+              })),
+            )
+          : addOnlineUser(prev, { userId: currentUser.id, username: currentUser.username }),
       );
       setAuthed(true);
     } catch (err) {
