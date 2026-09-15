@@ -139,17 +139,29 @@ export function useChat() {
       setRole(currentUser.role);
       setEmail(currentUser.email);
       setCurrentUserId(currentUser.id);
-      setOnlineUsers((prev) =>
-        presence
-          ? replaceOnlineUsers(
-              prev,
-              (presence.online_users ?? []).map((u) => ({
-                userId: u.user_id,
-                username: u.username,
-              })),
-            )
-          : addOnlineUser(prev, { userId: currentUser.id, username: currentUser.username }),
-      );
+      setOnlineUsers((prev) => {
+        if (!presence) {
+          return addOnlineUser(prev, { userId: currentUser.id, username: currentUser.username });
+        }
+
+        const onlineList = (presence.online_users ?? []).map((u) => ({
+          userId: u.user_id,
+          username: u.username,
+        }));
+        const offlineList = (presence.offline_users ?? []).map((u) => ({
+          userId: u.user_id,
+          username: u.username,
+        }));
+        const next = replaceOnlineUsers(prev, onlineList);
+
+        for (const user of offlineList) {
+          if (!next[user.userId]) {
+            next[user.userId] = { ...user, online: false };
+          }
+        }
+
+        return next;
+      });
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
@@ -329,11 +341,7 @@ export function useChat() {
   useEffect(() => {
     if (status !== "connecting") return;
     setVoicePresence({});
-    setOnlineUsers((_prev) => {
-      if (!currentUserId || !username) return {};
-      return { [currentUserId]: { userId: currentUserId, username, online: true } };
-    });
-  }, [status, currentUserId, username]);
+  }, [status]);
 
   const setTyping = useCallback(
     (typing: boolean) => {
