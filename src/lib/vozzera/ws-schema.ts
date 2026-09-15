@@ -179,10 +179,26 @@ const userOfflineFrame = envelope("user.offline", presenceTopic, presenceUserDat
 const presenceSnapshotFrame = envelope(
   "presence.snapshot",
   presenceTopic,
-  z.array(presenceUserData),
+  z.object({
+    online: z.number(),
+    offline: z.number(),
+    total: z.number(),
+    online_users: z.array(presenceUserData).optional(),
+    offline_users: z.array(presenceUserData).optional(),
+  }),
 ).transform((frame): OutboundEvent => ({
   type: "presence.snapshot",
-  users: frame.data.map((u) => ({ userId: u.user_id, username: u.username })),
+  online: frame.data.online,
+  offline: frame.data.offline,
+  total: frame.data.total,
+  online_users: (frame.data.online_users ?? []).map((u) => ({
+    userId: u.user_id,
+    username: u.username,
+  })),
+  offline_users: (frame.data.offline_users ?? []).map((u) => ({
+    userId: u.user_id,
+    username: u.username,
+  })),
 }));
 
 export const outboundFrameSchema = z.union([

@@ -123,7 +123,11 @@ export type OutboundEvent =
     }
   | {
       type: "presence.snapshot";
-      users: Array<{ userId: string; username: string }>;
+      online: number;
+      offline: number;
+      total: number;
+      online_users: Array<{ userId: string; username: string }>;
+      offline_users?: Array<{ userId: string; username: string }>;
     }
   | {
       type: "typing";
@@ -143,6 +147,14 @@ export type OutboundEvent =
     };
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+
+export type PresenceSnapshot = {
+  online: number;
+  offline: number;
+  total: number;
+  online_users?: Array<{ user_id: string; username: string }>;
+  offline_users?: Array<{ user_id: string; username: string }>;
+};
 
 export type VoiceTokenResponse = {
   token: string;

@@ -7,6 +7,7 @@ import {
   deleteMessage as deleteMessageApi,
   deleteRoom as deleteRoomApi,
   getCurrentUser,
+  getPresence,
   listMessages,
   listRooms,
   logout as logoutApi,
@@ -120,7 +121,7 @@ export function useChat() {
 
   const loadSession = useCallback(async () => {
     try {
-      const [nextRooms, currentUser] = await Promise.all([
+      const [nextRooms, currentUser, presence] = await Promise.all([
         queryClient.ensureQueryData({
           queryKey: ["rooms"],
           queryFn: listRooms,
@@ -131,12 +132,36 @@ export function useChat() {
           queryFn: getCurrentUser,
           staleTime: 5 * 60_000,
         }),
+        getPresence().catch(() => null),
       ]);
       setRooms(nextRooms);
       setUsername(currentUser.username);
       setRole(currentUser.role);
       setEmail(currentUser.email);
       setCurrentUserId(currentUser.id);
+      setOnlineUsers((prev) => {
+        if (!presence) {
+          return addOnlineUser(prev, { userId: currentUser.id, username: currentUser.username });
+        }
+
+        const onlineList = (presence.online_users ?? []).map((u) => ({
+          userId: u.user_id,
+          username: u.username,
+        }));
+        const offlineList = (presence.offline_users ?? []).map((u) => ({
+          userId: u.user_id,
+          username: u.username,
+        }));
+        const next = replaceOnlineUsers(prev, onlineList);
+
+        for (const user of offlineList) {
+          if (!next[user.userId]) {
+            next[user.userId] = { ...user, online: false };
+          }
+        }
+
+        return next;
+      });
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
@@ -283,7 +308,7 @@ export function useChat() {
       }
 
       if (event.type === "presence.snapshot") {
-        setOnlineUsers((prev) => replaceOnlineUsers(prev, event.users));
+        setOnlineUsers((prev) => replaceOnlineUsers(prev, event.online_users));
         return;
       }
 
@@ -316,7 +341,6 @@ export function useChat() {
   useEffect(() => {
     if (status !== "connecting") return;
     setVoicePresence({});
-    setOnlineUsers((prev) => replaceOnlineUsers(prev, []));
   }, [status]);
 
   const setTyping = useCallback(
