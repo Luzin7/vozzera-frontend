@@ -1,24 +1,5 @@
 {
   "version": "v1.17.0",
   "releasedAt": "2026-09-15",
-  "items": [
-    {
-      "title": "feat(voice): adicionar push-to-talk configuravel",
-      "kind": "feat",
-      "pr": 150,
-      "summary": "Fale só quando quiser! Push-to-talk configurável chegou pra dar controle total sobre o seu microfone — do seu jeito."
-    },
-    {
-      "title": "feat(voice): adicionar sons às ações da chamada",
-      "kind": "feat",
-      "pr": 149,
-      "summary": "Cada ação da chamada ganhou vida! Sons que tornam a experiência mais imersiva — você sabe exatamente o que aconteceu só de ouvir."
-    },
-    {
-      "title": "feat(voice): monitoramento de FPS, modo qualidade e sugestão adaptativa no screen share",
-      "kind": "feat",
-      "pr": 146,
-      "summary": "Compartilhe sua tela com a melhor qualidade possível! Monitoramento de FPS em tempo real e sugestão adaptativa pra você nunca perder detalhes."
-    }
-  ]
+  "items": []
 }
