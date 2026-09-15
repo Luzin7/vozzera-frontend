@@ -137,6 +137,9 @@ export function useChat() {
       setRole(currentUser.role);
       setEmail(currentUser.email);
       setCurrentUserId(currentUser.id);
+      setOnlineUsers((prev) =>
+        addOnlineUser(prev, { userId: currentUser.id, username: currentUser.username }),
+      );
       setAuthed(true);
     } catch (err) {
       setAuthed(false);
@@ -283,7 +286,7 @@ export function useChat() {
       }
 
       if (event.type === "presence.snapshot") {
-        setOnlineUsers((prev) => replaceOnlineUsers(prev, event.users));
+        setOnlineUsers((prev) => replaceOnlineUsers(prev, event.online_users));
         return;
       }
 
@@ -316,8 +319,11 @@ export function useChat() {
   useEffect(() => {
     if (status !== "connecting") return;
     setVoicePresence({});
-    setOnlineUsers((prev) => replaceOnlineUsers(prev, []));
-  }, [status]);
+    setOnlineUsers((_prev) => {
+      if (!currentUserId || !username) return {};
+      return { [currentUserId]: { userId: currentUserId, username, online: true } };
+    });
+  }, [status, currentUserId, username]);
 
   const setTyping = useCallback(
     (typing: boolean) => {

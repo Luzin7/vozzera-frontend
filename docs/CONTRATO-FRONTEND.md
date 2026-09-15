@@ -172,6 +172,23 @@ O frontend solicita áudio estéreo ao LiveKit sem processamento de voz. A publi
 ]
 ```
 
+### `GET /api/presence`
+
+```jsonc
+// response 200
+{
+  "online": 5,
+  "offline": 3,
+  "total": 8,
+  "online_users": [{ "user_id": "uuid", "username": "string" }],
+  "offline_users": [{ "user_id": "uuid", "username": "string" }],
+}
+```
+
+- `401` → não autenticado.
+- `online` é o número de usuários atualmente conectados ao WebSocket; `offline` é a diferença entre `total` e `online`; `total` é o total de contas registradas.
+- `online_users` e `offline_users` são listas opcionais (omitempty) de usuários conectados/desconectados.
+
 ## WebSocket
 
 Endpoint autenticado `GET /api/ws`, na mesma base da API (http→ws, https→wss).
@@ -227,7 +244,7 @@ Digitação e presença de voz:
 { "v": 1, "type": "typing.start" | "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "user_id": "uuid", "username": "string" } }
 { "v": 1, "type": "voice.presence.joined" | "voice.presence.left" | "voice.presence.snapshot", "topic": "room:<uuid>", "ts": "string", "data": [{ "sid": "string", "user_id": "string", "username": "string" }] }
 { "v": 1, "type": "user.online" | "user.offline", "topic": "__presence__", "ts": "string", "data": { "user_id": "string", "username": "string" } }
-{ "v": 1, "type": "presence.snapshot", "topic": "__presence__", "ts": "string", "data": [{ "user_id": "string", "username": "string" }] }
+{ "v": 1, "type": "presence.snapshot", "topic": "__presence__", "ts": "string", "data": { "online": 5, "offline": 3, "total": 8, "online_users": [{ "user_id": "string", "username": "string" }], "offline_users": [{ "user_id": "string", "username": "string" }] } }
 ```
 
 Regras:
@@ -237,7 +254,7 @@ Regras:
 - Uma inscrição negada não confirma estado local nem produz mensagem otimista; sem eco, o histórico permanece íntegro.
 - `room.created`, `room.updated` e `room.deleted` atualizam a lista local; exclusão também remove o histórico local sem encerrar o WebSocket.
 - `voice.presence.*` substitui o snapshot da sala na UI de voz; participantes são deduplicados por `user_id` e exibidos na barra lateral.
-- **Presença global** (`__presence__`): todo cliente é automaticamente inscrito no tópico `__presence__` ao conectar. Os eventos `user.online`, `user.offline` e `presence.snapshot` gerenciam a lista de usuários online no servidor. O snapshot inicial chega logo após a inscrição automática.
+- **Presença global** (`__presence__`): o snapshot inicial de presença (`presence.snapshot`) é enviado automaticamente na conexão WebSocket, contendo estatísticas (`online`, `offline`, `total`) e a lista de usuários online (`online_users`). Os eventos `user.online` e `user.offline` mantêm a lista atualizada durante a sessão. A contagem `total` é atualizada periodicamente no servidor (a cada 15 min) e reflete o total de contas registradas.
 - Ao reconectar o WebSocket, o cliente descarta a presença anterior e aguarda novos snapshots das salas de voz assinadas.
 - **Revogação/expiração de sessão**: o servidor fecha o WS com `CloseMessage` vazio → no browser `CloseEvent.code === 1005`. O front trata como "sessão morta" (desloga e para de reconectar), distinto de queda de rede/crash (`1006`), que tem retry com backoff.
 
