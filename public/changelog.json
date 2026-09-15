@@ -1,6 +1,6 @@
 {
-  "version": "v1.16.0",
-  "releasedAt": "2026-09-11",
+  "version": "v1.17.0",
+  "releasedAt": "2026-09-15",
   "items": [
     {
       "title": "feat(voice): adicionar push-to-talk configuravel",
