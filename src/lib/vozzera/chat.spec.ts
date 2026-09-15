@@ -379,7 +379,12 @@ describe("parseFrame", () => {
     (type) => {
       const data =
         type === "presence.snapshot"
-          ? [{ user_id: wsUserId, username: "luan" }]
+          ? {
+              online: 5,
+              offline: 3,
+              total: 8,
+              online_users: [{ user_id: wsUserId, username: "luan" }],
+            }
           : { user_id: wsUserId, username: "luan" };
       const raw = messageEvent({
         v: 1,
@@ -391,11 +396,33 @@ describe("parseFrame", () => {
       expect(parseFrame(raw)).toMatchObject({
         type,
         ...(type === "presence.snapshot"
-          ? { users: [{ userId: wsUserId, username: "luan" }] }
+          ? {
+              online: 5,
+              offline: 3,
+              total: 8,
+              online_users: [{ userId: wsUserId, username: "luan" }],
+            }
           : { userId: wsUserId, username: "luan" }),
       });
     },
   );
+
+  it("accepts presence.snapshot without online_users (omitempty no Go)", () => {
+    const raw = messageEvent({
+      v: 1,
+      type: "presence.snapshot",
+      topic: "__presence__",
+      ts: wsTimestamp,
+      data: { online: 0, offline: 6, total: 6 },
+    });
+    expect(parseFrame(raw)).toMatchObject({
+      type: "presence.snapshot",
+      online: 0,
+      offline: 6,
+      total: 6,
+      online_users: [],
+    });
+  });
 
   it("rejects a frame larger than the limit", () => {
     const raw = {

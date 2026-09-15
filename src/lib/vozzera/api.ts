@@ -2,6 +2,7 @@ import type {
   CurrentUser,
   HistoryMessage,
   LoginResponse,
+  PresenceSnapshot,
   RegisterRequest,
   RegisterResponse,
   Room,
@@ -106,6 +107,8 @@ export const deleteMessage = (roomId: string, messageId: string) =>
   api(`/api/rooms/${roomId}/messages/${messageId}`, {
     method: "DELETE",
   });
+
+export const getPresence = () => api<PresenceSnapshot>("/api/presence");
 
 export function wsUrl(): string {
   if (typeof window === "undefined") return "";
