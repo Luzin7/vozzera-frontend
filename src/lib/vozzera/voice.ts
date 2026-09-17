@@ -270,50 +270,29 @@ export function muteVolume(muted: boolean, previousVolume: number | undefined): 
   return muted ? 0 : (previousVolume ?? 1);
 }
 
-export function effectiveParticipantVolume(
-  deafen: boolean,
-  savedVolume: number | undefined,
-): number {
-  if (deafen) return 0;
+export function effectiveParticipantVolume(savedVolume: number | undefined): number {
   return savedVolume ?? 1;
 }
 
 export function isParticipantLocallyInaudible(
   isCurrentUser: boolean,
-  deafen: boolean,
   savedVolume: number | undefined,
 ): boolean {
   if (isCurrentUser) return false;
-  return deafen || savedVolume === 0;
+  return savedVolume === 0;
 }
 
-export function participantNamesToMuteForSelectiveListening(
-  participantNames: string[],
-  selectedName: string,
-): string[] {
-  return participantNames.filter((name) => name !== selectedName);
+export const DEAFEN_DATA_TOPIC = "vozzera.deafen";
+
+export function deafenStatePayload(enabled: boolean): Uint8Array<ArrayBuffer> {
+  return new Uint8Array([enabled ? 1 : 0]);
 }
 
-export function microphoneEnabledAfterDeafenToggle(deafenActive: boolean): boolean {
-  return deafenActive;
-}
-
-export function locallyMutedParticipantNames(volumes: Record<string, number>): string[] {
-  return Object.entries(volumes)
-    .filter(([, volume]) => volume === 0)
-    .map(([name]) => name);
-}
-
-export function isGlobalMuteActive(
-  microphoneEnabled: boolean,
-  participantNames: string[],
-  participantVolumes: Record<string, number>,
-  screenShareNames: string[],
-  screenShareVolumes: Record<string, number>,
-): boolean {
-  if (microphoneEnabled) return false;
-  if (participantNames.some((name) => participantVolumes[name] !== 0)) return false;
-  return screenShareNames.every((name) => screenShareVolumes[name] === 0);
+export function deafenStateFromPayload(payload: Uint8Array): boolean | null {
+  if (payload.length !== 1) return null;
+  if (payload[0] === 1) return true;
+  if (payload[0] === 0) return false;
+  return null;
 }
 
 type HasPlayoutDelay = {
