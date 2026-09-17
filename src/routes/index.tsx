@@ -102,16 +102,15 @@ function Index() {
   const isOnline = useOnline();
   const voice = useVoice();
   const {
-    micEnabled,
     screenShareEnabled,
     activeRoomId: voiceActiveRoomId,
     connect,
     disconnect,
-    setMicEnabled,
     setScreenShare,
     reduceScreenQuality,
     ensureKrispLoaded,
     toggleDeafen,
+    toggleMic,
   } = voice;
 
   const handleDeleteMessage = useCallback(
@@ -183,10 +182,7 @@ function Index() {
     [handleDeleteRoom],
   );
 
-  const handleToggleMic = useCallback(
-    () => void setMicEnabled(!micEnabled),
-    [micEnabled, setMicEnabled],
-  );
+  const handleToggleMic = useCallback(() => toggleMic(), [toggleMic]);
 
   const handleLeaveVoice = useCallback(() => {
     setVisibleVoiceRoomId(null);
@@ -278,12 +274,11 @@ function Index() {
     onSetScreenShareVolume: voice.setScreenShareVolume,
     onToggleLocalMute: voice.toggleLocalMute,
     onToggleLocalScreenShareMute: voice.toggleLocalScreenShareMute,
-    onListenToParticipant: voice.listenToParticipant,
-    onListenToParticipantScreenShare: voice.listenToParticipantScreenShare,
     screenShareEnabled: voice.screenShareEnabled,
     onToggleScreenShare: handleToggleScreenShare,
     screenShares: voice.screenShares,
     mutedParticipants: voice.mutedParticipants,
+    deafenedParticipants: voice.deafenedParticipants,
     speakingNames: voice.speakingNames,
     deafen: voice.deafen,
     onToggleDeafen: handleToggleDeafen,
@@ -422,6 +417,7 @@ function Index() {
               deafen={voice.deafen}
               volumes={voice.volumes}
               mutedParticipants={voice.mutedParticipants}
+              deafenedParticipants={voice.deafenedParticipants}
               speakingNames={voice.speakingNames}
               screenShareEnabled={voice.screenShareEnabled}
               screenShares={voice.screenShares}
