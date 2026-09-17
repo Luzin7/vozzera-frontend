@@ -3,7 +3,6 @@ import { useCallback, useRef, useState } from "react";
 import type { RemoteParticipant } from "livekit-client";
 import {
   effectiveParticipantVolume,
-  locallyMutedParticipantNames,
   muteVolume,
   readParticipantVolumes,
   readScreenShareVolumes,
@@ -11,23 +10,18 @@ import {
   writeScreenShareVolumes,
 } from "./voice";
 
-function setRemoteParticipantVolume(
-  participant: RemoteParticipant,
-  volume: number | undefined,
-  deafenActive: boolean,
-) {
-  participant.setVolume(effectiveParticipantVolume(deafenActive, volume));
+function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number | undefined) {
+  participant.setVolume(effectiveParticipantVolume(volume));
 }
 
 export function setRemoteParticipantScreenShareVolume(
   participant: RemoteParticipant,
   volume: number | undefined,
-  deafenActive: boolean,
   ssAudioSource: unknown,
 ) {
   if (ssAudioSource === null) return;
   participant.setVolume(
-    effectiveParticipantVolume(deafenActive, volume),
+    effectiveParticipantVolume(volume),
     ssAudioSource as Parameters<RemoteParticipant["setVolume"]>[1],
   );
 }
@@ -49,17 +43,13 @@ export type VolumeResult = {
   toggleLocalScreenShareMute: (name: string) => void;
   setRemoteMuted: (name: string, muted: boolean) => void;
   getScreenShareVolumeRef: () => Record<string, number>;
-  getVolumeRef: () => Record<string, number>;
-  unmuteAllParticipants: () => void;
   resetState: () => void;
 };
 
-type MustRef = { readonly current: boolean };
 type ScreenShareAudioSourceRef = { readonly current: unknown };
 
 export function useParticipantVolume(
   roomRef: RoomRef,
-  deafenRef: MustRef,
   screenShareAudioSourceRef: ScreenShareAudioSourceRef,
 ): VolumeResult {
   const [volumes, setVolumes] = useState<Record<string, number>>(() => {
@@ -88,15 +78,10 @@ export function useParticipantVolume(
       const name = p.name || p.identity;
       const volume = volumesRef.current[name];
       const ssVolume = screenShareVolumesRef.current[name];
-      setRemoteParticipantVolume(p, volume, deafenRef.current);
-      setRemoteParticipantScreenShareVolume(
-        p,
-        ssVolume,
-        deafenRef.current,
-        screenShareAudioSourceRef.current,
-      );
+      setRemoteParticipantVolume(p, volume);
+      setRemoteParticipantScreenShareVolume(p, ssVolume, screenShareAudioSourceRef.current);
     },
-    [deafenRef, screenShareAudioSourceRef],
+    [screenShareAudioSourceRef],
   );
 
   const setParticipantVolume = useCallback(
@@ -109,9 +94,9 @@ export function useParticipantVolume(
       const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
         (p) => (p.name || p.identity) === name,
       );
-      if (participant) setRemoteParticipantVolume(participant, volume, deafenRef.current);
+      if (participant) setRemoteParticipantVolume(participant, volume);
     },
-    [roomRef, deafenRef],
+    [roomRef],
   );
 
   const setScreenShareVolume = useCallback(
@@ -128,11 +113,10 @@ export function useParticipantVolume(
         setRemoteParticipantScreenShareVolume(
           participant,
           volume,
-          deafenRef.current,
           screenShareAudioSourceRef.current,
         );
     },
-    [roomRef, deafenRef, screenShareAudioSourceRef],
+    [roomRef, screenShareAudioSourceRef],
   );
 
   const setLocalMute = useCallback(
@@ -206,18 +190,7 @@ export function useParticipantVolume(
     setMutedParticipants((prev) => ({ ...prev, [name]: muted }));
   }, []);
 
-  const getVolumeRef = useCallback(() => volumesRef.current, []);
-
   const getScreenShareVolumeRef = useCallback(() => screenShareVolumesRef.current, []);
-
-  const unmuteAllParticipants = useCallback(() => {
-    for (const name of locallyMutedParticipantNames(volumesRef.current)) {
-      setLocalMute(name, false);
-    }
-    for (const name of locallyMutedParticipantNames(screenShareVolumesRef.current)) {
-      setLocalScreenShareMute(name, false);
-    }
-  }, [setLocalMute, setLocalScreenShareMute]);
 
   const resetState = useCallback(() => {
     setMutedParticipants({});
@@ -240,9 +213,7 @@ export function useParticipantVolume(
     setLocalScreenShareMute,
     toggleLocalScreenShareMute,
     setRemoteMuted,
-    getVolumeRef,
     getScreenShareVolumeRef,
-    unmuteAllParticipants,
     resetState,
   };
 }
