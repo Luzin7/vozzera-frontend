@@ -44,7 +44,7 @@ import {
   writeNotificationsEnabled,
   writeSoundEnabled,
 } from "@/lib/vozzera/notifications";
-import { canManageRooms, canModerateMessages } from "@/lib/vozzera/permissions";
+import { canManageRooms, canModerateMessages, canSeeRoom } from "@/lib/vozzera/permissions";
 import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
@@ -88,6 +88,7 @@ export function useChat() {
   const selectedInitialRoomRef = useRef(false);
   const typingRoomRef = useRef<string | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resubscribeRoomRef = useRef<((roomId: string) => void) | null>(null);
 
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
@@ -124,7 +125,7 @@ export function useChat() {
       const [nextRooms, currentUser, presence] = await Promise.all([
         queryClient.ensureQueryData({
           queryKey: ["rooms"],
-          queryFn: listRooms,
+          queryFn: () => listRooms(),
           staleTime: 30_000,
         }),
         queryClient.ensureQueryData({
@@ -200,16 +201,28 @@ export function useChat() {
       const room: Room = {
         id: event.id,
         name: event.name,
-        type: event.room_type,
+        created_by: current?.created_by ?? null,
+        has_voice: event.has_voice,
+        staff_only: event.staff_only,
         created_at: event.created_at,
         updated_at: current?.updated_at ?? null,
       };
 
+      if (!canSeeRoom(room, role)) {
+        removeRoomLocally(room.id);
+        queryClient.setQueryData<Room[]>(["rooms"], (prev) =>
+          prev?.filter((item) => item.id !== room.id),
+        );
+        return;
+      }
+
       setRooms((prev) => upsertRoom(prev, room));
       queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
       setActiveRoom((active) => (active?.id === room.id ? { ...active, ...room } : active));
+
+      if (event.staff_only) resubscribeRoomRef.current?.(room.id);
     },
-    [queryClient, removeRoomLocally],
+    [queryClient, removeRoomLocally, role],
   );
 
   const handleMessageEvent = useCallback(
@@ -318,18 +331,21 @@ export function useChat() {
     [currentUserId, handleMessageEvent, handleRoomEvent],
   );
 
-  const { status, subscribeRoom, unsubscribeRoom, sendMessage, sendTyping } = useSocket({
-    enabled: authed === true,
-    onEvent: handleEvent,
-    onProtocolError: setBanner,
-    onSessionExpired: () => {
-      endSession();
-      setBanner("Sessão encerrada no servidor. Entre novamente.");
-    },
-  });
+  const { status, subscribeRoom, unsubscribeRoom, resubscribeRoom, sendMessage, sendTyping } =
+    useSocket({
+      enabled: authed === true,
+      onEvent: handleEvent,
+      onProtocolError: setBanner,
+      onSessionExpired: () => {
+        endSession();
+        setBanner("Sessão encerrada no servidor. Entre novamente.");
+      },
+    });
+
+  resubscribeRoomRef.current = resubscribeRoom;
 
   useEffect(() => {
-    const roomIds = rooms.filter((room) => room.type === "voice").map((room) => room.id);
+    const roomIds = rooms.filter((room) => room.has_voice).map((room) => room.id);
 
     for (const roomId of roomIds) subscribeRoom(roomId);
 
@@ -383,13 +399,14 @@ export function useChat() {
 
   const openRoom = useCallback(
     async (room: Room) => {
-      if (room.type !== "text") return;
       if (room.id === activeRoomRef.current?.id) return;
 
       setTyping(false);
       setActiveRoom(room);
       activeRoomRef.current = room;
-      writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
+      if (!room.has_voice) {
+        writeActiveRoomId(typeof localStorage === "undefined" ? null : localStorage, room.id);
+      }
       const unreadCount = unread[room.id] ?? 0;
       const cachedMessages = messages[room.id];
       const cachedMarkerId = cachedMessages
@@ -439,7 +456,7 @@ export function useChat() {
     const storage = typeof localStorage === "undefined" ? null : localStorage;
     const persistedId = readActiveRoomId(storage);
     const target = persistedId
-      ? rooms.find((room) => room.id === persistedId && room.type === "text")
+      ? rooms.find((room) => room.id === persistedId && !room.has_voice)
       : undefined;
 
     const room = target ?? firstTextRoom(rooms);
@@ -450,28 +467,31 @@ export function useChat() {
     }
   }, [rooms, activeRoom, openRoom]);
 
-  const createRoom = useCallback(
-    async (name: string, type: "text" | "voice") => {
-      const room = await createRoomApi(name, type);
-
+  const applyRoomUpdate = useCallback(
+    (room: Room) => {
       setRooms((prev) => upsertRoom(prev, room));
       queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
-
-      if (room.type === "text") {
-        void openRoom(room);
-      }
+      setActiveRoom((current) => (current?.id === room.id ? { ...current, ...room } : current));
     },
-    [openRoom, queryClient],
+    [queryClient],
+  );
+
+  const createRoom = useCallback(
+    async (input: { name: string; hasVoice: boolean; staffOnly: boolean }) => {
+      const room = await createRoomApi(input);
+
+      applyRoomUpdate(room);
+
+      if (!room.has_voice) void openRoom(room);
+    },
+    [applyRoomUpdate, openRoom],
   );
 
   const updateRoom = useCallback(
-    async (roomId: string, name: string) => {
-      const room = await updateRoomApi(roomId, name);
-      setRooms((prev) => upsertRoom(prev, room));
-      queryClient.setQueryData<Room[]>(["rooms"], (prev) => upsertRoom(prev ?? [], room));
-      setActiveRoom((current) => (current?.id === room.id ? room : current));
+    async (roomId: string, input: { name: string; staffOnly?: boolean }) => {
+      applyRoomUpdate(await updateRoomApi(roomId, input));
     },
-    [queryClient],
+    [applyRoomUpdate],
   );
 
   const deleteRoom = useCallback(

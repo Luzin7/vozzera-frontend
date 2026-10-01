@@ -135,6 +135,14 @@ export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired 
     socket.send(JSON.stringify(inboundFrame("room.unsubscribe", roomId)));
   }, []);
 
+  const resubscribeRoom = useCallback(
+    (roomId: string) => {
+      desiredRooms.current.delete(roomId);
+      subscribeRoom(roomId);
+    },
+    [subscribeRoom],
+  );
+
   const sendMessage = useCallback(
     (roomId: string, content: string) => {
       rawSend(inboundFrame("message", roomId, content));
@@ -153,6 +161,7 @@ export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired 
     status,
     subscribeRoom,
     unsubscribeRoom,
+    resubscribeRoom,
     sendMessage,
     sendTyping,
   };

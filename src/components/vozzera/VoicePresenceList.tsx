@@ -6,7 +6,7 @@ type Props = {
   currentUserId: string | null;
 };
 
-export function VoicePresenceList({ participants, currentUserId }: Readonly<Props>) {
+export function VoicePresenceList({ participants }: Readonly<Props>) {
   if (participants.length === 0) return null;
 
   return (
@@ -26,7 +26,6 @@ export function VoicePresenceList({ participants, currentUserId }: Readonly<Prop
             />
           </span>
           <span className="truncate">{participant.username}</span>
-          {participant.user_id === currentUserId && <span className="shrink-0">(você)</span>}
         </li>
       ))}
     </ul>

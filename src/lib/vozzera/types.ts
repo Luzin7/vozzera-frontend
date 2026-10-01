@@ -1,7 +1,9 @@
 export type Room = {
   id: string;
   name: string;
-  type: "text" | "voice";
+  created_by: string | null;
+  has_voice: boolean;
+  staff_only: boolean;
   created_at: string;
   updated_at?: string | null;
 };
@@ -47,8 +49,6 @@ export type RegisterRequest = {
   inviteCode: string;
 };
 
-export type MessageAction = "created" | "updated" | "deleted";
-
 export type InboundEventType =
   "room.subscribe" | "room.unsubscribe" | "message" | "typing.start" | "typing.stop";
 
@@ -75,7 +75,8 @@ export type OutboundEvent =
       action: "created" | "updated";
       id: string;
       name: string;
-      room_type: "text" | "voice";
+      has_voice: boolean;
+      staff_only: boolean;
       created_at: string;
     }
   | {

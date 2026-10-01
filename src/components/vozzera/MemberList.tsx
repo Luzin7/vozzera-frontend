@@ -1,6 +1,6 @@
+import { cn } from "@/lib/utils";
 import { initials } from "@/lib/vozzera/avatar";
 import type { OnlineUser, OnlineUsers } from "@/lib/vozzera/chat";
-import { cn } from "@/lib/utils";
 
 type Props = {
   className?: string;
@@ -14,7 +14,7 @@ function sortUsersByUsername(users: OnlineUser[]) {
   );
 }
 
-export function MemberList({ className, onlineUsers, currentUserId }: Readonly<Props>) {
+export function MemberList({ className, onlineUsers }: Readonly<Props>) {
   const users = sortUsersByUsername(Object.values(onlineUsers));
   const online = users.filter((user) => user.online);
   const offline = users.filter((user) => !user.online);
@@ -45,9 +45,6 @@ export function MemberList({ className, onlineUsers, currentUserId }: Readonly<P
                   />
                 </span>
                 <span className="truncate text-sidebar-foreground">{user.username}</span>
-                {user.userId === currentUserId && (
-                  <span className="shrink-0 text-muted-foreground">(você)</span>
-                )}
               </span>
             </li>
           ))}
@@ -71,9 +68,6 @@ export function MemberList({ className, onlineUsers, currentUserId }: Readonly<P
                   />
                 </span>
                 <span className="truncate text-sidebar-foreground">{user.username}</span>
-                {user.userId === currentUserId && (
-                  <span className="shrink-0 text-muted-foreground">(você)</span>
-                )}
               </span>
             </li>
           ))}
