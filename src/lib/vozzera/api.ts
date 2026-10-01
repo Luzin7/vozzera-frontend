@@ -82,11 +82,20 @@ export const getCurrentUser = () => api<CurrentUser>("/api/me");
 export const updateEmail = (email: string) =>
   api<UpdateEmailResponse>("/api/me", jsonRequest("PATCH", { email }));
 
-export const createRoom = (name: string, type: "text" | "voice") =>
-  api<Room>("/api/rooms", jsonBody({ name, type }));
+type CreateRoomInput = { name: string; hasVoice: boolean; staffOnly: boolean };
 
-export const updateRoom = (roomId: string, name: string) =>
-  api<Room>(`/api/rooms/${roomId}`, jsonRequest("PATCH", { name }));
+export const createRoom = ({ name, hasVoice, staffOnly }: CreateRoomInput) =>
+  api<Room>("/api/rooms", jsonBody({ name, has_voice: hasVoice, staff_only: staffOnly }));
+
+type UpdateRoomInput = { name: string; staffOnly?: boolean };
+
+function updateRoomBody({ name, staffOnly }: UpdateRoomInput): Record<string, unknown> {
+  if (staffOnly === undefined) return { name };
+  return { name, staff_only: staffOnly };
+}
+
+export const updateRoom = (roomId: string, input: UpdateRoomInput) =>
+  api<Room>(`/api/rooms/${roomId}`, jsonRequest("PATCH", updateRoomBody(input)));
 
 export const deleteRoom = (roomId: string) =>
   api<void>(`/api/rooms/${roomId}`, { method: "DELETE" });

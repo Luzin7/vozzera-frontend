@@ -68,16 +68,23 @@ describe("backoffDelay", () => {
 
 describe("firstTextRoom", () => {
   const rooms: Room[] = [
-    { id: "v1", name: "voz", type: "voice", created_at: "" },
-    { id: "t1", name: "geral", type: "text", created_at: "" },
+    { id: "v1", name: "voz", created_by: null, has_voice: true, staff_only: false, created_at: "" },
+    {
+      id: "t1",
+      name: "geral",
+      created_by: null,
+      has_voice: false,
+      staff_only: false,
+      created_at: "",
+    },
   ];
 
-  it("returns the first text room", () => {
+  it("returns the first room without voice", () => {
     expect(firstTextRoom(rooms)?.id).toBe("t1");
   });
 
   it("returns undefined when there is no text room", () => {
-    expect(firstTextRoom(rooms.filter((room) => room.type === "voice"))).toBeUndefined();
+    expect(firstTextRoom(rooms.filter((room) => room.has_voice))).toBeUndefined();
   });
 });
 
@@ -137,7 +144,14 @@ describe("nextRoomIndex", () => {
 });
 
 describe("room state", () => {
-  const room: Room = { id: "r1", name: "geral", type: "text", created_at: "" };
+  const room: Room = {
+    id: "r1",
+    name: "geral",
+    created_by: null,
+    has_voice: false,
+    staff_only: false,
+    created_at: "",
+  };
 
   it("adds and updates a room without duplicating it", () => {
     expect(upsertRoom([], room)).toEqual([room]);
@@ -258,7 +272,13 @@ describe("parseFrame", () => {
       type: "room.created",
       topic: "app:rooms",
       ts: wsTimestamp,
-      data: { id: wsRoomId, name: "nova-sala", type: "voice", created_at: wsTimestamp },
+      data: {
+        id: wsRoomId,
+        name: "nova-sala",
+        has_voice: true,
+        staff_only: false,
+        created_at: wsTimestamp,
+      },
     });
 
     expect(parseFrame(created)).toMatchObject({
@@ -266,7 +286,8 @@ describe("parseFrame", () => {
       action: "created",
       id: wsRoomId,
       name: "nova-sala",
-      room_type: "voice",
+      has_voice: true,
+      staff_only: false,
       created_at: wsTimestamp,
     });
   });
@@ -277,7 +298,13 @@ describe("parseFrame", () => {
       type: "room.created",
       topic: `room:${wsRoomId}`,
       ts: wsTimestamp,
-      data: { id: wsRoomId, name: "outra", type: "text", created_at: wsTimestamp },
+      data: {
+        id: wsRoomId,
+        name: "outra",
+        has_voice: false,
+        staff_only: false,
+        created_at: wsTimestamp,
+      },
     });
 
     expect(parseFrame(created)).toMatchObject({
@@ -294,7 +321,13 @@ describe("parseFrame", () => {
       type: "room.updated",
       topic: `room:${wsRoomId}`,
       ts: wsTimestamp,
-      data: { id: wsRoomId, name: "geral", type: "text", created_at: wsTimestamp },
+      data: {
+        id: wsRoomId,
+        name: "geral",
+        has_voice: false,
+        staff_only: true,
+        created_at: wsTimestamp,
+      },
     });
 
     expect(parseFrame(updated)).toMatchObject({
@@ -302,6 +335,7 @@ describe("parseFrame", () => {
       action: "updated",
       id: wsRoomId,
       name: "geral",
+      staff_only: true,
       created_at: wsTimestamp,
     });
   });
@@ -312,7 +346,13 @@ describe("parseFrame", () => {
       type: "room.updated",
       topic: "app:rooms",
       ts: wsTimestamp,
-      data: { id: wsRoomId, name: "global-update", type: "voice", created_at: wsTimestamp },
+      data: {
+        id: wsRoomId,
+        name: "global-update",
+        has_voice: true,
+        staff_only: true,
+        created_at: wsTimestamp,
+      },
     });
 
     expect(parseFrame(updated)).toMatchObject({

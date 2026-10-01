@@ -12,6 +12,8 @@ export type MicCaptureOptions = {
 
 export type DegradationPreference = "maintain-framerate" | "maintain-resolution";
 
+export type ScreenShareIntent = "text" | "video" | "economy";
+
 export type ScreenShareQuality = {
   width: number;
   height: number;
@@ -32,11 +34,28 @@ type ScreenSharePublishProfile = AudioPublishProfile & {
     maxFramerate: number;
   };
   videoCodec: "h264";
-  simulcast: false;
+  simulcast: true;
 };
 
 type ScreenShareAdaptiveStreamSettings = {
   pauseVideoInBackground: false;
+};
+
+export type ScreenShareContentHint = "motion" | "detail";
+
+export type ScreenShareProfile = {
+  constraints: { width: number; height: number; frameRate: number };
+  encoding: { maxBitrate: number; maxFramerate: number };
+  degradationPreference: DegradationPreference;
+  contentHint: ScreenShareContentHint;
+  displaySurface: "window" | "monitor";
+};
+
+export type ScreenShareHealth = "ok" | "cpu" | "bandwidth" | "paused";
+
+export type ScreenShareSenderStats = {
+  qualityLimitationReason?: string | undefined;
+  paused?: boolean;
 };
 
 const NOISE_FILTER_KEY = "vozzera.noiseFilter";
@@ -153,30 +172,94 @@ export function screenShareAudioCaptureOptions(): MicCaptureOptions & {
 }
 
 function screenShareVideoBitrate(quality: ScreenShareQuality): number {
-  const isHighFrameRate = quality.frameRate > 30;
-
-  if (quality.height >= 1080) return isHighFrameRate ? 6_000_000 : 3_500_000;
-  if (quality.height >= 720) return isHighFrameRate ? 3_000_000 : 1_800_000;
+  if (quality.height >= 1080) {
+    if (quality.frameRate >= 60) return 8_000_000;
+    if (quality.frameRate <= 15) return 3_000_000;
+    return 5_000_000;
+  }
+  if (quality.height >= 720) return quality.frameRate >= 60 ? 4_500_000 : 2_000_000;
   return 800_000;
 }
 
-export function screenSharePublishOptions(quality: ScreenShareQuality): ScreenSharePublishProfile {
+export function screenShareContentHintFor(
+  degradationPreference: DegradationPreference,
+): ScreenShareContentHint {
+  if (degradationPreference === "maintain-resolution") return "detail";
+  return "motion";
+}
+
+const SCREEN_SHARE_INTENT_QUALITIES: Record<ScreenShareIntent, ScreenShareQuality> = {
+  text: { width: 1920, height: 1080, frameRate: 15, degradationPreference: "maintain-resolution" },
+  video: { width: 1920, height: 1080, frameRate: 60, degradationPreference: "maintain-framerate" },
+  economy: {
+    width: 1280,
+    height: 720,
+    frameRate: 30,
+    degradationPreference: "maintain-resolution",
+  },
+};
+
+export function screenShareQualityFor(intent: ScreenShareIntent): ScreenShareQuality {
+  return SCREEN_SHARE_INTENT_QUALITIES[intent];
+}
+
+export function screenShareProfileFor(intent: ScreenShareIntent): ScreenShareProfile {
+  const quality = screenShareQualityFor(intent);
+  const degradationPreference = quality.degradationPreference ?? "maintain-framerate";
+
+  return {
+    constraints: { width: quality.width, height: quality.height, frameRate: quality.frameRate },
+    encoding: { maxBitrate: screenShareVideoBitrate(quality), maxFramerate: quality.frameRate },
+    degradationPreference,
+    contentHint: screenShareContentHintFor(degradationPreference),
+    displaySurface: "window",
+  };
+}
+
+export function screenSharePublishOptions(intent: ScreenShareIntent): ScreenSharePublishProfile {
+  const profile = screenShareProfileFor(intent);
+
   return {
     audioPreset: { maxBitrate: 128_000 },
     dtx: false,
     forceStereo: true,
-    degradationPreference: quality.degradationPreference ?? "maintain-framerate",
-    screenShareEncoding: {
-      maxBitrate: screenShareVideoBitrate(quality),
-      maxFramerate: quality.frameRate,
-    },
+    degradationPreference: profile.degradationPreference,
+    screenShareEncoding: profile.encoding,
     videoCodec: "h264",
-    simulcast: false,
+    simulcast: true,
   };
 }
 
 export function screenShareAdaptiveStreamSettings(): ScreenShareAdaptiveStreamSettings {
   return { pauseVideoInBackground: false };
+}
+
+export function screenShareHealthFor(stats: ScreenShareSenderStats): ScreenShareHealth {
+  if (stats.paused) return "paused";
+  if (stats.qualityLimitationReason === "cpu") return "cpu";
+  if (stats.qualityLimitationReason === "bandwidth") return "bandwidth";
+  return "ok";
+}
+
+export function screenShareHealthMessageFor(health: ScreenShareHealth): string | null {
+  if (health === "cpu") return "Seu computador está no limite.";
+  if (health === "bandwidth") return "Sua internet de upload está limitando a qualidade.";
+  if (health === "paused") return "Sua conexão não está dando conta. A transmissão volta sozinha.";
+  return null;
+}
+
+export function participantConnectionWarningFor(
+  quality: string | undefined,
+  name: string,
+): string | null {
+  if (quality !== "poor") return null;
+  return `A conexão de ${name} está instável.`;
+}
+
+export function canShareScreen(
+  mediaDevices: { getDisplayMedia?: unknown } | null | undefined,
+): boolean {
+  return typeof mediaDevices?.getDisplayMedia === "function";
 }
 
 export function readNoiseFilter(storage: Storage | null): boolean {
@@ -337,38 +420,4 @@ export function applyVolumeWithElementMuted(
   element.volume = 0;
   applyVolume();
   element.volume = 1;
-}
-
-export type FpsSeverity = "excellent" | "good" | "poor" | "critical";
-
-export function fpsSeverityFor(measuredFps: number, targetFps: number): FpsSeverity {
-  if (measuredFps >= targetFps * 0.8) return "excellent";
-  if (measuredFps >= targetFps * 0.5) return "good";
-  if (measuredFps >= Math.min(targetFps * 0.3, 20)) return "poor";
-  return "critical";
-}
-
-export function fpsLabelFor(measuredFps: number, targetFps: number): string | null {
-  if (measuredFps >= targetFps * 0.8) return null;
-  if (measuredFps >= targetFps * 0.5) return `${measuredFps} fps`;
-  return `${measuredFps} fps · Baixe a qualidade`;
-}
-
-export function remoteFpsLabelFor(measuredFps: number): string | null {
-  if (measuredFps >= 30) return null;
-  if (measuredFps >= 15) return "Qualidade instável";
-  return "Streamer com dificuldades";
-}
-
-export function fpsColorFor(severity: FpsSeverity): string {
-  switch (severity) {
-    case "excellent":
-      return "bg-green-600/80 text-white";
-    case "good":
-      return "bg-amber-500/80 text-white";
-    case "poor":
-      return "bg-orange-600/80 text-white";
-    case "critical":
-      return "bg-red-600/80 text-white";
-  }
 }

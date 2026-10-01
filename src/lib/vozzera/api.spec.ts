@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   api,
   ApiError,
+  createRoom,
   deleteRoom,
   getCurrentUser,
+  listRooms,
   register,
   requestPasswordReset,
   resetPassword,
@@ -173,18 +175,80 @@ describe("room management", () => {
     );
   });
 
-  it("renames and deletes rooms with the expected methods", async () => {
+  it("creates a room with its voice and staff_only flags", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: "r1",
+            name: "voz",
+            created_by: "u1",
+            has_voice: true,
+            staff_only: true,
+            created_at: "",
+          }),
+          { status: 201 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createRoom({ name: "voz", hasVoice: true, staffOnly: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/rooms"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "voz", has_voice: true, staff_only: true }),
+      }),
+    );
+  });
+
+  it("lists rooms from /api/rooms", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listRooms();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/rooms$/),
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("renames, hides and deletes rooms with the expected payloads", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: "r1", name: "novo", type: "text", created_at: "" }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({
+            id: "r1",
+            name: "novo",
+            created_by: null,
+            has_voice: false,
+            staff_only: false,
+            created_at: "",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "r1",
+            name: "novo",
+            created_by: null,
+            has_voice: false,
+            staff_only: true,
+            created_at: "",
+          }),
+          { status: 200 },
+        ),
       )
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await updateRoom("r1", "novo");
+    await updateRoom("r1", { name: "novo" });
+    await updateRoom("r1", { name: "novo", staffOnly: true });
     await deleteRoom("r1");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -194,6 +258,14 @@ describe("room management", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      expect.stringContaining("/api/rooms/r1"),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ name: "novo", staff_only: true }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       expect.stringContaining("/api/rooms/r1"),
       expect.objectContaining({ method: "DELETE" }),
     );
