@@ -1,5 +1,12 @@
 {
-  "version": "v1.17.0",
-  "releasedAt": "2026-10-01",
-  "items": []
+  "version": "v1.18.0",
+  "releasedAt": "2026-10-02",
+  "items": [
+    {
+      "title": "feat(rooms): config de sala e qualidade da tela",
+      "kind": "feat",
+      "pr": 161,
+      "summary": ""
+    }
+  ]
 }
