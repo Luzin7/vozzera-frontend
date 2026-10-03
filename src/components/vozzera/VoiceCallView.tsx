@@ -1,4 +1,4 @@
-import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, VolumeX } from "lucide-react";
+import { HeadphoneOff, Mic, MicOff, MonitorUp, MonitorX, PhoneOff, VolumeX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,6 +19,7 @@ type Props = {
   deafen: boolean;
   volumes: Record<string, number>;
   mutedParticipants: Record<string, boolean>;
+  deafenedParticipants: Record<string, boolean>;
   speakingNames: string[];
   screenShareEnabled: boolean;
   screenShareHealth: ScreenShareHealth;
@@ -48,6 +49,7 @@ export function VoiceCallView({
   deafen,
   volumes,
   mutedParticipants,
+  deafenedParticipants,
   speakingNames,
   screenShareEnabled,
   screenShareHealth,
@@ -88,7 +90,6 @@ export function VoiceCallView({
                     name === username ? !micEnabled : mutedParticipants[name] === true;
                   const isLocallyInaudible = isParticipantLocallyInaudible(
                     name === username,
-                    deafen,
                     volumes[name],
                   );
                   const centersLastParticipant = participants.length === 3 && index === 2;
@@ -111,11 +112,19 @@ export function VoiceCallView({
                       <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
                         <span className="truncate">{name}</span>
                         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
+                        {((name === username && deafen) || deafenedParticipants[name]) && (
+                          <HeadphoneOff
+                            aria-label={
+                              name === username
+                                ? "Você está no mudo total"
+                                : `${name} está no mudo total`
+                            }
+                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          />
+                        )}
                         {isLocallyInaudible && (
                           <VolumeX
-                            aria-label={
-                              deafen ? "Silenciado pelo mudo total" : "Silenciado para você"
-                            }
+                            aria-label="Silenciado para você"
                             className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                           />
                         )}
@@ -165,7 +174,7 @@ export function VoiceCallView({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span>
+              <span className="hidden md:inline-flex">
                 <Button
                   size="icon"
                   variant={screenShareEnabled ? "default" : "secondary"}

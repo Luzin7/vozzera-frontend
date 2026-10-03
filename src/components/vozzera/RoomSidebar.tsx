@@ -1,6 +1,4 @@
 import {
-  Ear,
-  EarOff,
   Hash,
   Lock,
   MessageSquare,
@@ -14,6 +12,8 @@ import {
   Settings2,
   Volume2,
   VolumeX,
+  HeadphoneOff,
+  Headphones,
 } from "lucide-react";
 import { memo, useRef, type KeyboardEvent } from "react";
 
@@ -47,7 +47,6 @@ type Props = {
   settingsRoomId: string | null;
   onOpenSettings: () => void;
   username: string | null;
-  currentUserId: string | null;
   status: SocketStatus;
   voiceStatus: VoiceStatus;
   voiceRoomId: string | null;
@@ -63,12 +62,11 @@ type Props = {
   onSetScreenShareVolume: (name: string, volume: number) => void;
   onToggleLocalMute: (name: string) => void;
   onToggleLocalScreenShareMute: (name: string) => void;
-  onListenToParticipant: (name: string, volume?: number) => void;
-  onListenToParticipantScreenShare: (name: string, volume?: number) => void;
   screenShareEnabled: boolean;
   onToggleScreenShare: () => void;
   screenShares: ScreenShare[];
   mutedParticipants: Record<string, boolean>;
+  deafenedParticipants: Record<string, boolean>;
   speakingNames: string[];
   deafen: boolean;
   onToggleDeafen: () => void;
@@ -153,7 +151,6 @@ export const RoomSidebar = memo(function RoomSidebar({
   settingsRoomId,
   onOpenSettings,
   username,
-  currentUserId,
   status,
   voiceStatus,
   voiceRoomId,
@@ -169,12 +166,11 @@ export const RoomSidebar = memo(function RoomSidebar({
   onSetScreenShareVolume,
   onToggleLocalMute,
   onToggleLocalScreenShareMute,
-  onListenToParticipant,
-  onListenToParticipantScreenShare,
   screenShareEnabled,
   onToggleScreenShare,
   screenShares,
   mutedParticipants,
+  deafenedParticipants,
   speakingNames,
   deafen,
   onToggleDeafen,
@@ -377,7 +373,6 @@ export const RoomSidebar = memo(function RoomSidebar({
                       const isLocalMuted = name !== username && volumes[name] === 0;
                       const isLocallyInaudible = isParticipantLocallyInaudible(
                         name === username,
-                        deafen,
                         volumes[name],
                       );
                       const isScreenShareLocallyMuted =
@@ -396,19 +391,24 @@ export const RoomSidebar = memo(function RoomSidebar({
                           </span>
                           <span className="truncate">{name}</span>
                           {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
+                          {((name === username && deafen) || deafenedParticipants[name]) && (
+                            <HeadphoneOff
+                              aria-label={
+                                name === username
+                                  ? "Você está no mudo total"
+                                  : `${name} está no mudo total`
+                              }
+                              className="h-3 w-3 shrink-0 text-muted-foreground"
+                            />
+                          )}
                           {isStreaming && <MonitorUp className="h-3 w-3 shrink-0 text-primary" />}
                           {isLocallyInaudible && (
-                            <span
-                              className="inline-flex shrink-0"
-                              title={deafen ? "Silenciado pelo mudo total" : "Silenciado para você"}
-                            >
+                            <span className="inline-flex shrink-0" title="Silenciado para você">
                               <VolumeX
                                 aria-hidden="true"
                                 className="h-3 w-3 text-muted-foreground"
                               />
-                              <span className="sr-only">
-                                {deafen ? "Silenciado pelo mudo total" : "Silenciado para você"}
-                              </span>
+                              <span className="sr-only">Silenciado para você</span>
                             </span>
                           )}
                         </span>
@@ -423,40 +423,19 @@ export const RoomSidebar = memo(function RoomSidebar({
                               name={name}
                               volume={volumes[name] ?? 1}
                               screenShareVolume={screenShareVolumes[name] ?? 1}
-                              deafen={deafen}
                               locallyMuted={isLocalMuted}
                               screenShareLocallyMuted={isScreenShareLocallyMuted}
                               isMuted={isMuted}
                               isStreaming={isStreaming}
                               isSpeaking={isSpeaking}
-                              onSetVolume={(volume) => {
-                                if (deafen) {
-                                  onListenToParticipant(name, volume);
-                                  return;
-                                }
-                                onSetVolume(name, volume);
-                              }}
-                              onSetScreenShareVolume={(volume) => {
-                                if (deafen) {
-                                  onListenToParticipantScreenShare(name, volume);
-                                  return;
-                                }
-                                onSetScreenShareVolume(name, volume);
-                              }}
-                              onToggleLocalMute={() => {
-                                if (deafen) {
-                                  onListenToParticipant(name);
-                                  return;
-                                }
-                                onToggleLocalMute(name);
-                              }}
-                              onToggleLocalScreenShareMute={() => {
-                                if (deafen) {
-                                  onListenToParticipantScreenShare(name);
-                                  return;
-                                }
-                                onToggleLocalScreenShareMute(name);
-                              }}
+                              onSetVolume={(volume) => onSetVolume(name, volume)}
+                              onSetScreenShareVolume={(volume) =>
+                                onSetScreenShareVolume(name, volume)
+                              }
+                              onToggleLocalMute={() => onToggleLocalMute(name)}
+                              onToggleLocalScreenShareMute={() =>
+                                onToggleLocalScreenShareMute(name)
+                              }
                             >
                               {row}
                             </ParticipantMenu>
@@ -470,10 +449,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                 {(!isConnected ||
                   voiceStatus !== "connected" ||
                   voiceParticipants.length === 0) && (
-                  <VoicePresenceList
-                    participants={onlineParticipants}
-                    currentUserId={currentUserId}
-                  />
+                  <VoicePresenceList participants={onlineParticipants} />
                 )}
               </div>
             );
@@ -494,7 +470,7 @@ export const RoomSidebar = memo(function RoomSidebar({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span>
+                    <span className="hidden md:inline-flex">
                       <Button
                         size="icon"
                         variant="ghost"
@@ -529,7 +505,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                 onClick={onToggleDeafen}
                 disabled={voiceStatus !== "connected"}
               >
-                {deafen ? <EarOff className="h-4 w-4" /> : <Ear className="h-4 w-4" />}
+                {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
                 <span className="sr-only">{deafen ? "Ativar som" : "Mudo total"}</span>
               </Button>
               <Button
