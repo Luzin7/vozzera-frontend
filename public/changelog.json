@@ -1,12 +1,18 @@
 {
   "version": "v1.18.0",
-  "releasedAt": "2026-10-02",
+  "releasedAt": "2026-09-15",
   "items": [
+    {
+      "title": "feat(chat): linkify de URLs cruas em mensagens",
+      "kind": "feat",
+      "pr": 162,
+      "summary": "Linkou, clicou! Agora qualquer URL colada no chat vira link clicável na hora — sem copiar e colar."
+    },
     {
       "title": "feat(rooms): config de sala e qualidade da tela",
       "kind": "feat",
       "pr": 161,
-      "summary": ""
+      "summary": "Sua sala, do seu jeito! Configurações de visibilidade por cargo e uma transmissão de tela muito mais nítida — agora com chat de texto durante a call."
     }
   ]
 }
