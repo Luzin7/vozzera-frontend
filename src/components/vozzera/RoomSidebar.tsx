@@ -47,7 +47,6 @@ type Props = {
   settingsRoomId: string | null;
   onOpenSettings: () => void;
   username: string | null;
-  currentUserId: string | null;
   status: SocketStatus;
   voiceStatus: VoiceStatus;
   voiceRoomId: string | null;
@@ -152,7 +151,6 @@ export const RoomSidebar = memo(function RoomSidebar({
   settingsRoomId,
   onOpenSettings,
   username,
-  currentUserId,
   status,
   voiceStatus,
   voiceRoomId,
@@ -451,10 +449,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                 {(!isConnected ||
                   voiceStatus !== "connected" ||
                   voiceParticipants.length === 0) && (
-                  <VoicePresenceList
-                    participants={onlineParticipants}
-                    currentUserId={currentUserId}
-                  />
+                  <VoicePresenceList participants={onlineParticipants} />
                 )}
               </div>
             );

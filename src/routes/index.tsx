@@ -301,7 +301,6 @@ function Index() {
     settingsRoomId,
     onOpenSettings: handleOpenSettings,
     username,
-    currentUserId,
     status: socketStatus,
     voiceStatus: voice.status,
     voiceRoomId: voice.activeRoomId,

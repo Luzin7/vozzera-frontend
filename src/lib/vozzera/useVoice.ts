@@ -6,6 +6,7 @@ import {
   setRemoteParticipantScreenShareVolume,
   useParticipantVolume,
 } from "./use-participant-volume";
+import type { ScreenShareAudioSource } from "./use-participant-volume";
 import { useScreenShare } from "./use-screen-share";
 import type { ScreenShare as ScreenShareType } from "./use-screen-share";
 import { useScreenShareHealth } from "./use-screen-share-health";
@@ -90,11 +91,12 @@ function editableDetailsFor(target: EventTarget | null) {
 type RoomEventHandlerCtx = {
   room: LiveKitRoom;
   RoomEvent: typeof import("livekit-client").RoomEvent;
+  TrackEvent: typeof import("livekit-client").TrackEvent;
   Track: typeof import("livekit-client").Track;
   notificationsEnabledRef: { readonly current: boolean };
   roomRef: { current: LiveKitRoom | null };
   screenShareRef: { current: boolean };
-  screenShareAudioSourceRef: { readonly current: unknown };
+  screenShareAudioSourceRef: { readonly current: ScreenShareAudioSource | null };
   voiceAudioContextRef: { readonly current: AudioContext | null };
   deafenRef: { readonly current: boolean };
   setRemoteMuted: (name: string, muted: boolean) => void;
@@ -124,6 +126,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   const {
     room,
     RoomEvent,
+    TrackEvent,
     Track,
     notificationsEnabledRef,
     roomRef,
@@ -157,10 +160,16 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       return;
     }
 
+    track.on(TrackEvent.AudioPlaybackStarted, () =>
+      suspendAudioForDeafen(voiceAudioContextRef, deafenRef),
+    );
+    track.on(TrackEvent.AudioPlaybackFailed, () =>
+      suspendAudioForDeafen(voiceAudioContextRef, deafenRef),
+    );
+
     const el = track.attach();
     el.style.display = "none";
     document.body.appendChild(el);
-    suspendAudioForDeafen(voiceAudioContextRef, deafenRef);
 
     if (participant.isLocal) return;
 
@@ -347,7 +356,7 @@ export function useVoice() {
   const screenShareRef = useRef(false);
   const deafenRef = useRef(deafen);
   deafenRef.current = deafen;
-  const screenShareAudioSourceRef = useRef<unknown>(null);
+  const screenShareAudioSourceRef = useRef<ScreenShareAudioSource | null>(null);
   const deafenTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const micEnabledBeforeDeafenRef = useRef(true);
   const pushToTalkTransitionRef = useRef<Promise<void>>(Promise.resolve());
@@ -567,7 +576,7 @@ export function useVoice() {
           createKrispProcessor(),
         ]);
         if (connectionAttemptRef.current !== attemptId) return;
-        const { Room, RoomEvent, Track } = client;
+        const { Room, RoomEvent, TrackEvent, Track } = client;
         const { token, url } = tokenResponse;
 
         const voiceAudioContext = new (
@@ -576,9 +585,6 @@ export function useVoice() {
         )();
         attemptAudioContext = voiceAudioContext;
         voiceAudioContextRef.current = voiceAudioContext;
-        voiceAudioContext.onstatechange = () => {
-          suspendAudioForDeafen(voiceAudioContextRef, deafenRef);
-        };
         const room = new Room({
           adaptiveStream: screenShareAdaptiveStreamSettings(),
           dynacast: true,
@@ -594,6 +600,7 @@ export function useVoice() {
         setupRoomHandlers({
           room,
           RoomEvent,
+          TrackEvent,
           Track,
           notificationsEnabledRef,
           roomRef,

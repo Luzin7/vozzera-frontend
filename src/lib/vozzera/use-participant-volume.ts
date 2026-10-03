@@ -10,6 +10,8 @@ import {
   writeScreenShareVolumes,
 } from "./voice";
 
+export type ScreenShareAudioSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
+
 function setRemoteParticipantVolume(participant: RemoteParticipant, volume: number | undefined) {
   participant.setVolume(effectiveParticipantVolume(volume));
 }
@@ -17,13 +19,10 @@ function setRemoteParticipantVolume(participant: RemoteParticipant, volume: numb
 export function setRemoteParticipantScreenShareVolume(
   participant: RemoteParticipant,
   volume: number | undefined,
-  ssAudioSource: unknown,
+  ssAudioSource: ScreenShareAudioSource | null,
 ) {
   if (ssAudioSource === null) return;
-  participant.setVolume(
-    effectiveParticipantVolume(volume),
-    ssAudioSource as Parameters<RemoteParticipant["setVolume"]>[1],
-  );
+  participant.setVolume(effectiveParticipantVolume(volume), ssAudioSource);
 }
 
 type RoomRef = { readonly current: import("livekit-client").Room | null };
@@ -46,7 +45,7 @@ export type VolumeResult = {
   resetState: () => void;
 };
 
-type ScreenShareAudioSourceRef = { readonly current: unknown };
+type ScreenShareAudioSourceRef = { readonly current: ScreenShareAudioSource | null };
 
 export function useParticipantVolume(
   roomRef: RoomRef,

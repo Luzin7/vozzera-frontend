@@ -3,7 +3,6 @@ import type { VoiceParticipant } from "@/lib/vozzera/types";
 
 type Props = {
   participants: VoiceParticipant[];
-  currentUserId: string | null;
 };
 
 export function VoicePresenceList({ participants }: Readonly<Props>) {
