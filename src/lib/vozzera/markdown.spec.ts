@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { parseBlocks, parseInline } from "./markdown";
+import { matchBareUrl, parseBlocks, parseInline } from "./markdown";
+import type { Inline } from "./markdown";
+
+function link(url: string): Inline {
+  return { kind: "link", url, children: [{ kind: "text", text: url }] };
+}
 
 describe("parseInline", () => {
   it("keeps plain text as a single text node", () => {
@@ -63,6 +68,101 @@ describe("parseInline", () => {
 
   it("does not parse # when no valid room name follows", () => {
     expect(parseInline("#")).toEqual([{ kind: "text", text: "#" }]);
+  });
+});
+
+describe("parseInline bare urls", () => {
+  it("links a url at the start of the message", () => {
+    expect(parseInline("https://vozzera.app")).toEqual([link("https://vozzera.app")]);
+  });
+
+  it("links a url in the middle of the message", () => {
+    expect(parseInline("veja https://vozzera.app aqui")).toEqual([
+      { kind: "text", text: "veja " },
+      link("https://vozzera.app"),
+      { kind: "text", text: " aqui" },
+    ]);
+  });
+
+  it("links a url at the end of the message", () => {
+    expect(parseInline("acesso https://vozzera.app")).toEqual([
+      { kind: "text", text: "acesso " },
+      link("https://vozzera.app"),
+    ]);
+  });
+
+  it("links an uppercase scheme and host", () => {
+    expect(parseInline("HTTPS://VOZZERA.APP")).toEqual([link("HTTPS://VOZZERA.APP")]);
+  });
+
+  it("links a url wrapped in bold without swallowing the markers", () => {
+    expect(parseInline("**https://vozzera.app**")).toEqual([
+      { kind: "bold", children: [link("https://vozzera.app")] },
+    ]);
+  });
+
+  it("leaves a trailing dot outside the url", () => {
+    expect(parseInline("https://x.com/y.")).toEqual([
+      link("https://x.com/y"),
+      { kind: "text", text: "." },
+    ]);
+  });
+
+  it("leaves trailing punctuation outside the url", () => {
+    expect(parseInline("https://x.com/y,")).toEqual([
+      link("https://x.com/y"),
+      { kind: "text", text: "," },
+    ]);
+    expect(parseInline("https://x.com/y!")).toEqual([
+      link("https://x.com/y"),
+      { kind: "text", text: "!" },
+    ]);
+    expect(parseInline("https://x.com/y?")).toEqual([
+      link("https://x.com/y"),
+      { kind: "text", text: "?" },
+    ]);
+  });
+
+  it("leaves an external parenthesis outside the url", () => {
+    expect(parseInline("(https://x.com/y)")).toEqual([
+      { kind: "text", text: "(" },
+      link("https://x.com/y"),
+      { kind: "text", text: ")" },
+    ]);
+  });
+
+  it("keeps an internal parenthesis inside the url", () => {
+    expect(parseInline("https://en.wikipedia.org/wiki/Foo_(bar)")).toEqual([
+      link("https://en.wikipedia.org/wiki/Foo_(bar)"),
+    ]);
+  });
+
+  it("does not link text without a scheme", () => {
+    expect(parseInline("httpfoo")).toEqual([{ kind: "text", text: "httpfoo" }]);
+    expect(parseInline("isso é http")).toEqual([{ kind: "text", text: "isso é http" }]);
+  });
+
+  it("does not link a url inside inline code", () => {
+    expect(parseInline("`https://vozzera.app`")).toEqual([
+      { kind: "code", text: "https://vozzera.app" },
+    ]);
+  });
+});
+
+describe("matchBareUrl", () => {
+  it("returns null when the text does not start with a url", () => {
+    expect(matchBareUrl("vozzera.com")).toBeNull();
+    expect(matchBareUrl("veja https://vozzera.app")).toBeNull();
+  });
+
+  it("trims trailing punctuation and reports the consumed length", () => {
+    expect(matchBareUrl("https://x.com/y.")).toEqual({ url: "https://x.com/y", length: 15 });
+  });
+
+  it("keeps balanced parenthesis", () => {
+    expect(matchBareUrl("https://en.wikipedia.org/wiki/Foo_(bar)")?.url).toBe(
+      "https://en.wikipedia.org/wiki/Foo_(bar)",
+    );
   });
 });
 
@@ -142,6 +242,12 @@ describe("parseBlocks", () => {
     expect(parseBlocks("um\n\ndois")).toEqual([
       { kind: "paragraph", children: [{ kind: "text", text: "um" }] },
       { kind: "paragraph", children: [{ kind: "text", text: "dois" }] },
+    ]);
+  });
+
+  it("does not link a url inside a fenced code block", () => {
+    expect(parseBlocks("```\nhttps://vozzera.app\n```")).toEqual([
+      { kind: "code", text: "https://vozzera.app" },
     ]);
   });
 });

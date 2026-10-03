@@ -50,7 +50,7 @@ export function firstUnreadMessageId(messages: ChatMessage[], unreadCount: numbe
 }
 
 export function firstTextRoom(rooms: Room[]): Room | undefined {
-  return rooms.find((room) => room.type === "text");
+  return rooms.find((room) => !room.has_voice);
 }
 
 export function upsertRoom(rooms: Room[], room: Room): Room[] {

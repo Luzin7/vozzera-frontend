@@ -10,22 +10,36 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { DegradationPreference, ScreenShareQuality } from "@/lib/vozzera/useVoice";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import type { ScreenShareIntent } from "@/lib/vozzera/voice";
 
-type Resolution = "720p" | "1080p";
-type FrameRate = "30" | "60";
-
-const resolutionSize: Record<Resolution, { width: number; height: number }> = {
-  "720p": { width: 1280, height: 720 },
-  "1080p": { width: 1920, height: 1080 },
+type IntentOption = {
+  value: ScreenShareIntent;
+  label: string;
+  hint: string;
+  description: string;
 };
+
+const INTENT_OPTIONS: IntentOption[] = [
+  {
+    value: "text",
+    label: "Texto e código",
+    hint: "1080p, 15 fps",
+    description: "Documentos, código e slides.",
+  },
+  {
+    value: "video",
+    label: "Vídeo e jogos",
+    hint: "1080p, 60 fps",
+    description: "Melhor equilíbrio para assistir.",
+  },
+  {
+    value: "economy",
+    label: "Economia",
+    hint: "720p, 30 fps",
+    description: "Para internet fraca.",
+  },
+];
 
 export function ScreenShareDialog({
   open,
@@ -34,16 +48,12 @@ export function ScreenShareDialog({
 }: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onStart: (quality: ScreenShareQuality) => void;
+  onStart: (intent: ScreenShareIntent) => void;
 }>) {
-  const [resolution, setResolution] = useState<Resolution>("1080p");
-  const [frameRate, setFrameRate] = useState<FrameRate>("30");
-  const [qualityMode, setQualityMode] = useState<DegradationPreference>("maintain-framerate");
+  const [intent, setIntent] = useState<ScreenShareIntent>("text");
 
   const start = () => {
-    const size = resolutionSize[resolution];
-
-    onStart({ ...size, frameRate: Number(frameRate), degradationPreference: qualityMode });
+    onStart(intent);
     onOpenChange(false);
   };
 
@@ -52,68 +62,40 @@ export function ScreenShareDialog({
       <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-lg [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center">
         <DialogHeader>
           <DialogTitle>Compartilhar tela</DialogTitle>
-          <DialogDescription>Escolha a qualidade da transmissão.</DialogDescription>
+          <DialogDescription>Escolha o que você vai mostrar.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="share-resolution">Resolução</Label>
-            <Select value={resolution} onValueChange={(v) => setResolution(v as Resolution)}>
-              <SelectTrigger id="share-resolution">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="720p">720p</SelectItem>
-                <SelectItem value="1080p">1080p (Full HD)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <RadioGroup
+          value={intent}
+          onValueChange={(value) => setIntent(value as ScreenShareIntent)}
+          className="gap-2"
+        >
+          {INTENT_OPTIONS.map((option) => (
+            <Label
+              key={option.value}
+              htmlFor={`share-intent-${option.value}`}
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 transition-colors ${
+                intent === option.value
+                  ? "border-primary bg-primary/10"
+                  : "border-border hover:bg-muted"
+              }`}
+            >
+              <RadioGroupItem
+                id={`share-intent-${option.value}`}
+                value={option.value}
+                className="mt-0.5"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">{option.label}</span>
+                <span className="text-xs text-muted-foreground">{option.hint}</span>
+              </span>
+            </Label>
+          ))}
+        </RadioGroup>
 
-          <div className="space-y-2">
-            <Label htmlFor="share-fps">Quadros por segundo</Label>
-            <Select value={frameRate} onValueChange={(v) => setFrameRate(v as FrameRate)}>
-              <SelectTrigger id="share-fps">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="30">30 fps</SelectItem>
-                <SelectItem value="60">60 fps</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Modo de qualidade</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setQualityMode("maintain-framerate")}
-                className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-sm transition-colors ${
-                  qualityMode === "maintain-framerate"
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                <span className="font-medium">Fluidez</span>
-                <span className="text-xs">Prioriza FPS sobre nitidez</span>
-                <span className="text-xs text-muted-foreground">Recomendado para jogos</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setQualityMode("maintain-resolution")}
-                className={`flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-sm transition-colors ${
-                  qualityMode === "maintain-resolution"
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                <span className="font-medium">Nitidez</span>
-                <span className="text-xs">Prioriza nitidez sobre FPS</span>
-                <span className="text-xs text-muted-foreground">Recomendado para docs/slides</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Dica: prefira uma janela e confirme “compartilhar áudio” no seletor.
+        </p>
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

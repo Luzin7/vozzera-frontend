@@ -1,21 +1,12 @@
-import { HeadphoneOff } from "lucide-react";
-
 import { initials } from "@/lib/vozzera/avatar";
 import type { VoiceParticipant } from "@/lib/vozzera/types";
 
 type Props = {
   participants: VoiceParticipant[];
   currentUserId: string | null;
-  deafen: boolean;
-  deafenedParticipants: Record<string, boolean>;
 };
 
-export function VoicePresenceList({
-  participants,
-  currentUserId,
-  deafen,
-  deafenedParticipants,
-}: Readonly<Props>) {
+export function VoicePresenceList({ participants }: Readonly<Props>) {
   if (participants.length === 0) return null;
 
   return (
@@ -35,18 +26,6 @@ export function VoicePresenceList({
             />
           </span>
           <span className="truncate">{participant.username}</span>
-          {participant.user_id === currentUserId && <span className="shrink-0">(você)</span>}
-          {((participant.user_id === currentUserId && deafen) ||
-            deafenedParticipants[participant.username]) && (
-            <HeadphoneOff
-              aria-label={
-                participant.user_id === currentUserId
-                  ? "Você está no mudo total"
-                  : `${participant.username} está no mudo total`
-              }
-              className="h-3 w-3 shrink-0 text-destructive"
-            />
-          )}
         </li>
       ))}
     </ul>

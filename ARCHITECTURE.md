@@ -18,7 +18,9 @@ src/
     vozzera/               # Features do domínio (componentes "burros")
       AuthForm.tsx         # Login/registro
       CreateRoomDialog.tsx # Nova sala
-      RoomSidebar.tsx      # Lista de salas + status do socket
+      RoomSidebar.tsx      # Lista de salas (texto/voz) + status do socket
+      RoomSettingsView.tsx # Configurações da sala (nome, visibilidade, apagar)
+      VoiceChatDock.tsx    # Chat da call de voz (dock lateral)
       MessageList.tsx      # Histórico agrupado por autor
       MessageComposer.tsx  # Caixa de envio
   lib/
@@ -49,7 +51,7 @@ src/
 2. **Bootstrap** — `useChat` carrega as salas e o usuário atual; `401` → tela de auth, `200` → aplica as permissões e abre o WebSocket.
 3. **Socket** — `useSocket` conecta com backoff exponencial, fila envios antes do `open` e re-envia `join` de todas as salas conhecidas a cada reconexão.
 4. **Mensagens** — chegam do histórico REST ou do WS; `appendMessage` (em `chat.ts`) faz dedup por `id`. Sem otimismo: a mensagem só aparece quando o eco volta.
-5. **Salas** — `mod` e `admin` podem criar, renomear e apagar. Eventos `room:created`, `room:updated` e `room:deleted` mantêm todos os clientes sincronizados sem encerrar o WebSocket.
+5. **Salas** — `mod` e `admin` podem criar, renomear e apagar. Uma sala sempre tem chat de texto; `has_voice` (imutável) adiciona a capacidade de call, e `staff_only` restringe visibilidade/acesso à moderação. Eventos `room.created`, `room.updated` e `room.deleted` mantêm todos os clientes sincronizados sem encerrar o WebSocket; virar `staff_only` derruba as assinaturas ativas da sala.
 
 Nenhuma chamada roda em loader/SSR — o SSR não tem o cookie do usuário. Tudo é client-side.
 
