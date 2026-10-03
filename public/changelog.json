@@ -1,6 +1,6 @@
 {
-  "version": "v1.18.0",
-  "releasedAt": "2026-09-15",
+  "version": "v1.19.0",
+  "releasedAt": "2026-10-03",
   "items": [
     {
       "title": "feat(chat): linkify de URLs cruas em mensagens",
