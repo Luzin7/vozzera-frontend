@@ -33,7 +33,7 @@ function MessageActions({
   onDelete: () => void;
 }>) {
   return (
-    <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden">
+    <div className="absolute right-0 top-1/2 -translate-y-1/2 select-none md:hidden">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -74,7 +74,7 @@ function DesktopMessageActions({
   onDelete: () => void;
 }>) {
   return (
-    <div className="pointer-events-none absolute right-0 top-0 z-20 hidden gap-1 opacity-0 transition-opacity md:flex md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:focus-within:opacity-100">
+    <div className="pointer-events-none absolute right-0 top-0 z-20 hidden select-none gap-1 opacity-0 transition-opacity md:flex md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:focus-within:opacity-100">
       {isOwnMessage && (
         <Button
           variant="secondary"
