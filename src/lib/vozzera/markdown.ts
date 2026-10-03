@@ -13,8 +13,161 @@ export type Block =
   | { kind: "quote"; children: Inline[] }
   | { kind: "list"; ordered: boolean; items: Inline[][] };
 
+export type BareUrlMatch = { url: string; length: number };
+
+type InlineMatch = { node: Inline; length: number };
+type BlockMatch = { block: Block; length: number };
+
+const CODE_DELIMITER = "`";
+const BOLD_DELIMITER = "**";
+const ITALIC_DELIMITER = "*";
+const ROOM_DELIMITER = "#";
+const FENCE = "```";
+const TRAILING_PUNCTUATION = ".,;:!?";
+
+const SAFE_URL_PATTERN = /^https?:\/\//i;
+const BARE_URL_PATTERN = /https?:\/\/[^\s<>"'`*]+/i;
+const ROOM_PATTERN = /^#([^\s#]+)/;
+const HEADING_PATTERN = /^(#{1,6})\s+/;
+const UNORDERED_LIST_PATTERN = /^[-*]\s+/;
+const ORDERED_LIST_PATTERN = /^\d+\.\s+/;
+const LIST_ITEM_PATTERN = /^([-*]|\d+\.)\s+/;
+
 function isSafeUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url);
+  return SAFE_URL_PATTERN.test(url);
+}
+
+function isWhitespace(value: string | undefined): boolean {
+  return value !== undefined && /\s/.test(value);
+}
+
+function matchCode(rest: string): InlineMatch | null {
+  if (!rest.startsWith(CODE_DELIMITER)) return null;
+
+  const end = rest.indexOf(CODE_DELIMITER, CODE_DELIMITER.length);
+
+  if (end === -1)
+    return { node: { kind: "text", text: CODE_DELIMITER }, length: CODE_DELIMITER.length };
+
+  return {
+    node: { kind: "code", text: rest.slice(CODE_DELIMITER.length, end) },
+    length: end + CODE_DELIMITER.length,
+  };
+}
+
+function matchBold(rest: string): InlineMatch | null {
+  if (!rest.startsWith(BOLD_DELIMITER)) return null;
+
+  const end = rest.indexOf(BOLD_DELIMITER, BOLD_DELIMITER.length);
+
+  if (end === -1)
+    return { node: { kind: "text", text: BOLD_DELIMITER }, length: BOLD_DELIMITER.length };
+
+  return {
+    node: { kind: "bold", children: parseInline(rest.slice(BOLD_DELIMITER.length, end)) },
+    length: end + BOLD_DELIMITER.length,
+  };
+}
+
+function matchItalic(rest: string): InlineMatch | null {
+  if (!rest.startsWith(ITALIC_DELIMITER)) return null;
+
+  const end = rest.indexOf(ITALIC_DELIMITER, ITALIC_DELIMITER.length);
+
+  if (end === -1) {
+    return { node: { kind: "text", text: ITALIC_DELIMITER }, length: ITALIC_DELIMITER.length };
+  }
+
+  return {
+    node: { kind: "italic", children: parseInline(rest.slice(ITALIC_DELIMITER.length, end)) },
+    length: end + ITALIC_DELIMITER.length,
+  };
+}
+
+function matchLink(rest: string): InlineMatch | null {
+  if (!rest.startsWith("[")) return null;
+
+  const open = rest.indexOf("](", 1);
+  if (open === -1) return null;
+
+  const close = rest.indexOf(")", open + 2);
+  if (close === -1) return null;
+
+  const url = rest.slice(open + 2, close).trim();
+  if (!isSafeUrl(url)) return null;
+
+  return {
+    node: { kind: "link", url, children: parseInline(rest.slice(1, open)) },
+    length: close + 1,
+  };
+}
+
+function matchRoom(rest: string, atWordStart: boolean): InlineMatch | null {
+  if (!rest.startsWith(ROOM_DELIMITER)) return null;
+
+  const roomName = ROOM_PATTERN.exec(rest)?.[1];
+  if (roomName === undefined || !atWordStart) return null;
+
+  return { node: { kind: "room", roomName }, length: roomName.length + 1 };
+}
+
+function trimTrailingPunctuation(url: string): string {
+  let end = url.length;
+
+  while (end > 0) {
+    const last = url[end - 1];
+    if (last === undefined || !TRAILING_PUNCTUATION.includes(last)) break;
+    end -= 1;
+  }
+
+  return url.slice(0, end);
+}
+
+function trimUnbalancedParenthesis(url: string): string {
+  let balance = 0;
+
+  for (const char of url) {
+    if (char === "(") balance += 1;
+    if (char === ")") balance -= 1;
+  }
+
+  let end = url.length;
+
+  while (end > 0 && balance < 0 && url[end - 1] === ")") {
+    end -= 1;
+    balance += 1;
+  }
+
+  return url.slice(0, end);
+}
+
+export function matchBareUrl(rest: string): BareUrlMatch | null {
+  const found = BARE_URL_PATTERN.exec(rest);
+  if (found === null) return null;
+  if (found.index !== 0) return null;
+
+  const url = trimUnbalancedParenthesis(trimTrailingPunctuation(found[0]));
+
+  return { url, length: url.length };
+}
+
+function matchInline(rest: string, atWordStart: boolean): InlineMatch | null {
+  const markerMatch =
+    matchCode(rest) ??
+    matchBold(rest) ??
+    matchItalic(rest) ??
+    matchLink(rest) ??
+    matchRoom(rest, atWordStart);
+
+  if (markerMatch !== null) return markerMatch;
+
+  const bare = matchBareUrl(rest);
+  if (bare === null) return null;
+
+  return {
+    node: { kind: "link", url: bare.url, children: [{ kind: "text", text: bare.url }] },
+    length: bare.length,
+  };
 }
 
 export function parseInline(input: string): Inline[] {
@@ -23,207 +176,174 @@ export function parseInline(input: string): Inline[] {
   let i = 0;
 
   const flushText = () => {
-    if (text) {
-      nodes.push({ kind: "text", text });
-      text = "";
-    }
+    if (!text) return;
+    nodes.push({ kind: "text", text });
+    text = "";
   };
 
   while (i < input.length) {
     const rest = input.slice(i);
+    const match = matchInline(rest, i === 0 || isWhitespace(input[i - 1]));
 
-    if (rest.startsWith("`")) {
-      const end = input.indexOf("`", i + 1);
-
-      if (end === -1) {
-        text += "`";
-        i += 1;
-        continue;
-      }
-
-      flushText();
-      nodes.push({ kind: "code", text: input.slice(i + 1, end) });
-      i = end + 1;
-      continue;
-    }
-
-    if (rest.startsWith("**")) {
-      const end = input.indexOf("**", i + 2);
-
-      if (end === -1) {
-        text += "**";
-        i += 2;
-        continue;
-      }
-
-      flushText();
-      nodes.push({ kind: "bold", children: parseInline(input.slice(i + 2, end)) });
-      i = end + 2;
-      continue;
-    }
-
-    if (rest.startsWith("*")) {
-      const end = input.indexOf("*", i + 1);
-
-      if (end === -1) {
-        text += "*";
-        i += 1;
-        continue;
-      }
-
-      flushText();
-      nodes.push({ kind: "italic", children: parseInline(input.slice(i + 1, end)) });
-      i = end + 1;
-      continue;
-    }
-
-    if (rest.startsWith("[")) {
-      const open = rest.indexOf("](", 1);
-
-      if (open !== -1) {
-        const close = rest.indexOf(")", open + 2);
-        const url = close !== -1 ? rest.slice(open + 2, close).trim() : "";
-
-        if (close !== -1 && isSafeUrl(url)) {
-          flushText();
-          nodes.push({ kind: "link", url, children: parseInline(rest.slice(1, open)) });
-          i += close + 1;
-          continue;
-        }
-      }
-
-      text += "[";
+    if (match === null) {
+      text += input[i] ?? "";
       i += 1;
       continue;
     }
 
-    if (rest.startsWith("#")) {
-      const match = rest.match(/^#([^\s#]+)/);
-      const roomName = match?.[1];
-
-      if (roomName && (i === 0 || /\s/.test(input[i - 1] ?? ""))) {
-        flushText();
-        nodes.push({ kind: "room", roomName });
-        i += roomName.length + 1;
-        continue;
-      }
+    if (match.node.kind === "text") {
+      text += match.node.text;
+      i += match.length;
+      continue;
     }
 
-    text += input[i];
-    i += 1;
+    flushText();
+    nodes.push(match.node);
+    i += match.length;
   }
 
   flushText();
   return nodes;
 }
 
+function matchFencedCode(lines: string[], start: number): BlockMatch | null {
+  const line = lines[start];
+  if (!line?.trimStart().startsWith(FENCE)) return null;
+
+  const code: string[] = [];
+  let i = start + 1;
+
+  while (i < lines.length) {
+    const current = lines[i];
+    if (current === undefined || current.trimStart().startsWith(FENCE)) break;
+
+    code.push(current);
+    i += 1;
+  }
+
+  return { block: { kind: "code", text: code.join("\n") }, length: i + 1 - start };
+}
+
+function matchHeading(lines: string[], start: number): BlockMatch | null {
+  const line = lines[start];
+  if (line === undefined) return null;
+
+  const match = HEADING_PATTERN.exec(line);
+  const marker = match?.[1];
+  if (match === null || marker === undefined) return null;
+
+  return {
+    block: {
+      kind: "heading",
+      level: marker.length,
+      children: parseInline(line.slice(match[0].length)),
+    },
+    length: 1,
+  };
+}
+
+function matchQuote(lines: string[], start: number): BlockMatch | null {
+  const line = lines[start];
+  if (!line?.startsWith(">")) return null;
+
+  const quote: string[] = [];
+  let i = start;
+
+  while (i < lines.length) {
+    const current = lines[i];
+    if (!current?.startsWith(">")) break;
+
+    quote.push(current.slice(1).replace(/^ /, ""));
+    i += 1;
+  }
+
+  return { block: { kind: "quote", children: parseInline(quote.join("\n")) }, length: i - start };
+}
+
+function matchList(lines: string[], start: number): BlockMatch | null {
+  const line = lines[start];
+  if (line === undefined) return null;
+
+  const ordered = ORDERED_LIST_PATTERN.test(line);
+  if (!ordered && !UNORDERED_LIST_PATTERN.test(line)) return null;
+
+  const items: Inline[][] = [];
+  let i = start;
+
+  while (i < lines.length) {
+    const current = lines[i];
+    if (current === undefined) break;
+
+    const match = LIST_ITEM_PATTERN.exec(current);
+    if (match === null) break;
+
+    items.push(parseInline(current.slice(match[0].length)));
+    i += 1;
+  }
+
+  return { block: { kind: "list", ordered, items }, length: i - start };
+}
+
+function isBlockBoundary(line: string): boolean {
+  if (line.startsWith(">")) return true;
+  if (line.trimStart().startsWith(FENCE)) return true;
+  if (HEADING_PATTERN.test(line)) return true;
+  if (UNORDERED_LIST_PATTERN.test(line)) return true;
+  return ORDERED_LIST_PATTERN.test(line);
+}
+
+function matchParagraph(lines: string[], start: number): BlockMatch | null {
+  const paragraph: string[] = [];
+  let i = start;
+
+  while (i < lines.length) {
+    const current = lines[i];
+    if (current === undefined || current.trim() === "" || isBlockBoundary(current)) break;
+
+    paragraph.push(current);
+    i += 1;
+  }
+
+  if (paragraph.length === 0) return null;
+
+  return {
+    block: { kind: "paragraph", children: parseInline(paragraph.join("\n")) },
+    length: i - start,
+  };
+}
+
+function matchBlock(lines: string[], start: number): BlockMatch | null {
+  return (
+    matchFencedCode(lines, start) ??
+    matchHeading(lines, start) ??
+    matchQuote(lines, start) ??
+    matchList(lines, start) ??
+    matchParagraph(lines, start)
+  );
+}
+
 export function parseBlocks(input: string): Block[] {
-  const lines = input.replace(/\r\n/g, "\n").split("\n");
+  const lines = input.replaceAll("\r\n", "\n").split("\n");
   const blocks: Block[] = [];
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
 
-    if (line === undefined) {
+    if (line === undefined || line.trim() === "") {
       i += 1;
       continue;
     }
 
-    if (line.trimStart().startsWith("```")) {
-      const code: string[] = [];
-      i += 1;
+    const match = matchBlock(lines, i);
 
-      while (i < lines.length) {
-        const current = lines[i];
-
-        if (current === undefined || current.trimStart().startsWith("```")) break;
-
-        code.push(current);
-        i += 1;
-      }
-
-      i += 1;
-      blocks.push({ kind: "code", text: code.join("\n") });
-      continue;
-    }
-
-    if (line.trim() === "") {
+    if (match === null) {
       i += 1;
       continue;
     }
 
-    const headingMatch = /^(#{1,6})\s+(.*)$/.exec(line);
-
-    if (headingMatch?.[1] !== undefined && headingMatch?.[2] !== undefined) {
-      blocks.push({
-        kind: "heading",
-        level: headingMatch[1].length,
-        children: parseInline(headingMatch[2]),
-      });
-      i += 1;
-      continue;
-    }
-
-    if (line.startsWith(">")) {
-      const quote: string[] = [];
-
-      while (i < lines.length) {
-        const current = lines[i];
-
-        if (current === undefined || !current.startsWith(">")) break;
-
-        quote.push(current.slice(1).replace(/^ /, ""));
-        i += 1;
-      }
-
-      blocks.push({ kind: "quote", children: parseInline(quote.join("\n")) });
-      continue;
-    }
-
-    if (/^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-      const ordered = /^\d+\.\s+/.test(line);
-      const items: Inline[][] = [];
-
-      while (i < lines.length) {
-        const current = lines[i];
-
-        if (current === undefined) break;
-
-        const match = /^([-*]|\d+\.)\s+(.*)$/.exec(current);
-
-        if (!match || match[2] === undefined) break;
-
-        items.push(parseInline(match[2]));
-        i += 1;
-      }
-
-      blocks.push({ kind: "list", ordered, items });
-      continue;
-    }
-
-    const paragraph: string[] = [];
-
-    while (i < lines.length) {
-      const current = lines[i];
-
-      if (
-        current === undefined ||
-        current.trim() === "" ||
-        current.startsWith(">") ||
-        current.trimStart().startsWith("```") ||
-        /^#{1,6}\s+/.test(current) ||
-        /^[-*]\s+/.test(current) ||
-        /^\d+\.\s+/.test(current)
-      ) {
-        break;
-      }
-
-      paragraph.push(current);
-      i += 1;
-    }
-
-    blocks.push({ kind: "paragraph", children: parseInline(paragraph.join("\n")) });
+    blocks.push(match.block);
+    i += match.length;
   }
 
   return blocks;

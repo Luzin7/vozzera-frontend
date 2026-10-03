@@ -70,11 +70,22 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 ```jsonc
 // response 200
 [
-  { "id": "string", "name": "string", "type": "text" | "voice", "created_at": "string" }
+  {
+    "id": "string",
+    "name": "string",
+    "created_by": "string | null",
+    "has_voice": true,
+    "staff_only": false,
+    "created_at": "string",
+    "updated_at": "string" | null,
+  },
 ]
 ```
 
 - `401` → não autenticado (front mostra a tela de login).
+- `?has_voice=true|false` (opcional) filtra pela capacidade de voz. Sem o filtro, retorna todas.
+- Salas `staff_only: true` **não aparecem** para usuários comuns; apenas `mod` e `admin` as recebem.
+- `has_voice` é capacidade imutável: a sala sempre tem chat de texto e, quando `true`, também permite call de voz. `created_by` é a autoria (nulo se o criador foi removido).
 
 ### `GET /api/me`
 
@@ -102,24 +113,43 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 
 ```jsonc
 // request
-{ "name": "string", "type": "text" | "voice" }
+{ "name": "string", "has_voice": false, "staff_only": false }
 // response 201
-{ "id": "string", "name": "string", "type": "text" | "voice", "created_at": "string", "updated_at": "string" | null }
+{
+  "id": "string",
+  "name": "string",
+  "created_by": "string | null",
+  "has_voice": false,
+  "staff_only": false,
+  "created_at": "string",
+  "updated_at": "string" | null,
+}
 ```
 
 - Requer `role` `mod` ou `admin`; `403` para usuários sem permissão.
+- `has_voice` e `staff_only` são opcionais (default `false`). `has_voice` é imutável após a criação; `staff_only` pode ser alterado por `PATCH`.
+- Como só `mod`/`admin` criam e a sala nasce sem assinantes, criar `staff_only: true` não dispara revogação de tópico — isso só acontece ao ligar `staff_only` via `PATCH`.
 
 ### `PATCH /api/rooms/{id}`
 
 ```jsonc
 // request
-{ "name": "string" }
+{ "name": "string", "staff_only": true }
 // response 200
-{ "id": "string", "name": "string", "type": "text" | "voice", "created_at": "string", "updated_at": "string" | null }
+{
+  "id": "string",
+  "name": "string",
+  "created_by": "string | null",
+  "has_voice": false,
+  "staff_only": true,
+  "created_at": "string",
+  "updated_at": "string" | null,
+}
 ```
 
 - Requer `role` `mod` ou `admin`.
 - `400` para nome inválido, `403` sem permissão e `404` se a sala não existe.
+- `staff_only` é opcional; quando `true`, o servidor derruba as assinaturas WebSocket ativas da sala (inclusive a de quem editou).
 
 ### `DELETE /api/rooms/{id}`
 
@@ -138,6 +168,7 @@ Remove uma sala. O front trata qualquer 2xx como sucesso (204 esperado) e limpa 
 ```
 
 - `token` é o JWT do LiveKit; `url` é o `wss://` do projeto; `room_name` só pra exibir (a sala real é o UUID, já embutido no token).
+- `400` quando a sala não tem `has_voice`; `404` quando a sala não existe ou é `staff_only` para um usuário comum (o acesso é decidido pela mesma política de `GET /api/rooms`).
 
 #### Áudio no compartilhamento de tela
 
@@ -217,7 +248,7 @@ O front rejeita frames sem `v: 1`, tipos desconhecidos e payloads incompatíveis
 { "v": 1, "type": "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
 ```
 
-`room.subscribe` é autorizado pelo backend. A ausência de erro depois do envio não confirma a inscrição; uma inscrição negada é silenciosa na versão atual.
+`room.subscribe` é autorizado pelo backend pela política de acesso da sala: salas `staff_only` exigem `mod`/`admin`. A ausência de erro depois do envio não confirma a inscrição; uma inscrição negada é silenciosa na versão atual.
 
 ### Outbound (server → front)
 
@@ -234,7 +265,7 @@ Eventos de mensagem:
 Eventos de sala:
 
 ```jsonc
-{ "v": 1, "type": "room.created" | "room.updated", "topic": "string", "ts": "string", "data": { "id": "uuid", "name": "string", "type": "text" | "voice", "created_at": "string" } }
+{ "v": 1, "type": "room.created" | "room.updated", "topic": "string", "ts": "string", "data": { "id": "uuid", "name": "string", "has_voice": false, "staff_only": false, "created_at": "string" } }
 { "v": 1, "type": "room.deleted", "topic": "room:<uuid>", "ts": "string", "data": { "id": "uuid", "is_mod": true } }
 ```
 

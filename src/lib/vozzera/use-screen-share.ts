@@ -6,15 +6,15 @@ import type {
   ScreenShareCaptureOptions,
   TrackPublishOptions,
 } from "livekit-client";
-import { Track, VideoQuality } from "livekit-client";
+import { ScreenSharePresets, Track } from "livekit-client";
 import {
   applyVideoPlaybackDelay,
   screenShareAudioCaptureOptions,
+  screenShareProfileFor,
   screenSharePublishOptions,
   VIDEO_PLAYBACK_DELAY_MS,
 } from "./voice";
-
-export type { DegradationPreference, FpsSeverity, ScreenShareQuality } from "./voice";
+import type { ScreenShareIntent, ScreenShareProfile } from "./voice";
 
 export type ScreenShareTrack = LocalVideoTrack | RemoteVideoTrack;
 
@@ -31,11 +31,11 @@ export type ScreenShareResult = {
   setScreenShare: (
     room: import("livekit-client").Room,
     enabled: boolean,
-    quality?: import("./voice").ScreenShareQuality,
+    intent?: ScreenShareIntent,
   ) => Promise<void>;
-  changeScreenShareQuality: (
+  applyScreenShareIntent: (
     room: import("livekit-client").Room,
-    quality: import("./voice").ScreenShareQuality,
+    intent: ScreenShareIntent,
   ) => Promise<void>;
   onTrackSubscribed: (
     track: import("livekit-client").Track,
@@ -47,6 +47,16 @@ export type ScreenShareResult = {
   resetState: () => void;
 };
 
+const DEFAULT_SCREEN_SHARE_INTENT: ScreenShareIntent = "text";
+
+function screenShareConstraintsFor(profile: ScreenShareProfile): MediaTrackConstraints {
+  return {
+    width: { ideal: profile.constraints.width },
+    height: { ideal: profile.constraints.height },
+    frameRate: { max: profile.constraints.frameRate },
+  };
+}
+
 export function useScreenShare(): ScreenShareResult {
   const [sharingEnabled, setSharingEnabled] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShare[]>([]);
@@ -56,7 +66,7 @@ export function useScreenShare(): ScreenShareResult {
     async (
       room: import("livekit-client").Room,
       enabled: boolean,
-      quality?: import("./voice").ScreenShareQuality,
+      intent: ScreenShareIntent = DEFAULT_SCREEN_SHARE_INTENT,
     ) => {
       if (!enabled) {
         await room.localParticipant.setScreenShareEnabled(false);
@@ -65,27 +75,33 @@ export function useScreenShare(): ScreenShareResult {
         return;
       }
 
-      const options: ScreenShareCaptureOptions = quality
-        ? {
-            audio: screenShareAudioCaptureOptions(),
-            resolution: {
-              width: quality.width,
-              height: quality.height,
-              frameRate: quality.frameRate,
-            },
-          }
-        : { audio: screenShareAudioCaptureOptions() };
-
-      const publishQuality = quality ?? { width: 1920, height: 1080, frameRate: 60 };
-      const publishOptions = screenSharePublishOptions(publishQuality) as TrackPublishOptions;
+      const profile = screenShareProfileFor(intent);
+      const options: ScreenShareCaptureOptions = {
+        audio: screenShareAudioCaptureOptions(),
+        resolution: profile.constraints,
+        contentHint: profile.contentHint,
+        video: { displaySurface: profile.displaySurface },
+        selfBrowserSurface: "exclude",
+        surfaceSwitching: "include",
+        systemAudio: "include",
+      };
+      const publishOptions = {
+        ...screenSharePublishOptions(intent),
+        screenShareSimulcastLayers: [ScreenSharePresets.h360fps15],
+      } as TrackPublishOptions;
       const publication = await room.localParticipant.setScreenShareEnabled(
         true,
         options,
         publishOptions,
       );
       const track = publication?.videoTrack as LocalVideoTrack | undefined;
-      if (track?.mediaStreamTrack) track.mediaStreamTrack.contentHint = "motion";
       const name = room.localParticipant.name || room.localParticipant.identity;
+
+      if (track) {
+        await track.mediaStreamTrack
+          .applyConstraints(screenShareConstraintsFor(profile))
+          .catch(() => undefined);
+      }
 
       setSharingEnabled(true);
       setLocalPreview(track ? { id: "local", name, track } : null);
@@ -93,33 +109,24 @@ export function useScreenShare(): ScreenShareResult {
     [],
   );
 
-  const changeScreenShareQuality = useCallback(
-    async (room: import("livekit-client").Room, quality: import("./voice").ScreenShareQuality) => {
-      await room.localParticipant.setScreenShareEnabled(false);
-      setSharingEnabled(false);
-      setLocalPreview(null);
-
-      const options: ScreenShareCaptureOptions = {
-        audio: screenShareAudioCaptureOptions(),
-        resolution: {
-          width: quality.width,
-          height: quality.height,
-          frameRate: quality.frameRate,
-        },
-      };
-
-      const publishOptions = screenSharePublishOptions(quality) as TrackPublishOptions;
-      const publication = await room.localParticipant.setScreenShareEnabled(
-        true,
-        options,
-        publishOptions,
-      );
+  const applyScreenShareIntent = useCallback(
+    async (room: import("livekit-client").Room, intent: ScreenShareIntent) => {
+      const publication = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
       const track = publication?.videoTrack as LocalVideoTrack | undefined;
-      if (track?.mediaStreamTrack) track.mediaStreamTrack.contentHint = "motion";
-      const name = room.localParticipant.name || room.localParticipant.identity;
+      if (!track?.sender) return;
 
-      setSharingEnabled(true);
-      setLocalPreview(track ? { id: "local", name, track } : null);
+      const profile = screenShareProfileFor(intent);
+      track.mediaStreamTrack.contentHint = profile.contentHint;
+      await track.mediaStreamTrack.applyConstraints(screenShareConstraintsFor(profile));
+      await track.setDegradationPreference(profile.degradationPreference);
+
+      const params = track.sender.getParameters();
+      const topEncoding = params.encodings.at(-1);
+      if (!topEncoding) return;
+
+      topEncoding.maxBitrate = profile.encoding.maxBitrate;
+      topEncoding.maxFramerate = profile.encoding.maxFramerate;
+      await track.sender.setParameters(params);
     },
     [],
   );
@@ -133,7 +140,7 @@ export function useScreenShare(): ScreenShareResult {
       if (track.source !== Track.Source.ScreenShare) return;
 
       const remotePub = publication as import("livekit-client").RemoteTrackPublication;
-      remotePub.setVideoQuality(VideoQuality.HIGH);
+      remotePub.setEnabled(true);
       applyVideoPlaybackDelay(track as RemoteVideoTrack, VIDEO_PLAYBACK_DELAY_MS);
 
       const name = participant.name || participant.identity;
@@ -146,7 +153,7 @@ export function useScreenShare(): ScreenShareResult {
   );
 
   const onTrackUnsubscribed = useCallback((track: import("livekit-client").Track) => {
-    track.detach().forEach((el) => el.remove());
+    track.detach();
     setScreenShares((prev) => prev.filter((share) => share.track !== track));
   }, []);
 
@@ -171,7 +178,7 @@ export function useScreenShare(): ScreenShareResult {
     screenShares,
     localPreview,
     setScreenShare,
-    changeScreenShareQuality,
+    applyScreenShareIntent,
     onTrackSubscribed,
     onTrackUnsubscribed,
     onLocalTrackUnpublished,

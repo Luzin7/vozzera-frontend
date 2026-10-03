@@ -5,19 +5,15 @@ import {
   applyVolumeWithElementMuted,
   audioCaptureOptions,
   audioInputDevices,
+  deafenStateFromPayload,
+  deafenStatePayload,
   effectiveParticipantVolume,
   featuredShareId,
-  fpsColorFor,
-  fpsLabelFor,
-  fpsSeverityFor,
-  isGlobalMuteActive,
   isLocalVoiceActive,
   isParticipantLocallyInaudible,
-  locallyMutedParticipantNames,
   mergeActiveSpeakerNames,
-  microphoneEnabledAfterDeafenToggle,
+  microphoneEnabledAfterDeafenEnd,
   muteVolume,
-  participantNamesToMuteForSelectiveListening,
   participantStatusLabelFor,
   readMicDeviceId,
   readNoiseFilter,
@@ -25,10 +21,15 @@ import {
   readPushToTalkBinding,
   readPushToTalkEnabled,
   microphonePublishOptions,
-  remoteFpsLabelFor,
+  participantConnectionWarningFor,
   screenShareAdaptiveStreamSettings,
   screenShareAudioCaptureOptions,
+  screenShareContentHintFor,
+  screenShareHealthFor,
+  screenShareHealthMessageFor,
+  screenShareProfileFor,
   screenSharePublishOptions,
+  canShareScreen,
   shouldReleaseMicrophoneInBackground,
   shouldShowLocalVoiceActivity,
   shouldHandlePushToTalk,
@@ -212,55 +213,26 @@ describe("screenShareAudioCaptureOptions", () => {
 
 describe("screenSharePublishOptions", () => {
   it.each([
-    [{ width: 1280, height: 720, frameRate: 30 }, 1_800_000],
-    [{ width: 1280, height: 720, frameRate: 60 }, 3_000_000],
-    [{ width: 1920, height: 1080, frameRate: 30 }, 3_500_000],
-    [{ width: 1920, height: 1080, frameRate: 60 }, 6_000_000],
-  ])("selects the video bitrate for %o", (quality, maxBitrate) => {
-    expect(screenSharePublishOptions(quality)).toEqual({
-      audioPreset: { maxBitrate: 128_000 },
-      dtx: false,
-      forceStereo: true,
-      degradationPreference: "maintain-framerate",
-      screenShareEncoding: {
-        maxBitrate,
-        maxFramerate: quality.frameRate,
-      },
-      videoCodec: "h264",
-      simulcast: false,
-    });
-  });
-
-  it("defaults degradation preference to maintain-framerate when not specified", () => {
-    const result = screenSharePublishOptions({ width: 1920, height: 1080, frameRate: 30 });
-    expect(result.degradationPreference).toBe("maintain-framerate");
-  });
-
-  it("accepts explicit maintain-resolution degradation preference", () => {
-    const result = screenSharePublishOptions({
-      width: 1920,
-      height: 1080,
-      frameRate: 30,
-      degradationPreference: "maintain-resolution",
-    });
-    expect(result.degradationPreference).toBe("maintain-resolution");
-  });
-
-  it("accepts explicit maintain-framerate degradation preference", () => {
-    const result = screenSharePublishOptions({
-      width: 1280,
-      height: 720,
-      frameRate: 60,
-      degradationPreference: "maintain-framerate",
-    });
-    expect(result.degradationPreference).toBe("maintain-framerate");
-  });
-});
-
-describe("screenShareAdaptiveStreamSettings", () => {
-  it("keeps screen share video active while the tab is hidden", () => {
-    expect(screenShareAdaptiveStreamSettings()).toEqual({ pauseVideoInBackground: false });
-  });
+    ["text", 3_000_000, 15, "maintain-resolution"],
+    ["video", 8_000_000, 60, "maintain-framerate"],
+    ["economy", 2_000_000, 30, "maintain-resolution"],
+  ] as const)(
+    "selects the video bitrate for %s",
+    (intent, maxBitrate, maxFramerate, degradationPreference) => {
+      expect(screenSharePublishOptions(intent)).toEqual({
+        audioPreset: { maxBitrate: 128_000 },
+        dtx: false,
+        forceStereo: true,
+        degradationPreference,
+        screenShareEncoding: {
+          maxBitrate,
+          maxFramerate,
+        },
+        videoCodec: "h264",
+        simulcast: true,
+      });
+    },
+  );
 });
 
 describe("screenShareAdaptiveStreamSettings", () => {
@@ -360,73 +332,47 @@ describe("muteVolume", () => {
 });
 
 describe("effectiveParticipantVolume", () => {
-  it("mutes participant audio while deafen is active", () => {
-    expect(effectiveParticipantVolume(true, 0.4)).toBe(0);
+  it("uses the default volume without a saved preference", () => {
+    expect(effectiveParticipantVolume(undefined)).toBe(1);
   });
 
-  it("restores the default volume after deafen without a saved preference", () => {
-    expect(effectiveParticipantVolume(false, undefined)).toBe(1);
-  });
-
-  it("restores the saved participant volume after deafen", () => {
-    expect(effectiveParticipantVolume(false, 0.4)).toBe(0.4);
+  it("uses the saved participant volume", () => {
+    expect(effectiveParticipantVolume(0.4)).toBe(0.4);
   });
 });
 
 describe("isParticipantLocallyInaudible", () => {
-  it("marks remote participants as inaudible while deafen is active", () => {
-    expect(isParticipantLocallyInaudible(false, true, 1)).toBe(true);
-  });
-
   it("marks an individually muted remote participant as inaudible", () => {
-    expect(isParticipantLocallyInaudible(false, false, 0)).toBe(true);
+    expect(isParticipantLocallyInaudible(false, 0)).toBe(true);
   });
 
   it("does not show the local indicator on the current user", () => {
-    expect(isParticipantLocallyInaudible(true, true, 0)).toBe(false);
+    expect(isParticipantLocallyInaudible(true, 0)).toBe(false);
   });
 });
 
-describe("participantNamesToMuteForSelectiveListening", () => {
-  it("keeps only the selected participant audible", () => {
-    expect(participantNamesToMuteForSelectiveListening(["ana", "beto", "caio"], "beto")).toEqual([
-      "ana",
-      "caio",
-    ]);
+describe("microphoneEnabledAfterDeafenEnd", () => {
+  it("restores the previous microphone state", () => {
+    expect(microphoneEnabledAfterDeafenEnd(false, true)).toBe(true);
+    expect(microphoneEnabledAfterDeafenEnd(false, false)).toBe(false);
+  });
+
+  it("keeps the microphone off while push-to-talk is enabled", () => {
+    expect(microphoneEnabledAfterDeafenEnd(true, true)).toBe(false);
   });
 });
 
-describe("microphoneEnabledAfterDeafenToggle", () => {
-  it("mutes the microphone when deafen is activated", () => {
-    expect(microphoneEnabledAfterDeafenToggle(false)).toBe(false);
+describe("deafen state payload", () => {
+  it("round-trips an enabled state", () => {
+    expect(deafenStateFromPayload(deafenStatePayload(true))).toBe(true);
   });
 
-  it("always enables the microphone when deafen is disabled globally", () => {
-    expect(microphoneEnabledAfterDeafenToggle(true)).toBe(true);
-  });
-});
-
-describe("locallyMutedParticipantNames", () => {
-  it("selects only participants with volume zero", () => {
-    expect(locallyMutedParticipantNames({ ana: 0, beto: 0.7, caio: 0 })).toEqual(["ana", "caio"]);
-  });
-});
-
-describe("isGlobalMuteActive", () => {
-  it("recognizes locally muted participants and microphone as global mute", () => {
-    expect(isGlobalMuteActive(false, ["ana", "beto"], { ana: 0, beto: 0 }, [], {})).toBe(true);
+  it("round-trips a disabled state", () => {
+    expect(deafenStateFromPayload(deafenStatePayload(false))).toBe(false);
   });
 
-  it("stays inactive while the microphone is enabled", () => {
-    expect(isGlobalMuteActive(true, ["ana"], { ana: 0 }, [], {})).toBe(false);
-  });
-
-  it("stays inactive while a participant is audible", () => {
-    expect(isGlobalMuteActive(false, ["ana", "beto"], { ana: 0, beto: 0.8 }, [], {})).toBe(false);
-  });
-
-  it("stays inactive while a screen share is audible", () => {
-    expect(isGlobalMuteActive(false, ["ana"], { ana: 0 }, ["ana"], { ana: 0.8 })).toBe(false);
+  it("rejects an invalid payload", () => {
+    expect(deafenStateFromPayload(new Uint8Array([2]))).toBeNull();
   });
 });
 
@@ -486,67 +432,95 @@ describe("applyVolumeWithElementMuted", () => {
   });
 });
 
-describe("fpsSeverityFor", () => {
-  it("returns excellent when fps is near target", () => {
-    expect(fpsSeverityFor(55, 60)).toBe("excellent");
+describe("screenShareContentHintFor", () => {
+  it("uses detail for the sharpness mode", () => {
+    expect(screenShareContentHintFor("maintain-resolution")).toBe("detail");
   });
 
-  it("returns good when fps is between half and most of target", () => {
-    expect(fpsSeverityFor(35, 60)).toBe("good");
-  });
-
-  it("returns poor when fps is below half but above 20", () => {
-    expect(fpsSeverityFor(21, 60)).toBe("poor");
-  });
-
-  it("returns critical when fps is very low", () => {
-    expect(fpsSeverityFor(10, 60)).toBe("critical");
+  it("uses motion for the fluidity mode", () => {
+    expect(screenShareContentHintFor("maintain-framerate")).toBe("motion");
   });
 });
 
-describe("fpsLabelFor", () => {
-  it("returns null when fps is excellent for the target", () => {
-    expect(fpsLabelFor(55, 60)).toBeNull();
+describe("screenShareProfileFor", () => {
+  it("derives capture, encoding, degradation, hint and surface from the intent", () => {
+    expect(screenShareProfileFor("text")).toEqual({
+      constraints: { width: 1920, height: 1080, frameRate: 15 },
+      encoding: { maxBitrate: 3_000_000, maxFramerate: 15 },
+      degradationPreference: "maintain-resolution",
+      contentHint: "detail",
+      displaySurface: "window",
+    });
   });
 
-  it("shows the fps when it is good but not excellent", () => {
-    expect(fpsLabelFor(35, 60)).toBe("35 fps");
-  });
-
-  it("shows the fps with a tip when it is poor", () => {
-    expect(fpsLabelFor(15, 60)).toBe("15 fps · Baixe a qualidade");
-  });
-});
-
-describe("remoteFpsLabelFor", () => {
-  it("returns null when fps is at least 30", () => {
-    expect(remoteFpsLabelFor(30)).toBeNull();
-    expect(remoteFpsLabelFor(45)).toBeNull();
-  });
-
-  it("warns about instability between 15 and 30 fps", () => {
-    expect(remoteFpsLabelFor(20)).toBe("Qualidade instável");
-  });
-
-  it("warns about difficulty below 15 fps", () => {
-    expect(remoteFpsLabelFor(10)).toBe("Streamer com dificuldades");
+  it("asks for a window surface to avoid capturing the whole screen", () => {
+    expect(screenShareProfileFor("video")).toEqual({
+      constraints: { width: 1920, height: 1080, frameRate: 60 },
+      encoding: { maxBitrate: 8_000_000, maxFramerate: 60 },
+      degradationPreference: "maintain-framerate",
+      contentHint: "motion",
+      displaySurface: "window",
+    });
+    expect(screenShareProfileFor("economy").displaySurface).toBe("window");
   });
 });
 
-describe("fpsColorFor", () => {
-  it("returns green for excellent", () => {
-    expect(fpsColorFor("excellent")).toContain("green");
+describe("screenShareHealthFor", () => {
+  it("reports cpu when the encoder is limited by cpu", () => {
+    expect(screenShareHealthFor({ qualityLimitationReason: "cpu" })).toBe("cpu");
   });
 
-  it("returns amber for good", () => {
-    expect(fpsColorFor("good")).toContain("amber");
+  it("reports bandwidth when the encoder is limited by bandwidth", () => {
+    expect(screenShareHealthFor({ qualityLimitationReason: "bandwidth" })).toBe("bandwidth");
   });
 
-  it("returns orange for poor", () => {
-    expect(fpsColorFor("poor")).toContain("orange");
+  it("reports ok otherwise", () => {
+    expect(screenShareHealthFor({})).toBe("ok");
+    expect(screenShareHealthFor({ qualityLimitationReason: "none" })).toBe("ok");
   });
 
-  it("returns red for critical", () => {
-    expect(fpsColorFor("critical")).toContain("red");
+  it("reports paused when the stream was suspended", () => {
+    expect(screenShareHealthFor({ paused: true })).toBe("paused");
+    expect(screenShareHealthFor({ paused: true, qualityLimitationReason: "cpu" })).toBe("paused");
+  });
+});
+
+describe("screenShareHealthMessageFor", () => {
+  it("explains each unhealthy state in pt-BR", () => {
+    expect(screenShareHealthMessageFor("cpu")).toBe("Seu computador está no limite.");
+    expect(screenShareHealthMessageFor("bandwidth")).toBe(
+      "Sua internet de upload está limitando a qualidade.",
+    );
+    expect(screenShareHealthMessageFor("paused")).toBe(
+      "Sua conexão não está dando conta. A transmissão volta sozinha.",
+    );
+  });
+
+  it("stays silent when the stream is healthy", () => {
+    expect(screenShareHealthMessageFor("ok")).toBeNull();
+  });
+});
+
+describe("participantConnectionWarningFor", () => {
+  it("warns when the remote sharer has a poor connection", () => {
+    expect(participantConnectionWarningFor("poor", "ana")).toBe("A conexão de ana está instável.");
+  });
+
+  it("stays silent for good, excellent, unknown or missing quality", () => {
+    expect(participantConnectionWarningFor("good", "ana")).toBeNull();
+    expect(participantConnectionWarningFor("excellent", "ana")).toBeNull();
+    expect(participantConnectionWarningFor(undefined, "ana")).toBeNull();
+  });
+});
+
+describe("canShareScreen", () => {
+  it("accepts devices that expose getDisplayMedia", () => {
+    expect(canShareScreen({ getDisplayMedia: () => Promise.resolve() })).toBe(true);
+  });
+
+  it("rejects missing devices or devices without the API", () => {
+    expect(canShareScreen(null)).toBe(false);
+    expect(canShareScreen(undefined)).toBe(false);
+    expect(canShareScreen({})).toBe(false);
   });
 });

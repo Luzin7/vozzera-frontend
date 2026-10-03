@@ -1,50 +1,35 @@
 import {
   Hash,
+  Lock,
+  MessageSquare,
   Mic,
   MicOff,
-  MoreHorizontal,
   MonitorUp,
   MonitorX,
   PhoneOff,
   Plus,
-  Pencil,
+  Settings,
   Settings2,
-  Trash2,
   Volume2,
   VolumeX,
-  Ear,
-  EarOff,
+  HeadphoneOff,
+  Headphones,
 } from "lucide-react";
-import { memo, type KeyboardEvent, useRef, useState } from "react";
+import { memo, useRef, type KeyboardEvent } from "react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { VoicePresenceList } from "@/components/vozzera/VoicePresenceList";
-import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex, type VoicePresence } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
-import { isParticipantLocallyInaudible } from "@/lib/vozzera/voice";
-import { cn } from "@/lib/utils";
-import type { ScreenShare } from "@/lib/vozzera/useVoice";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
-import type { VoiceStatus } from "@/lib/vozzera/useVoice";
+import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
+import type { ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
+import { isParticipantLocallyInaudible } from "@/lib/vozzera/voice";
 
 type Props = {
   className?: string;
@@ -56,11 +41,12 @@ type Props = {
   onSelectVoiceRoom: (room: Room) => void;
   onCreateRoom: () => void;
   canManageRooms: boolean;
-  onEditRoom: (room: Room) => void;
-  onDeleteRoom: (room: Room) => void;
+  onOpenVoiceChat: (room: Room) => void;
+  onOpenRoomSettings: (room: Room) => void;
+  voiceChatOpen: boolean;
+  settingsRoomId: string | null;
   onOpenSettings: () => void;
   username: string | null;
-  currentUserId: string | null;
   status: SocketStatus;
   voiceStatus: VoiceStatus;
   voiceRoomId: string | null;
@@ -76,12 +62,11 @@ type Props = {
   onSetScreenShareVolume: (name: string, volume: number) => void;
   onToggleLocalMute: (name: string) => void;
   onToggleLocalScreenShareMute: (name: string) => void;
-  onListenToParticipant: (name: string, volume?: number) => void;
-  onListenToParticipantScreenShare: (name: string, volume?: number) => void;
   screenShareEnabled: boolean;
   onToggleScreenShare: () => void;
   screenShares: ScreenShare[];
   mutedParticipants: Record<string, boolean>;
+  deafenedParticipants: Record<string, boolean>;
   speakingNames: string[];
   deafen: boolean;
   onToggleDeafen: () => void;
@@ -99,40 +84,54 @@ const statusColor: Record<SocketStatus, string> = {
   closed: "bg-destructive",
 };
 
-function RoomActions({
+function RoomRowActions({
   room,
-  onEdit,
-  onDelete,
+  connected,
+  chatOpen,
+  settingsOpen,
+  canManageRooms,
+  onOpenChat,
+  onOpenSettings,
 }: Readonly<{
   room: Room;
-  onEdit: () => void;
-  onDelete: () => void;
+  connected: boolean;
+  chatOpen: boolean;
+  settingsOpen: boolean;
+  canManageRooms: boolean;
+  onOpenChat?: () => void;
+  onOpenSettings: () => void;
 }>) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <div className="absolute right-0 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 pr-1 opacity-100 transition-opacity md:right-1 md:pointer-events-none md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100">
+      {connected && onOpenChat && (
         <Button
           size="icon"
           variant="ghost"
-          className="group/action absolute right-0 top-1/2 z-10 h-11 w-11 shrink-0 -translate-y-1/2 p-0 opacity-100 transition-opacity hover:bg-transparent md:right-1 md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 data-[state=open]:opacity-100"
+          className={cn(
+            "h-7 w-7 shrink-0 text-muted-foreground/60 transition-colors hover:bg-foreground/15 hover:text-foreground [&_svg]:size-3.5",
+            chatOpen && "text-primary hover:text-primary",
+          )}
+          onClick={onOpenChat}
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-md group-hover/action:bg-sidebar-accent">
-            <MoreHorizontal className="h-4 w-4" />
-          </span>
-          <span className="sr-only">Ações da sala {room.name}</span>
+          <MessageSquare />
+          <span className="sr-only">Chat da call {room.name}</span>
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onEdit}>
-          <Pencil className="h-4 w-4" />
-          Editar sala
-        </DropdownMenuItem>
-        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
-          <Trash2 className="h-4 w-4" />
-          Apagar sala
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      )}
+      {canManageRooms && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className={cn(
+            "h-7 w-7 shrink-0 text-muted-foreground/60 transition-colors hover:bg-foreground/15 hover:text-foreground [&_svg]:size-3.5",
+            settingsOpen && "text-primary hover:text-primary",
+          )}
+          onClick={onOpenSettings}
+        >
+          <Settings />
+          <span className="sr-only">Configurações da sala {room.name}</span>
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -146,11 +145,12 @@ export const RoomSidebar = memo(function RoomSidebar({
   onSelectVoiceRoom,
   onCreateRoom,
   canManageRooms,
-  onEditRoom,
-  onDeleteRoom,
+  onOpenVoiceChat,
+  onOpenRoomSettings,
+  voiceChatOpen,
+  settingsRoomId,
   onOpenSettings,
   username,
-  currentUserId,
   status,
   voiceStatus,
   voiceRoomId,
@@ -166,20 +166,19 @@ export const RoomSidebar = memo(function RoomSidebar({
   onSetScreenShareVolume,
   onToggleLocalMute,
   onToggleLocalScreenShareMute,
-  onListenToParticipant,
-  onListenToParticipantScreenShare,
   screenShareEnabled,
   onToggleScreenShare,
   screenShares,
   mutedParticipants,
+  deafenedParticipants,
   speakingNames,
   deafen,
   onToggleDeafen,
 }: Readonly<Props>) {
-  const [deleteTarget, setDeleteTarget] = useState<Room | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
-  const textRooms = rooms.filter((r) => r.type === "text");
-  const voiceRooms = rooms.filter((r) => r.type === "voice");
+  const canShare = useCanShareScreen();
+  const textRooms = rooms.filter((r) => !r.has_voice);
+  const voiceRooms = rooms.filter((r) => r.has_voice);
   const currentVoiceRoom = voiceRooms.find((r) => r.id === voiceRoomId) ?? null;
 
   const focusRoom = (event: KeyboardEvent<HTMLButtonElement>, group: string) => {
@@ -244,10 +243,10 @@ export const RoomSidebar = memo(function RoomSidebar({
           <Button
             size="icon"
             variant="ghost"
-            className="h-11 w-11 md:h-7 md:w-7"
+            className="h-11 w-11 text-muted-foreground/60 transition-colors hover:bg-foreground/15 hover:text-foreground md:h-7 md:w-7"
             onClick={onCreateRoom}
           >
-            <Plus className="h-4 w-4" />
+            <Plus />
             <span className="sr-only">Nova sala</span>
           </Button>
         )}
@@ -276,6 +275,12 @@ export const RoomSidebar = memo(function RoomSidebar({
               >
                 <Hash className="h-4 w-4 shrink-0 opacity-70" />
                 <span className="truncate">{room.name}</span>
+                {room.staff_only && (
+                  <span className="inline-flex shrink-0" title="Só para moderação">
+                    <Lock aria-hidden="true" className="h-3 w-3 text-muted-foreground" />
+                    <span className="sr-only">Só para moderação</span>
+                  </span>
+                )}
                 {unread[room.id] ? (
                   <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
                     {unread[room.id]}
@@ -283,10 +288,13 @@ export const RoomSidebar = memo(function RoomSidebar({
                 ) : null}
               </Button>
               {canManageRooms && (
-                <RoomActions
+                <RoomRowActions
                   room={room}
-                  onEdit={() => onEditRoom(room)}
-                  onDelete={() => setDeleteTarget(room)}
+                  connected={false}
+                  chatOpen={false}
+                  settingsOpen={settingsRoomId === room.id}
+                  canManageRooms={canManageRooms}
+                  onOpenSettings={() => onOpenRoomSettings(room)}
                 />
               )}
             </div>
@@ -312,7 +320,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                     data-room-nav="voice"
                     onClick={() => onSelectVoiceRoom(room)}
                     onKeyDown={(event) => focusRoom(event, "voice")}
-                    className={`flex min-h-11 w-full min-w-0 items-center justify-start gap-2 rounded-md py-1.5 pl-2 pr-12 text-sm transition-colors md:min-h-0 md:pr-10 ${
+                    className={`flex min-h-11 w-full min-w-0 items-center justify-start gap-2 rounded-md py-1.5 pl-2 pr-16 text-sm transition-colors md:min-h-0 md:pr-14 ${
                       isSelected
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
@@ -320,17 +328,34 @@ export const RoomSidebar = memo(function RoomSidebar({
                   >
                     <Volume2 className="h-4 w-4 shrink-0 opacity-70" />
                     <span className="truncate">{room.name}</span>
-                    {isConnected && voiceStatus === "connecting" && (
-                      <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        conectando…
+                    {room.staff_only && (
+                      <span className="inline-flex shrink-0" title="Só para moderação">
+                        <Lock aria-hidden="true" className="h-3 w-3 text-muted-foreground" />
+                        <span className="sr-only">Só para moderação</span>
                       </span>
                     )}
+                    <span className="ml-auto flex shrink-0 items-center gap-1">
+                      {unread[room.id] ? (
+                        <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
+                          {unread[room.id]}
+                        </span>
+                      ) : null}
+                      {isConnected && voiceStatus === "connecting" && (
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          conectando…
+                        </span>
+                      )}
+                    </span>
                   </Button>
-                  {canManageRooms && (
-                    <RoomActions
+                  {(isConnected || canManageRooms) && (
+                    <RoomRowActions
                       room={room}
-                      onEdit={() => onEditRoom(room)}
-                      onDelete={() => setDeleteTarget(room)}
+                      connected={isConnected}
+                      chatOpen={voiceChatOpen && isSelected}
+                      settingsOpen={settingsRoomId === room.id}
+                      canManageRooms={canManageRooms}
+                      onOpenChat={() => onOpenVoiceChat(room)}
+                      onOpenSettings={() => onOpenRoomSettings(room)}
                     />
                   )}
                 </div>
@@ -348,7 +373,6 @@ export const RoomSidebar = memo(function RoomSidebar({
                       const isLocalMuted = name !== username && volumes[name] === 0;
                       const isLocallyInaudible = isParticipantLocallyInaudible(
                         name === username,
-                        deafen,
                         volumes[name],
                       );
                       const isScreenShareLocallyMuted =
@@ -366,21 +390,25 @@ export const RoomSidebar = memo(function RoomSidebar({
                             </span>
                           </span>
                           <span className="truncate">{name}</span>
-                          {name === username && <span className="shrink-0">(você)</span>}
                           {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
+                          {((name === username && deafen) || deafenedParticipants[name]) && (
+                            <HeadphoneOff
+                              aria-label={
+                                name === username
+                                  ? "Você está no mudo total"
+                                  : `${name} está no mudo total`
+                              }
+                              className="h-3 w-3 shrink-0 text-muted-foreground"
+                            />
+                          )}
                           {isStreaming && <MonitorUp className="h-3 w-3 shrink-0 text-primary" />}
                           {isLocallyInaudible && (
-                            <span
-                              className="inline-flex shrink-0"
-                              title={deafen ? "Silenciado pelo mudo total" : "Silenciado para você"}
-                            >
+                            <span className="inline-flex shrink-0" title="Silenciado para você">
                               <VolumeX
                                 aria-hidden="true"
                                 className="h-3 w-3 text-muted-foreground"
                               />
-                              <span className="sr-only">
-                                {deafen ? "Silenciado pelo mudo total" : "Silenciado para você"}
-                              </span>
+                              <span className="sr-only">Silenciado para você</span>
                             </span>
                           )}
                         </span>
@@ -395,40 +423,19 @@ export const RoomSidebar = memo(function RoomSidebar({
                               name={name}
                               volume={volumes[name] ?? 1}
                               screenShareVolume={screenShareVolumes[name] ?? 1}
-                              deafen={deafen}
                               locallyMuted={isLocalMuted}
                               screenShareLocallyMuted={isScreenShareLocallyMuted}
                               isMuted={isMuted}
                               isStreaming={isStreaming}
                               isSpeaking={isSpeaking}
-                              onSetVolume={(volume) => {
-                                if (deafen) {
-                                  onListenToParticipant(name, volume);
-                                  return;
-                                }
-                                onSetVolume(name, volume);
-                              }}
-                              onSetScreenShareVolume={(volume) => {
-                                if (deafen) {
-                                  onListenToParticipantScreenShare(name, volume);
-                                  return;
-                                }
-                                onSetScreenShareVolume(name, volume);
-                              }}
-                              onToggleLocalMute={() => {
-                                if (deafen) {
-                                  onListenToParticipant(name);
-                                  return;
-                                }
-                                onToggleLocalMute(name);
-                              }}
-                              onToggleLocalScreenShareMute={() => {
-                                if (deafen) {
-                                  onListenToParticipantScreenShare(name);
-                                  return;
-                                }
-                                onToggleLocalScreenShareMute(name);
-                              }}
+                              onSetVolume={(volume) => onSetVolume(name, volume)}
+                              onSetScreenShareVolume={(volume) =>
+                                onSetScreenShareVolume(name, volume)
+                              }
+                              onToggleLocalMute={() => onToggleLocalMute(name)}
+                              onToggleLocalScreenShareMute={() =>
+                                onToggleLocalScreenShareMute(name)
+                              }
                             >
                               {row}
                             </ParticipantMenu>
@@ -442,10 +449,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                 {(!isConnected ||
                   voiceStatus !== "connected" ||
                   voiceParticipants.length === 0) && (
-                  <VoicePresenceList
-                    participants={onlineParticipants}
-                    currentUserId={currentUserId}
-                  />
+                  <VoicePresenceList participants={onlineParticipants} />
                 )}
               </div>
             );
@@ -463,22 +467,37 @@ export const RoomSidebar = memo(function RoomSidebar({
               <p className="truncate text-xs text-muted-foreground">{currentVoiceRoom.name}</p>
             </div>
             <div className="flex shrink-0 items-center">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-11 w-11 md:h-7 md:w-7"
-                onClick={onToggleScreenShare}
-                disabled={voiceStatus !== "connected"}
-              >
-                {screenShareEnabled ? (
-                  <MonitorX className="h-4 w-4" />
-                ) : (
-                  <MonitorUp className="h-4 w-4" />
-                )}
-                <span className="sr-only">
-                  {screenShareEnabled ? "Parar de compartilhar tela" : "Compartilhar tela"}
-                </span>
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="hidden md:inline-flex">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-11 w-11 md:h-7 md:w-7"
+                        onClick={onToggleScreenShare}
+                        disabled={voiceStatus !== "connected" || !canShare}
+                      >
+                        {screenShareEnabled ? (
+                          <MonitorX className="h-4 w-4" />
+                        ) : (
+                          <MonitorUp className="h-4 w-4" />
+                        )}
+                        <span className="sr-only">
+                          {screenShareEnabled ? "Parar de compartilhar tela" : "Compartilhar tela"}
+                        </span>
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {canShare
+                      ? screenShareEnabled
+                        ? "Parar de compartilhar tela"
+                        : "Compartilhar tela"
+                      : "Compartilhar tela não é suportado neste dispositivo"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button
                 size="icon"
                 variant="ghost"
@@ -486,7 +505,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                 onClick={onToggleDeafen}
                 disabled={voiceStatus !== "connected"}
               >
-                {deafen ? <EarOff className="h-4 w-4" /> : <Ear className="h-4 w-4" />}
+                {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
                 <span className="sr-only">{deafen ? "Ativar som" : "Mudo total"}</span>
               </Button>
               <Button
@@ -527,41 +546,14 @@ export const RoomSidebar = memo(function RoomSidebar({
           <Button
             size="icon"
             variant="ghost"
-            className="h-11 w-11 md:h-7 md:w-7"
+            className="h-11 w-11 text-muted-foreground/60 transition-colors hover:bg-foreground/15 hover:text-foreground md:h-7 md:w-7"
             onClick={onOpenSettings}
           >
-            <Settings2 className="h-4 w-4" />
+            <Settings2 />
             <span className="sr-only">Configurações</span>
           </Button>
         </div>
       </div>
-
-      <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-      >
-        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto rounded-lg">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Apagar sala?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A sala {deleteTarget?.name} e todo o histórico dela serão apagados permanentemente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (!deleteTarget) return;
-                onDeleteRoom(deleteTarget);
-                setDeleteTarget(null);
-              }}
-            >
-              Apagar sala
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </aside>
   );
 });

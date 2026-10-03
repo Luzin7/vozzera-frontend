@@ -45,7 +45,8 @@ const envelope = <Type extends string, Topic extends z.ZodType<string>, Data ext
 const roomData = z.object({
   id: uuid,
   name: z.string(),
-  type: z.union([z.literal("text"), z.literal("voice")]),
+  has_voice: z.boolean(),
+  staff_only: z.boolean(),
   created_at: timestamp,
 });
 
@@ -91,7 +92,8 @@ const roomChangedFrame = z
     action: frame.type === "room.created" ? "created" : "updated",
     id: frame.data.id,
     name: frame.data.name,
-    room_type: frame.data.type,
+    has_voice: frame.data.has_voice,
+    staff_only: frame.data.staff_only,
     created_at: frame.data.created_at,
   }));
 

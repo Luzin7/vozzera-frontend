@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, BellOff, Menu, Volume2 } from "lucide-react";
+import { Bell, BellOff, Menu, Settings, Volume2 } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
@@ -8,7 +8,9 @@ import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
 import { MemberList } from "@/components/vozzera/MemberList";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
+import { RoomSettingsView } from "@/components/vozzera/RoomSettingsView";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { VoiceChatDock } from "@/components/vozzera/VoiceChatDock";
 import { WhatsNewDialog } from "@/components/vozzera/WhatsNewDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -93,25 +95,25 @@ function Index() {
     dismiss: dismissChangelog,
   } = useChangelog(authed === true);
   const [roomDialogOpen, setRoomDialogOpen] = useState(false);
-  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
+  const [voiceChatOpen, setVoiceChatOpen] = useState(false);
+  const [settingsRoomId, setSettingsRoomId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const isOnline = useOnline();
   const voice = useVoice();
   const {
-    micEnabled,
     screenShareEnabled,
     activeRoomId: voiceActiveRoomId,
     connect,
     disconnect,
-    setMicEnabled,
     setScreenShare,
     reduceScreenQuality,
     ensureKrispLoaded,
     toggleDeafen,
+    toggleMic,
   } = voice;
 
   const handleDeleteMessage = useCallback(
@@ -131,6 +133,8 @@ function Index() {
     (room: Room) => {
       setSidebarOpen(false);
       setVisibleVoiceRoomId(null);
+      setVoiceChatOpen(false);
+      setSettingsRoomId(null);
       void openRoom(room);
     },
     [openRoom],
@@ -149,47 +153,52 @@ function Index() {
       setSidebarOpen(false);
       dismissBanner();
       setVisibleVoiceRoomId(room.id);
+      setVoiceChatOpen(false);
+      setSettingsRoomId(null);
       if (voiceActiveRoomId === room.id) return;
       void connect(room.id);
     },
     [dismissBanner, voiceActiveRoomId, connect],
   );
 
+  const handleOpenVoiceChat = useCallback(
+    (room: Room) => {
+      setSidebarOpen(false);
+      setVisibleVoiceRoomId(room.id);
+      const next = !(voiceChatOpen && visibleVoiceRoomId === room.id);
+      setVoiceChatOpen(next);
+      if (next) void openRoom(room);
+    },
+    [voiceChatOpen, visibleVoiceRoomId, openRoom],
+  );
+
+  const handleOpenRoomSettings = useCallback((room: Room) => {
+    setSidebarOpen(false);
+    setSettingsRoomId(room.id);
+  }, []);
+
+  const handleCloseRoomSettings = useCallback(() => setSettingsRoomId(null), []);
+
   const handleCreateRoom = useCallback(() => {
     setSidebarOpen(false);
-    setEditingRoom(null);
     setRoomDialogOpen(true);
   }, []);
 
-  const handleEditRoom = useCallback((room: Room) => {
-    setSidebarOpen(false);
-    setEditingRoom(room);
-    setRoomDialogOpen(true);
-  }, []);
-
-  const handleDeleteRoom = useCallback(
-    async (room: Room) => {
-      try {
-        await deleteRoom(room.id);
-      } catch {
-        showBanner("Não foi possível apagar a sala.");
-      }
-    },
-    [deleteRoom, showBanner],
+  const handleSaveRoom = useCallback(
+    (roomId: string, input: { name: string; staffOnly: boolean }) => updateRoom(roomId, input),
+    [updateRoom],
   );
 
-  const handleDeleteRoomVoid = useCallback(
-    (room: Room) => void handleDeleteRoom(room),
-    [handleDeleteRoom],
+  const handleDeleteRoomForSettings = useCallback(
+    (roomId: string) => deleteRoom(roomId),
+    [deleteRoom],
   );
 
-  const handleToggleMic = useCallback(
-    () => void setMicEnabled(!micEnabled),
-    [micEnabled, setMicEnabled],
-  );
+  const handleToggleMic = useCallback(() => toggleMic(), [toggleMic]);
 
   const handleLeaveVoice = useCallback(() => {
     setVisibleVoiceRoomId(null);
+    setVoiceChatOpen(false);
     void disconnect();
   }, [disconnect]);
 
@@ -241,8 +250,18 @@ function Index() {
     if (rooms.some((room) => room.id === voiceActiveRoomId)) return;
 
     setVisibleVoiceRoomId(null);
+    setVoiceChatOpen(false);
     void disconnect();
   }, [rooms, voiceActiveRoomId, disconnect]);
+
+  useEffect(() => {
+    if (voice.status !== "idle") return;
+    if (!activeRoom?.has_voice) return;
+
+    const fallback = rooms.find((room) => !room.has_voice);
+    if (!fallback) return;
+    void openRoom(fallback);
+  }, [voice.status, activeRoom, rooms, openRoom]);
 
   const activeMessages = activeRoom ? (messages[activeRoom.id] ?? []) : [];
   const typingText = activeRoom
@@ -250,6 +269,24 @@ function Index() {
     : null;
   const visibleVoiceRoom =
     voice.status === "idle" ? null : (rooms.find((room) => room.id === visibleVoiceRoomId) ?? null);
+  const settingsRoom = settingsRoomId
+    ? (rooms.find((room) => room.id === settingsRoomId) ?? null)
+    : null;
+  const voiceChatMessages = visibleVoiceRoom ? (messages[visibleVoiceRoom.id] ?? []) : [];
+  const voiceChatTypingText = visibleVoiceRoom
+    ? typingIndicatorText(Object.values(typingUsers[visibleVoiceRoom.id] ?? {}))
+    : null;
+  const voiceChatLoading =
+    visibleVoiceRoom !== null && loadingHistory && voiceChatMessages.length === 0;
+
+  const handleSendVoiceMessage = useCallback(
+    (content: string) => {
+      if (!visibleVoiceRoom) return;
+      sendMessage(visibleVoiceRoom.id, content);
+    },
+    [visibleVoiceRoom, sendMessage],
+  );
+
   const sidebarProps = {
     rooms,
     activeRoomId: visibleVoiceRoom ? null : (activeRoom?.id ?? null),
@@ -258,11 +295,12 @@ function Index() {
     onSelectVoiceRoom: handleSelectVoiceRoom,
     onCreateRoom: handleCreateRoom,
     canManageRooms,
-    onEditRoom: handleEditRoom,
-    onDeleteRoom: handleDeleteRoomVoid,
+    onOpenVoiceChat: handleOpenVoiceChat,
+    onOpenRoomSettings: handleOpenRoomSettings,
+    voiceChatOpen,
+    settingsRoomId,
     onOpenSettings: handleOpenSettings,
     username,
-    currentUserId,
     status: socketStatus,
     voiceStatus: voice.status,
     voiceRoomId: voice.activeRoomId,
@@ -278,12 +316,11 @@ function Index() {
     onSetScreenShareVolume: voice.setScreenShareVolume,
     onToggleLocalMute: voice.toggleLocalMute,
     onToggleLocalScreenShareMute: voice.toggleLocalScreenShareMute,
-    onListenToParticipant: voice.listenToParticipant,
-    onListenToParticipantScreenShare: voice.listenToParticipantScreenShare,
     screenShareEnabled: voice.screenShareEnabled,
     onToggleScreenShare: handleToggleScreenShare,
     screenShares: voice.screenShares,
     mutedParticipants: voice.mutedParticipants,
+    deafenedParticipants: voice.deafenedParticipants,
     speakingNames: voice.speakingNames,
     deafen: voice.deafen,
     onToggleDeafen: handleToggleDeafen,
@@ -356,7 +393,12 @@ function Index() {
             <Menu className="h-5 w-5" />
           </button>
           <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">
-            {visibleVoiceRoom ? (
+            {settingsRoom ? (
+              <span className="flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                {settingsRoom.name}
+              </span>
+            ) : visibleVoiceRoom ? (
               <span className="flex items-center gap-2">
                 <Volume2 className="h-4 w-4" />
                 {visibleVoiceRoom.name}
@@ -367,12 +409,14 @@ function Index() {
               "Nenhuma sala selecionada"
             )}
           </h1>
-          {!visibleVoiceRoom && (
+          {!visibleVoiceRoom && !settingsRoom && (
             <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">
-              · todos os membros do servidor leem esta sala
+              {activeRoom?.staff_only
+                ? "· só para mod e admin"
+                : "· todos os membros do servidor leem esta sala"}
             </span>
           )}
-          {activeRoom && !visibleVoiceRoom && (
+          {activeRoom && !visibleVoiceRoom && !settingsRoom && (
             <button
               className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={() => void toggleNotifications()}
@@ -404,34 +448,63 @@ function Index() {
           </div>
         )}
 
-        {visibleVoiceRoom ? (
-          <Suspense
-            fallback={
-              <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3">
-                <Skeleton className="h-8 w-48" />
-                <Skeleton className="h-4 w-32" />
-              </div>
-            }
-          >
-            <VoiceCallView
+        {settingsRoom ? (
+          <RoomSettingsView
+            key={settingsRoom.id}
+            room={settingsRoom}
+            onClose={handleCloseRoomSettings}
+            onSave={handleSaveRoom}
+            onDelete={handleDeleteRoomForSettings}
+          />
+        ) : visibleVoiceRoom ? (
+          isMobile && voiceChatOpen ? (
+            <VoiceChatDock
+              className="flex-1 md:hidden"
+              roomId={visibleVoiceRoom.id}
               roomName={visibleVoiceRoom.name}
-              status={voice.status}
-              participants={voice.participants}
-              username={username}
-              micEnabled={voice.micEnabled}
-              deafen={voice.deafen}
-              volumes={voice.volumes}
-              mutedParticipants={voice.mutedParticipants}
-              speakingNames={voice.speakingNames}
-              screenShareEnabled={voice.screenShareEnabled}
-              screenShares={voice.screenShares}
-              localPreview={voice.localPreview}
-              onToggleMic={handleToggleMic}
-              onToggleScreenShare={handleToggleScreenShare}
-              onReduceLocalQuality={reduceScreenQuality}
-              onLeave={handleLeaveVoice}
+              messages={voiceChatMessages}
+              loading={voiceChatLoading}
+              typingText={voiceChatTypingText}
+              canModerateMessages={canModerateMessages}
+              disabled={socketStatus !== "open"}
+              onDelete={handleDeleteMessage}
+              onSend={handleSendVoiceMessage}
+              onTypingChange={setTyping}
+              onClose={() => setVoiceChatOpen(false)}
             />
-          </Suspense>
+          ) : (
+            <Suspense
+              fallback={
+                <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3">
+                  <Skeleton className="h-8 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              }
+            >
+              <VoiceCallView
+                roomName={visibleVoiceRoom.name}
+                status={voice.status}
+                connectionState={voice.connectionState}
+                participants={voice.participants}
+                username={username}
+                micEnabled={voice.micEnabled}
+                deafen={voice.deafen}
+                volumes={voice.volumes}
+                mutedParticipants={voice.mutedParticipants}
+                deafenedParticipants={voice.deafenedParticipants}
+                speakingNames={voice.speakingNames}
+                screenShareEnabled={voice.screenShareEnabled}
+                screenShareHealth={voice.screenShareHealth}
+                screenShares={voice.screenShares}
+                localPreview={voice.localPreview}
+                remoteQualities={voice.remoteQualities}
+                onToggleMic={handleToggleMic}
+                onToggleScreenShare={handleToggleScreenShare}
+                onReduceLocalQuality={reduceScreenQuality}
+                onLeave={handleLeaveVoice}
+              />
+            </Suspense>
+          )
         ) : activeRoom ? (
           <>
             <MessageList
@@ -470,27 +543,41 @@ function Index() {
         )}
       </main>
 
-      <MemberList
-        onlineUsers={onlineUsers}
-        currentUserId={currentUserId}
-        className="hidden md:flex"
-      />
+      {voiceChatOpen && visibleVoiceRoom && !settingsRoom ? (
+        <VoiceChatDock
+          className="hidden md:flex"
+          roomId={visibleVoiceRoom.id}
+          roomName={visibleVoiceRoom.name}
+          messages={voiceChatMessages}
+          loading={voiceChatLoading}
+          typingText={voiceChatTypingText}
+          canModerateMessages={canModerateMessages}
+          disabled={socketStatus !== "open"}
+          onDelete={handleDeleteMessage}
+          onSend={handleSendVoiceMessage}
+          onTypingChange={setTyping}
+          onClose={() => setVoiceChatOpen(false)}
+        />
+      ) : (
+        <MemberList
+          onlineUsers={onlineUsers}
+          currentUserId={currentUserId}
+          className="hidden md:flex"
+        />
+      )}
 
       <CreateRoomDialog
-        key={editingRoom?.id ?? "create"}
         open={roomDialogOpen}
         onOpenChange={setRoomDialogOpen}
         existingRooms={rooms}
-        room={editingRoom}
         onCreate={createRoom}
-        onUpdate={updateRoom}
       />
 
       <Suspense fallback={null}>
         <ScreenShareDialog
           open={screenShareOpen}
           onOpenChange={setScreenShareOpen}
-          onStart={(quality) => void voice.setScreenShare(true, quality)}
+          onStart={(intent) => void voice.setScreenShare(true, intent)}
         />
       </Suspense>
 
