@@ -60,6 +60,7 @@ export function playMessageSound(): void {
     osc.frequency.setValueAtTime(660, audioCtx.currentTime + 0.08);
     gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+    osc.onended = () => void audioCtx.close();
     osc.start(audioCtx.currentTime);
     osc.stop(audioCtx.currentTime + 0.25);
   } catch {
