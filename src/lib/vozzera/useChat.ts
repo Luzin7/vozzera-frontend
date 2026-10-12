@@ -46,6 +46,7 @@ import {
   writeSoundEnabled,
 } from "@/lib/vozzera/notifications";
 import { canManageRooms, canModerateMessages, canSeeRoom } from "@/lib/vozzera/permissions";
+import { sessionRejected } from "@/lib/vozzera/session";
 import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
@@ -167,7 +168,7 @@ export function useChat() {
       });
       setAuthed(true);
     } catch (err) {
-      if (isUnauthorized(err)) {
+      if (sessionRejected(err)) {
         setAuthed(false);
         return;
       }
