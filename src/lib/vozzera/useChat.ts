@@ -8,6 +8,7 @@ import {
   deleteRoom as deleteRoomApi,
   getCurrentUser,
   getPresence,
+  isUnauthorized,
   listMessages,
   listRooms,
   logout as logoutApi,
@@ -57,6 +58,7 @@ export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
   const queryClient = useQueryClient();
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [role, setRole] = useState<UserRole | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -165,13 +167,29 @@ export function useChat() {
       });
       setAuthed(true);
     } catch (err) {
-      setAuthed(false);
+      if (isUnauthorized(err)) {
+        setAuthed(false);
+        return;
+      }
 
-      if (err instanceof ApiError && err.status === 401) return;
-
-      setBanner("Não consegui falar com o servidor.");
+      setAuthed(null);
+      setSessionUnavailable(true);
     }
   }, [queryClient, setUsername]);
+
+  const retrySession = useCallback(() => {
+    setSessionUnavailable(false);
+    void loadSession();
+  }, [loadSession]);
+
+  const isSessionAlive = useCallback(async () => {
+    try {
+      await getCurrentUser();
+      return true;
+    } catch (err) {
+      return !isUnauthorized(err);
+    }
+  }, []);
 
   useEffect(() => {
     void loadSession();
@@ -340,6 +358,7 @@ export function useChat() {
         endSession();
         setBanner("Sessão encerrada no servidor. Entre novamente.");
       },
+      isSessionAlive,
     });
 
   resubscribeRoomRef.current = resubscribeRoom;
@@ -626,6 +645,8 @@ export function useChat() {
     currentUserId,
     onlineUsers,
     authed,
+    sessionUnavailable,
+    retrySession,
     rooms,
     canManageRooms: canManageRooms(role),
     canModerateMessages: canModerateMessages(role),

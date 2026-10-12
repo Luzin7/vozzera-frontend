@@ -16,6 +16,12 @@ export function backoffDelay(attempt: number): number {
   return Math.min(1000 * 2 ** attempt, 15000);
 }
 
+export const SESSION_REVOKED_CLOSE_CODE = 4001;
+
+export function isSessionRevokedClose(code: number): boolean {
+  return code === SESSION_REVOKED_CLOSE_CODE;
+}
+
 export function nextRoomIndex(key: string, currentIndex: number, length: number): number | null {
   if (key === "ArrowDown") return currentIndex + 1 < length ? currentIndex + 1 : 0;
   if (key === "ArrowUp") return currentIndex - 1 >= 0 ? currentIndex - 1 : length - 1;

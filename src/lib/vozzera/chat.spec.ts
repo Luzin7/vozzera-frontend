@@ -10,6 +10,7 @@ import {
   expireTypingUsers,
   firstTextRoom,
   firstUnreadMessageId,
+  isSessionRevokedClose,
   nextRoomIndex,
   parseFrame,
   readActiveRoomId,
@@ -613,5 +614,18 @@ describe("online users", () => {
     expect(replaceOnlineUsers({}, [luan, updated])).toEqual({
       u1: { ...updated, online: true },
     });
+  });
+});
+
+describe("isSessionRevokedClose", () => {
+  it("ends the session only when the server revokes it", () => {
+    expect(isSessionRevokedClose(4001)).toBe(true);
+  });
+
+  it("keeps the session on shutdown, network drops and the legacy empty close", () => {
+    expect(isSessionRevokedClose(1001)).toBe(false);
+    expect(isSessionRevokedClose(1005)).toBe(false);
+    expect(isSessionRevokedClose(1006)).toBe(false);
+    expect(isSessionRevokedClose(1013)).toBe(false);
   });
 });

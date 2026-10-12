@@ -6,6 +6,7 @@ import {
   createRoom,
   deleteRoom,
   getCurrentUser,
+  isUnauthorized,
   listRooms,
   register,
   requestPasswordReset,
@@ -284,5 +285,16 @@ describe("wsUrl", () => {
   it("derives ws:// from the api base", () => {
     (globalThis as WindowLike).window = { location: { origin: "http://example.com" } };
     expect(wsUrl()).toBe("ws://localhost:8080/api/ws");
+  });
+});
+
+describe("isUnauthorized", () => {
+  it("recognizes a rejected session", () => {
+    expect(isUnauthorized(new ApiError(401, "Token inválido"))).toBe(true);
+  });
+
+  it("does not treat server or network failures as a rejected session", () => {
+    expect(isUnauthorized(new ApiError(500, "Erro ao buscar usuário"))).toBe(false);
+    expect(isUnauthorized(new TypeError("Failed to fetch"))).toBe(false);
   });
 });

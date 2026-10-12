@@ -21,6 +21,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 let onUnauthorized: (() => void) | null = null;
 
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
