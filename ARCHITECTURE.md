@@ -83,7 +83,7 @@ Estas regras valem em todo arquivo deste repo:
 ## Produção
 
 - Build servido pelo **próprio Go na mesma origem** — `VITE_API_URL` vazio.
-- Cookie `SameSite=Lax` + `credentials: "include"`: o front precisa estar na mesma origem do backend (ou o cookie não chega cross-site).
+- Cookie `SameSite=None; Secure; Partitioned` + `credentials: "include"`: front e API estão em sites diferentes; detalhes e limitações em [`docs/CONTRATO-FRONTEND.md`](./docs/CONTRATO-FRONTEND.md).
 - Rede de erro de formulário em pt-BR, identificadores em inglês.
 
 Veja [`CONTRIBUTING.md`](./CONTRIBUTING.md) para comandos e checklist de PR.
