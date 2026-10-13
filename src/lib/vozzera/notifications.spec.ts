@@ -132,22 +132,25 @@ describe("playMessageSound", () => {
     static instances: FakeAudioContext[] = [];
     currentTime = 0;
     destination = {};
-    closed = false;
-    oscillator = {
-      type: "",
-      frequency: { setValueAtTime: () => undefined },
-      connect: () => undefined,
-      start: () => undefined,
-      stop: () => undefined,
-      onended: null as (() => void) | null,
-    };
+    resumed = false;
 
     constructor() {
       FakeAudioContext.instances.push(this);
     }
 
+    resume() {
+      this.resumed = true;
+      return Promise.resolve();
+    }
+
     createOscillator() {
-      return this.oscillator;
+      return {
+        type: "",
+        frequency: { setValueAtTime: () => undefined },
+        connect: () => undefined,
+        start: () => undefined,
+        stop: () => undefined,
+      };
     }
 
     createGain() {
@@ -156,25 +159,19 @@ describe("playMessageSound", () => {
         connect: () => undefined,
       };
     }
-
-    close() {
-      this.closed = true;
-      return Promise.resolve();
-    }
   }
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    FakeAudioContext.instances = [];
   });
 
-  it("closes its audio context when the tone ends", () => {
+  it("reuses one audio context and resumes it for every sound", () => {
     vi.stubGlobal("window", { AudioContext: FakeAudioContext });
 
     playMessageSound();
-    const [context] = FakeAudioContext.instances;
-    context?.oscillator.onended?.();
+    playMessageSound();
 
-    expect(context?.closed).toBe(true);
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    expect(FakeAudioContext.instances[0]?.resumed).toBe(true);
   });
 });

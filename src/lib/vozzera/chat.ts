@@ -16,7 +16,7 @@ export function backoffDelay(attempt: number): number {
   return Math.min(1000 * 2 ** attempt, 15000);
 }
 
-export const SESSION_REVOKED_CLOSE_CODE = 4001;
+const SESSION_REVOKED_CLOSE_CODE = 4001;
 
 export function isSessionRevokedClose(code: number): boolean {
   return code === SESSION_REVOKED_CLOSE_CODE;
@@ -43,6 +43,14 @@ export function clearUnread(
   const next = { ...unread };
   delete next[roomId];
   return next;
+}
+
+const STICK_TO_BOTTOM_THRESHOLD_PX = 80;
+
+type ScrollMetrics = Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">;
+
+export function isNearBottom({ scrollHeight, scrollTop, clientHeight }: ScrollMetrics): boolean {
+  return scrollHeight - scrollTop - clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
 }
 
 export function totalUnread(unread: Record<string, number>): number {
@@ -161,7 +169,8 @@ export function replaceOnlineUsers(users: OnlineUsers, onlineUsers: UserIdentity
 
 export const TYPING_START_DELAY_MS = 1500;
 export const TYPING_RESEND_INTERVAL_MS = 1000;
-export const TYPING_STOP_DELAY_MS = 2000;
+const TYPING_STOP_DELAY_MS = 2000;
+export const TYPING_EXPIRY_TICK_MS = 250;
 const TYPING_START_LIFETIME_MS = TYPING_RESEND_INTERVAL_MS + TYPING_STOP_DELAY_MS;
 
 export type TypingUser = {
@@ -220,39 +229,29 @@ export function createTypingAnnouncer({
   resendIntervalMs,
 }: TypingAnnouncerOptions): TypingAnnouncer {
   let currentRoomId: string | null = null;
-  let announced = false;
-  let lastStartAt = 0;
-  let pendingStart: ReturnType<typeof setTimeout> | null = null;
-
-  const announce = (roomId: string) => {
-    announced = true;
-    lastStartAt = Date.now();
-    send(roomId, "start");
-  };
+  let startedAt = 0;
+  let announcedAt: number | null = null;
 
   const stop = () => {
-    if (pendingStart) clearTimeout(pendingStart);
-    pendingStart = null;
-    if (announced && currentRoomId) send(currentRoomId, "stop");
-    announced = false;
+    if (announcedAt !== null && currentRoomId) send(currentRoomId, "stop");
     currentRoomId = null;
+    announcedAt = null;
   };
 
   const typing = (roomId: string) => {
-    if (currentRoomId !== null && currentRoomId !== roomId) stop();
-
-    if (announced) {
-      if (Date.now() - lastStartAt >= resendIntervalMs) announce(roomId);
+    if (currentRoomId !== roomId) {
+      stop();
+      currentRoomId = roomId;
+      startedAt = Date.now();
       return;
     }
 
-    if (pendingStart) return;
+    const now = Date.now();
+    if (now - startedAt < startDelayMs) return;
+    if (announcedAt !== null && now - announcedAt < resendIntervalMs) return;
 
-    currentRoomId = roomId;
-    pendingStart = setTimeout(() => {
-      pendingStart = null;
-      announce(roomId);
-    }, startDelayMs);
+    announcedAt = now;
+    send(roomId, "start");
   };
 
   return { typing, stop };

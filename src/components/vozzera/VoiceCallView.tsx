@@ -1,11 +1,24 @@
-import { HeadphoneOff, Mic, MicOff, MonitorUp, MonitorX, PhoneOff, VolumeX } from "lucide-react";
+import {
+  HeadphoneOff,
+  Mic,
+  MicOff,
+  MonitorUp,
+  MonitorX,
+  PhoneOff,
+  PictureInPicture2,
+  VolumeX,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import { initials } from "@/lib/vozzera/avatar";
 import type { ScreenShareHealth } from "@/lib/vozzera/voice";
-import { isParticipantLocallyInaudible, screenShareHealthMessageFor } from "@/lib/vozzera/voice";
+import {
+  isParticipantLocallyInaudible,
+  isParticipantMuted,
+  screenShareHealthMessageFor,
+} from "@/lib/vozzera/voice";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
 import type { ConnectionState, ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
 
@@ -26,9 +39,12 @@ type Props = {
   screenShares: ScreenShare[];
   localPreview: ScreenShare | null;
   remoteQualities: Record<string, string>;
+  miniWindowSupported: boolean;
+  miniWindowOpen: boolean;
   onToggleMic: () => void;
   onToggleScreenShare: () => void;
   onReduceLocalQuality: (() => void) | undefined;
+  onToggleMiniWindow: () => void;
   onLeave: () => void;
 };
 
@@ -56,9 +72,12 @@ export function VoiceCallView({
   screenShares,
   localPreview,
   remoteQualities,
+  miniWindowSupported,
+  miniWindowOpen,
   onToggleMic,
   onToggleScreenShare,
   onReduceLocalQuality,
+  onToggleMiniWindow,
   onLeave,
 }: Readonly<Props>) {
   const isConnected = status === "connected";
@@ -86,8 +105,12 @@ export function VoiceCallView({
               >
                 {participants.map((name, index) => {
                   const isSpeaking = speakingNames.includes(name);
-                  const isMuted =
-                    name === username ? !micEnabled : mutedParticipants[name] === true;
+                  const isMuted = isParticipantMuted({
+                    name,
+                    username,
+                    micEnabled,
+                    mutedParticipants,
+                  });
                   const isLocallyInaudible = isParticipantLocallyInaudible(
                     name === username,
                     volumes[name],
@@ -202,6 +225,32 @@ export function VoiceCallView({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+
+        {miniWindowSupported && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="hidden md:inline-flex">
+                  <Button
+                    size="icon"
+                    variant={miniWindowOpen ? "default" : "secondary"}
+                    className="h-11 w-11"
+                    onClick={onToggleMiniWindow}
+                    disabled={!isConnected}
+                  >
+                    <PictureInPicture2 className="h-4 w-4" />
+                    <span className="sr-only">
+                      {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
+                    </span>
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         <Button size="icon" variant="destructive" className="h-11 w-11" onClick={onLeave}>
           <PhoneOff className="h-4 w-4" />
