@@ -1,11 +1,17 @@
 {
-  "version": "v1.20.1",
+  "version": "v1.21.0",
   "releasedAt": "2026-10-13",
   "items": [
     {
       "title": "fix: rolagem automática do chat e ajustes da revisão das PRs #166/#167",
       "kind": "fix",
       "pr": 169,
+      "summary": ""
+    },
+    {
+      "title": "feat(pwa): Vozzera instalável, com ícone do Papo e mini janela de voz",
+      "kind": "feat",
+      "pr": 168,
       "summary": ""
     }
   ]
