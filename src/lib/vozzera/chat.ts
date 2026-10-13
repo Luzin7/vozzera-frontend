@@ -45,6 +45,14 @@ export function clearUnread(
   return next;
 }
 
+const STICK_TO_BOTTOM_THRESHOLD_PX = 80;
+
+type ScrollMetrics = Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">;
+
+export function isNearBottom({ scrollHeight, scrollTop, clientHeight }: ScrollMetrics): boolean {
+  return scrollHeight - scrollTop - clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
+}
+
 export function totalUnread(unread: Record<string, number>): number {
   return Object.values(unread).reduce((sum, count) => sum + count, 0);
 }

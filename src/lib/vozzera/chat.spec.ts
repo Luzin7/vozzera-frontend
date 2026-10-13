@@ -11,6 +11,7 @@ import {
   expireTypingUsers,
   firstTextRoom,
   firstUnreadMessageId,
+  isNearBottom,
   isSessionRevokedClose,
   nextRoomIndex,
   parseFrame,
@@ -719,5 +720,12 @@ describe("createTypingAnnouncer", () => {
     vi.advanceTimersByTime(1500);
 
     expect(sent).toEqual(["start:r1", "stop:r1", "start:r2"]);
+  });
+});
+
+describe("isNearBottom", () => {
+  it("treats the last 80px as the bottom of the conversation", () => {
+    expect(isNearBottom({ scrollHeight: 1000, scrollTop: 500, clientHeight: 421 })).toBe(true);
+    expect(isNearBottom({ scrollHeight: 1000, scrollTop: 500, clientHeight: 420 })).toBe(false);
   });
 });
