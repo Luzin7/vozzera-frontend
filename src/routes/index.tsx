@@ -10,6 +10,7 @@ import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSettingsView } from "@/components/vozzera/RoomSettingsView";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { ServerUnavailableScreen } from "@/components/vozzera/ServerUnavailableScreen";
 import { VoiceChatDock } from "@/components/vozzera/VoiceChatDock";
 import { WhatsNewDialog } from "@/components/vozzera/WhatsNewDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,6 +59,8 @@ function Index() {
     email,
     currentUserId,
     authed,
+    sessionUnavailable,
+    retrySession,
     rooms,
     canManageRooms,
     canModerateMessages,
@@ -326,6 +329,10 @@ function Index() {
     onToggleDeafen: handleToggleDeafen,
   };
 
+  if (sessionUnavailable) {
+    return <ServerUnavailableScreen onRetry={retrySession} />;
+  }
+
   if (authed === null) {
     return (
       <div className="flex h-dvh overflow-hidden bg-background">
@@ -358,7 +365,7 @@ function Index() {
   }
 
   if (!authed) {
-    return <AuthForm onAuthenticated={authenticate} />;
+    return <AuthForm notice={banner} onAuthenticated={authenticate} />;
   }
 
   if (requiresEmailSetup(email)) {

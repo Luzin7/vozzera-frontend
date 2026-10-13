@@ -9,8 +9,9 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 - Identidade nunca é enviada pelo front; vem do servidor nas respostas.
 - A identidade e a permissão atuais vêm de `GET /api/me`; o `username` no `localStorage` serve apenas para exibição e não é credencial.
 - `POST /api/logout` encerra a sessão no servidor (204). Best-effort: o front limpa o estado local mesmo se a rota falhar.
-- **Sessão morreu** = qualquer `401` em rota autenticada ou o servidor fechar o WebSocket com `code 1005` (revogação/expiração). O front desloga sozinho e volta pro login — sem retry infinito do WS.
-- Base da API: `VITE_API_URL` (default `http://localhost:8080`). Em produção o build é servido pelo Go na mesma origem — deixar vazio. WebSocket deriva da mesma base.
+- **Sessão morreu** = qualquer `401` em rota autenticada ou o servidor fechar o WebSocket com `code 4001` (revogação). Qualquer outro fechamento passa por `GET /api/me` antes de reconectar: `401` desloga, o resto reconecta com backoff — sem retry infinito com sessão morta.
+- **Servidor indisponível ≠ deslogado**: se o carregamento da sessão falha por outro motivo que não `401`, o front mostra "Não consegui falar com o servidor." com "Tentar de novo", e não a tela de login.
+- Base da API: `VITE_API_URL` (default `http://localhost:8080`). Em produção o front (`vozzera.vercel.app`) e a API (`*.onrender.com`) estão em sites diferentes. WebSocket deriva da mesma base.
 
 ## REST
 
@@ -252,7 +253,7 @@ O front rejeita frames sem `v: 1`, tipos desconhecidos e payloads incompatíveis
 
 ### Outbound (server → front)
 
-Os eventos de uma sala usam o tópico `room:<uuid>`. O evento global `room.created` usa `app:rooms`.
+Os eventos de uma sala usam o tópico `room:<uuid>`. A lista de salas usa `app:rooms:members` (quem não é staff) e `app:rooms:staff` (mod/admin), assinados pelo servidor na conexão. Sala `staff_only` nunca é anunciada em `app:rooms:members`: quando vira restrita, quem não é staff recebe `room.deleted`. O `topic` do envelope de `room.deleted` é sempre `room:<uuid>`, mesmo quando entregue pela lista.
 
 Eventos de mensagem:
 
@@ -284,14 +285,15 @@ Regras:
 - Sem otimismo na UI: a mensagem aparece quando o eco volta (não há `client_msg_id` pra deduplicar).
 - Uma inscrição negada não confirma estado local nem produz mensagem otimista; sem eco, o histórico permanece íntegro.
 - `room.created`, `room.updated` e `room.deleted` atualizam a lista local; exclusão também remove o histórico local sem encerrar o WebSocket.
+- **Digitando**: o front só manda `typing.start` depois de 1,5 s digitando (mensagem rápida não anuncia nada) e reenvia no máximo 1x/s. Quem recebe mantém o aviso por 3 s após cada `start`, por 2 s após um `typing.stop`, e tira na hora quando chega a mensagem da pessoa.
 - `voice.presence.*` substitui o snapshot da sala na UI de voz; participantes são deduplicados por `user_id` e exibidos na barra lateral.
 - **Presença global** (`__presence__`): o snapshot inicial de presença (`presence.snapshot`) é enviado automaticamente na conexão WebSocket, contendo estatísticas (`online`, `offline`, `total`) e a lista de usuários online (`online_users`). Os eventos `user.online` e `user.offline` mantêm a lista atualizada durante a sessão. A contagem `total` é atualizada periodicamente no servidor (a cada 15 min) e reflete o total de contas registradas.
 - Ao reconectar o WebSocket, o cliente descarta a presença anterior e aguarda novos snapshots das salas de voz assinadas.
-- **Revogação/expiração de sessão**: o servidor fecha o WS com `CloseMessage` vazio → no browser `CloseEvent.code === 1005`. O front trata como "sessão morta" (desloga e para de reconectar), distinto de queda de rede/crash (`1006`), que tem retry com backoff.
+- **Códigos de fechamento do WS**: `4001` = sessão revogada (logout em outro lugar ou senha redefinida) → o front desloga. `1001` = servidor reiniciando (deploy), `1013` = cliente lento, `1006` = queda de rede, `1005` = backend antigo → o front confere a sessão em `GET /api/me` e reconecta com backoff.
 
 ## Limitações conhecidas
 
 - **Upload e paginação não existem** no backend.
 - Presença de voz existe via eventos `voice.presence.*`; presença online global existe via eventos `user.online`, `user.offline` e `presence.snapshot` no tópico `__presence__`.
 - Inscrição em sala é autorizada no backend, e `mod`/`admin` controlam criação, edição e exclusão de salas.
-- Cookie `SameSite=Lax`: em dev cross-origin (front num domínio diferente de `localhost:8080`) o cookie não viaja; auth funciona rodando o front localmente contra o Go, ou com o build servido pelo próprio Go.
+- Cookie `auth_token` é `SameSite=None; Secure; Partitioned`: como front e API estão em sites diferentes, ele é cookie de terceiro. Sem `Partitioned`, Safari/iOS, Brave e aba anônima do Chrome descartam o cookie e o login "não vai". Safari anterior ao 26.2 continua sem suporte; a solução definitiva é front e API no mesmo domínio registrável.

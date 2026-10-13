@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ACTIVE_ROOM_STORAGE_KEY,
@@ -6,15 +6,18 @@ import {
   appendMessage,
   backoffDelay,
   clearActiveRoomId,
+  createTypingAnnouncer,
   dateGroupLabelFor,
   expireTypingUsers,
   firstTextRoom,
   firstUnreadMessageId,
+  isSessionRevokedClose,
   nextRoomIndex,
   parseFrame,
   readActiveRoomId,
   removeOnlineUser,
   removeRoom,
+  removeTypingUser,
   replaceOnlineUsers,
   typingIndicatorText,
   updateTypingUsers,
@@ -24,7 +27,7 @@ import {
 } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { MAX_FRAME_BYTES } from "@/lib/vozzera/ws-schema";
-import type { ActiveRoomStorage } from "@/lib/vozzera/chat";
+import type { ActiveRoomStorage, TypingUsers } from "@/lib/vozzera/chat";
 
 function message(id: string, roomId = "r1"): ChatMessage {
   return {
@@ -480,32 +483,50 @@ describe("typing users", () => {
     user_id: "u2",
     username: "Luan",
   };
+  const stop = { ...start, action: "stop" as const };
+  const typingIds = (users: TypingUsers) => Object.keys(users["r1"] ?? {});
 
-  it("adds, refreshes and removes a typing user", () => {
+  it("keeps a typing user for the resend interval plus the stop delay", () => {
+    const users = updateTypingUsers({}, start, "u1", 1000);
+
+    expect(typingIds(expireTypingUsers(users, 3999))).toEqual(["u2"]);
+    expect(typingIds(expireTypingUsers(users, 4000))).toEqual([]);
+  });
+
+  it("refreshes a typing user on a new start", () => {
     const added = updateTypingUsers({}, start, "u1", 1000);
     const refreshed = updateTypingUsers(added, start, "u1", 2000);
-    const removed = updateTypingUsers(refreshed, { ...start, action: "stop" }, "u1", 2000);
 
-    expect(added).toMatchObject({ r1: { u2: { lastTypedAt: 1000 } } });
-    expect(refreshed).toMatchObject({ r1: { u2: { lastTypedAt: 2000 } } });
-    expect(removed).toEqual({});
+    expect(typingIds(expireTypingUsers(refreshed, 4999))).toEqual(["u2"]);
+    expect(typingIds(expireTypingUsers(refreshed, 5000))).toEqual([]);
+  });
+
+  it("waits 2 seconds before showing that someone stopped typing", () => {
+    const typing = updateTypingUsers({}, start, "u1", 1000);
+    const stopped = updateTypingUsers(typing, stop, "u1", 1500);
+
+    expect(typingIds(expireTypingUsers(stopped, 3499))).toEqual(["u2"]);
+    expect(typingIds(expireTypingUsers(stopped, 3500))).toEqual([]);
+  });
+
+  it("ignores a stop from someone who was not typing", () => {
+    expect(updateTypingUsers({}, stop, "u1", 1000)).toEqual({});
   });
 
   it("ignores events from the current user", () => {
     expect(updateTypingUsers({}, { ...start, user_id: "u1" }, "u1", 1000)).toEqual({});
   });
 
-  it("expires users after the timeout", () => {
+  it("clears the typer as soon as their message arrives", () => {
     const users = updateTypingUsers({}, start, "u1", 1000);
 
-    expect(expireTypingUsers(users, 3999, 3000)).toBe(users);
-    expect(expireTypingUsers(users, 4000, 3000)).toEqual({});
+    expect(typingIds(removeTypingUser(users, "r1", "u2"))).toEqual([]);
   });
 
   it("formats one or multiple names", () => {
-    const luan = { userId: "u1", username: "Luan", lastTypedAt: 1000 };
-    const bia = { userId: "u2", username: "Bia", lastTypedAt: 1000 };
-    const ana = { userId: "u3", username: "Ana", lastTypedAt: 1000 };
+    const luan = { userId: "u1", username: "Luan", expiresAt: 1000 };
+    const bia = { userId: "u2", username: "Bia", expiresAt: 1000 };
+    const ana = { userId: "u3", username: "Ana", expiresAt: 1000 };
 
     expect(typingIndicatorText([])).toBeNull();
     expect(typingIndicatorText([luan])).toBe("Luan está digitando...");
@@ -613,5 +634,90 @@ describe("online users", () => {
     expect(replaceOnlineUsers({}, [luan, updated])).toEqual({
       u1: { ...updated, online: true },
     });
+  });
+});
+
+describe("isSessionRevokedClose", () => {
+  it("ends the session only when the server revokes it", () => {
+    expect(isSessionRevokedClose(4001)).toBe(true);
+  });
+
+  it("keeps the session on shutdown, network drops and the legacy empty close", () => {
+    expect(isSessionRevokedClose(1001)).toBe(false);
+    expect(isSessionRevokedClose(1005)).toBe(false);
+    expect(isSessionRevokedClose(1006)).toBe(false);
+    expect(isSessionRevokedClose(1013)).toBe(false);
+  });
+});
+
+describe("createTypingAnnouncer", () => {
+  const options = { startDelayMs: 1500, resendIntervalMs: 1000 };
+  let sent: string[];
+  const send = (roomId: string, action: "start" | "stop") => void sent.push(`${action}:${roomId}`);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    sent = [];
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("announces typing only after the start delay", () => {
+    const announcer = createTypingAnnouncer({ send, ...options });
+
+    announcer.typing("r1");
+    vi.advanceTimersByTime(1499);
+    expect(sent).toEqual([]);
+
+    vi.advanceTimersByTime(1);
+    expect(sent).toEqual(["start:r1"]);
+  });
+
+  it("stays silent for a message sent before the delay", () => {
+    const announcer = createTypingAnnouncer({ send, ...options });
+
+    announcer.typing("r1");
+    vi.advanceTimersByTime(1000);
+    announcer.stop();
+    vi.advanceTimersByTime(5000);
+
+    expect(sent).toEqual([]);
+  });
+
+  it("stops an announced typing", () => {
+    const announcer = createTypingAnnouncer({ send, ...options });
+
+    announcer.typing("r1");
+    vi.advanceTimersByTime(1500);
+    announcer.stop();
+
+    expect(sent).toEqual(["start:r1", "stop:r1"]);
+  });
+
+  it("keeps an announced typing alive at most once per interval", () => {
+    const announcer = createTypingAnnouncer({ send, ...options });
+
+    announcer.typing("r1");
+    vi.advanceTimersByTime(1500);
+    announcer.typing("r1");
+    vi.advanceTimersByTime(999);
+    announcer.typing("r1");
+    vi.advanceTimersByTime(1);
+    announcer.typing("r1");
+
+    expect(sent).toEqual(["start:r1", "start:r1"]);
+  });
+
+  it("stops the previous room when typing moves to another room", () => {
+    const announcer = createTypingAnnouncer({ send, ...options });
+
+    announcer.typing("r1");
+    vi.advanceTimersByTime(1500);
+    announcer.typing("r2");
+    vi.advanceTimersByTime(1500);
+
+    expect(sent).toEqual(["start:r1", "stop:r1", "start:r2"]);
   });
 });

@@ -10,6 +10,11 @@ import type { ScreenShareAudioSource } from "./use-participant-volume";
 import { useScreenShare } from "./use-screen-share";
 import type { ScreenShare as ScreenShareType } from "./use-screen-share";
 import { useScreenShareHealth } from "./use-screen-share-health";
+import {
+  microphoneProblemFor,
+  voiceDisconnectMessageFor,
+  voiceJoinErrorMessageFor,
+} from "./voice-errors";
 import { useKrispFilter } from "./use-krisp-filter";
 import { useLocalVoiceActivity } from "./use-local-voice-activity";
 import type { VoiceTokenResponse } from "./types";
@@ -91,6 +96,7 @@ function editableDetailsFor(target: EventTarget | null) {
 type RoomEventHandlerCtx = {
   room: LiveKitRoom;
   RoomEvent: typeof import("livekit-client").RoomEvent;
+  ParticipantEvent: typeof import("livekit-client").ParticipantEvent;
   TrackEvent: typeof import("livekit-client").TrackEvent;
   Track: typeof import("livekit-client").Track;
   notificationsEnabledRef: { readonly current: boolean };
@@ -120,12 +126,14 @@ type RoomEventHandlerCtx = {
   resetRoomState: () => void;
   setStatus: (s: VoiceStatus) => void;
   setActiveRoomId: (id: string | null) => void;
+  setError: (message: string | null) => void;
 };
 
 function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   const {
     room,
     RoomEvent,
+    ParticipantEvent,
     TrackEvent,
     Track,
     notificationsEnabledRef,
@@ -151,6 +159,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     resetRoomState,
     setStatus,
     setActiveRoomId,
+    setError,
   } = ctx;
 
   room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -249,6 +258,10 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     suspendAudioForDeafen(voiceAudioContextRef, deafenRef);
   });
 
+  room.localParticipant.on(ParticipantEvent.AudioStreamAcquired, () => {
+    queueMicrotask(() => suspendAudioForDeafen(voiceAudioContextRef, deafenRef));
+  });
+
   room.on(RoomEvent.LocalTrackPublished, (publication) => {
     if (publication.track?.source !== Track.Source.ScreenShare) return;
 
@@ -309,7 +322,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     }
   });
 
-  room.on(RoomEvent.Disconnected, () => {
+  room.on(RoomEvent.Disconnected, (reason) => {
     void closeVoiceAudioContext();
     setConnectionState("connected");
     if (roomRef.current !== room) return;
@@ -317,6 +330,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     setStatus("idle");
     setActiveRoomId(null);
     resetRoomState();
+    setError(voiceDisconnectMessageFor(reason));
   });
 }
 
@@ -576,7 +590,7 @@ export function useVoice() {
           createKrispProcessor(),
         ]);
         if (connectionAttemptRef.current !== attemptId) return;
-        const { Room, RoomEvent, TrackEvent, Track } = client;
+        const { Room, RoomEvent, ParticipantEvent, TrackEvent, Track } = client;
         const { token, url } = tokenResponse;
 
         const voiceAudioContext = new (
@@ -600,6 +614,7 @@ export function useVoice() {
         setupRoomHandlers({
           room,
           RoomEvent,
+          ParticipantEvent,
           TrackEvent,
           Track,
           notificationsEnabledRef,
@@ -625,6 +640,7 @@ export function useVoice() {
           resetRoomState,
           setStatus,
           setActiveRoomId,
+          setError,
         });
 
         const [createdTrack] = await room.localParticipant.createTracks({
@@ -676,7 +692,7 @@ export function useVoice() {
         preparedMicTrack?.stop();
         await closeVoiceAudioContext(attemptAudioContext);
         if (connectionAttemptRef.current !== attemptId) return;
-        setError(err instanceof Error ? err.message : "Não consegui entrar no canal");
+        setError(voiceJoinErrorMessageFor(err));
         setStatus("idle");
         setActiveRoomId(null);
         resetRoomState();
@@ -823,7 +839,9 @@ export function useVoice() {
       applyDeafen(false);
       return;
     }
-    void setMicEnabled(!micOn);
+    setMicEnabled(!micOn).catch((err: unknown) => {
+      setError(microphoneProblemFor(err) ?? "Não consegui alterar o microfone.");
+    });
   }, [applyDeafen, micOn, setMicEnabled]);
 
   // --- Effects ---
