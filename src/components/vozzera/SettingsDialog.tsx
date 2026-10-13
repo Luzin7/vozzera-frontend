@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { appSettingsAvailable } from "@/lib/vozzera/pwa";
 import type { InstallOption } from "@/lib/vozzera/pwa";
 import type { MicDevice } from "@/lib/vozzera/voice";
 import { AppSettings } from "./AppSettings";
@@ -75,12 +76,15 @@ export function SettingsDialog({
   onLogout,
 }: Readonly<Props>) {
   const [section, setSection] = useState<Section>("microphone");
+  const visibleSections = sections.filter(
+    ({ id }) => id !== "app" || appSettingsAvailable(installOption),
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(520px,calc(100dvh-2rem))] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-lg p-0 sm:flex-row [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center">
         <nav className="flex w-full shrink-0 gap-0.5 overflow-x-auto border-b border-border bg-muted/30 p-2 pr-14 sm:w-44 sm:flex-col sm:overflow-x-visible sm:border-b-0 sm:border-r sm:pr-2">
-          {sections.map(({ id, label, icon: Icon }) => (
+          {visibleSections.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setSection(id)}

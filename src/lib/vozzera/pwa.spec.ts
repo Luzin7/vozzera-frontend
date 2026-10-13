@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   APP_BADGE_STORAGE_KEY,
+  appBadgeAvailable,
+  appSettingsAvailable,
   installOptionFor,
   isAppleMobile,
   launchTargetFor,
@@ -99,5 +101,25 @@ describe("app badge preference", () => {
 
     writeAppBadgeEnabled(storage, true);
     expect(readAppBadgeEnabled(storage)).toBe(true);
+  });
+});
+
+describe("appSettingsAvailable", () => {
+  it("hides the app settings when the browser offers no way to install", () => {
+    expect(appSettingsAvailable("unavailable")).toBe(false);
+  });
+
+  it("shows the app settings when there is something to do", () => {
+    expect(appSettingsAvailable("prompt")).toBe(true);
+    expect(appSettingsAvailable("ios")).toBe(true);
+    expect(appSettingsAvailable("installed")).toBe(true);
+  });
+});
+
+describe("appBadgeAvailable", () => {
+  it("offers the unread badge only inside the installed app", () => {
+    expect(appBadgeAvailable("installed")).toBe(true);
+    expect(appBadgeAvailable("prompt")).toBe(false);
+    expect(appBadgeAvailable("ios")).toBe(false);
   });
 });

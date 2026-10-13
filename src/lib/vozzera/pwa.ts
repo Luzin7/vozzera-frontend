@@ -22,6 +22,14 @@ export function installOptionFor({
   return "unavailable";
 }
 
+export function appSettingsAvailable(installOption: InstallOption): boolean {
+  return installOption !== "unavailable";
+}
+
+export function appBadgeAvailable(installOption: InstallOption): boolean {
+  return installOption === "installed";
+}
+
 export function isAppleMobile(userAgent: string, maxTouchPoints: number): boolean {
   if (/iPhone|iPad|iPod/.test(userAgent)) return true;
   return userAgent.includes("Macintosh") && maxTouchPoints > 1;

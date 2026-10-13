@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { appBadgeAvailable } from "@/lib/vozzera/pwa";
 import type { InstallOption } from "@/lib/vozzera/pwa";
 
 type Props = {
@@ -13,17 +14,17 @@ type Props = {
   onToggleAppBadge: (enabled: boolean) => void;
 };
 
-const INSTALL_MESSAGES: Record<Exclude<InstallOption, "prompt">, string> = {
+const INSTALL_MESSAGES: Record<"installed" | "ios", string> = {
   installed: "O Vozzera já está instalado como app neste dispositivo.",
   ios: "No iPhone ou iPad, toque em Compartilhar e depois em Adicionar à Tela de Início.",
-  unavailable:
-    "Este navegador não instala apps. No computador, abra o Vozzera no Chrome ou no Edge pra instalar.",
 };
 
 function InstallSection({
   installOption,
   onInstall,
 }: Readonly<Pick<Props, "installOption" | "onInstall">>) {
+  if (installOption === "unavailable") return null;
+
   if (installOption !== "prompt") {
     return <p className="text-sm text-muted-foreground">{INSTALL_MESSAGES[installOption]}</p>;
   }
@@ -53,19 +54,21 @@ export function AppSettings({
     <div className="space-y-5">
       <InstallSection installOption={installOption} onInstall={onInstall} />
 
-      <div className="flex items-center justify-between gap-2 border-t border-border pt-5">
-        <div>
-          <Label htmlFor="app-badge-toggle">Não lidas no ícone do app</Label>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Mostra no ícone do app instalado quantas mensagens você ainda não leu.
-          </p>
+      {appBadgeAvailable(installOption) && (
+        <div className="flex items-center justify-between gap-2 border-t border-border pt-5">
+          <div>
+            <Label htmlFor="app-badge-toggle">Não lidas no ícone do app</Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Mostra no ícone do app instalado quantas mensagens você ainda não leu.
+            </p>
+          </div>
+          <Switch
+            id="app-badge-toggle"
+            checked={appBadgeEnabled}
+            onCheckedChange={onToggleAppBadge}
+          />
         </div>
-        <Switch
-          id="app-badge-toggle"
-          checked={appBadgeEnabled}
-          onCheckedChange={onToggleAppBadge}
-        />
-      </div>
+      )}
 
       {miniWindowSupported && (
         <p className="border-t border-border pt-5 text-xs text-muted-foreground">
