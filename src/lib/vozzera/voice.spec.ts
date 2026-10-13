@@ -11,6 +11,7 @@ import {
   featuredShareId,
   isLocalVoiceActive,
   isParticipantLocallyInaudible,
+  isParticipantMuted,
   mergeActiveSpeakerNames,
   microphoneEnabledAfterDeafenEnd,
   muteVolume,
@@ -522,5 +523,27 @@ describe("canShareScreen", () => {
     expect(canShareScreen(null)).toBe(false);
     expect(canShareScreen(undefined)).toBe(false);
     expect(canShareScreen({})).toBe(false);
+  });
+});
+
+describe("isParticipantMuted", () => {
+  const mutedParticipants = { bia: true };
+
+  it("uses the local microphone for the current user", () => {
+    expect(
+      isParticipantMuted({ name: "luan", username: "luan", micEnabled: false, mutedParticipants }),
+    ).toBe(true);
+    expect(
+      isParticipantMuted({ name: "luan", username: "luan", micEnabled: true, mutedParticipants }),
+    ).toBe(false);
+  });
+
+  it("uses the remote mute state for everyone else", () => {
+    expect(
+      isParticipantMuted({ name: "bia", username: "luan", micEnabled: true, mutedParticipants }),
+    ).toBe(true);
+    expect(
+      isParticipantMuted({ name: "caio", username: "luan", micEnabled: true, mutedParticipants }),
+    ).toBe(false);
   });
 });

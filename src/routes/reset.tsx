@@ -17,12 +17,12 @@ export const Route = createFileRoute("/reset")({
 
 function ResetRoute() {
   const { token } = Route.useSearch();
-  const tokenRemovedFromUrl = useTokenRemovedFromUrl(token);
+  const resetToken = useTokenTakenFromUrl(token);
 
-  return <ResetPasswordPage token={tokenRemovedFromUrl} />;
+  return <ResetPasswordPage token={resetToken} />;
 }
 
-function useTokenRemovedFromUrl(tokenFromUrl: string): string {
+function useTokenTakenFromUrl(tokenFromUrl: string): string {
   const [token] = useState(tokenFromUrl);
 
   useEffect(() => {

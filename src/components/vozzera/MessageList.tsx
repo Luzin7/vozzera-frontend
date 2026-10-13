@@ -1,5 +1,5 @@
 import { updateMessage } from "@/lib/vozzera/api";
-import { dateGroupLabelFor } from "@/lib/vozzera/chat";
+import { dateGroupLabelFor, isNearBottom } from "@/lib/vozzera/chat";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 
@@ -45,84 +45,86 @@ export const MessageList = memo(function MessageList({
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
   const unreadMarkerRef = useRef<HTMLLIElement>(null);
+  const stuckToBottomRef = useRef(true);
   const editContentRef = useRef(editContent);
   const username = useAuth().username;
 
   editContentRef.current = editContent;
 
-  const jumpToLatest = useCallback(() => {
-    const container = scrollRef.current;
-    if (!container) return;
+  const scrollToBottom = useCallback(() => {
+    if (!scrollContainer) return;
 
-    container.scrollTop = container.scrollHeight;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    stuckToBottomRef.current = true;
     setShowJumpToLatest(false);
-  }, []);
+  }, [scrollContainer]);
 
   const handleScroll = useCallback(() => {
-    const container = scrollRef.current;
-    if (!container) return;
+    if (!scrollContainer) return;
 
     const marker = unreadMarkerRef.current;
-    if (marker && marker.getBoundingClientRect().bottom <= container.getBoundingClientRect().top) {
+    if (
+      marker &&
+      marker.getBoundingClientRect().bottom <= scrollContainer.getBoundingClientRect().top
+    ) {
       onUnreadMarkerRead?.(roomId);
     }
 
-    const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distance < 80) setShowJumpToLatest(false);
-  }, [onUnreadMarkerRead, roomId]);
+    stuckToBottomRef.current = isNearBottom(scrollContainer);
+    if (stuckToBottomRef.current) setShowJumpToLatest(false);
+  }, [onUnreadMarkerRead, roomId, scrollContainer]);
 
   useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
+    if (!scrollContainer) return;
 
-    container.addEventListener("scroll", handleScroll, { passive: true });
+    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
 
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [handleScroll, loading]);
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
+  }, [handleScroll, scrollContainer]);
+
+  useEffect(() => {
+    if (!scrollContainer || typeof ResizeObserver === "undefined") return;
+
+    const keepPinnedToBottom = () => {
+      if (stuckToBottomRef.current) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    };
+    const observer = new ResizeObserver(keepPinnedToBottom);
+    observer.observe(scrollContainer);
+    for (const child of Array.from(scrollContainer.children)) observer.observe(child);
+
+    return () => observer.disconnect();
+  }, [scrollContainer]);
 
   useEffect(() => {
     if (loading) return;
+    scrollToBottom();
+  }, [loading, roomId, scrollToBottom]);
 
-    setShowJumpToLatest(false);
-
-    const container = scrollRef.current;
-    if (!container) return;
-
-    container.scrollTop = container.scrollHeight;
-  }, [loading, roomId]);
+  const latestMessage = messages[messages.length - 1];
+  const latestMessageId = latestMessage?.id;
+  const latestMessageIsMine = latestMessage?.username === username;
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !latestMessageId) return;
 
-    const container = scrollRef.current;
-    if (!container) return;
-
-    const latestMessage = messages[messages.length - 1];
-    if (latestMessage?.username === username) {
-      container.scrollTop = container.scrollHeight;
-      setShowJumpToLatest(false);
+    if (latestMessageIsMine || stuckToBottomRef.current) {
+      scrollToBottom();
       return;
     }
 
-    const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distance > 80) {
-      setShowJumpToLatest(true);
-      return;
-    }
-
-    container.scrollTop = container.scrollHeight;
-  }, [messages, loading, username]);
+    setShowJumpToLatest(true);
+  }, [latestMessageId, latestMessageIsMine, loading, scrollToBottom]);
 
   useEffect(() => {
     if (loading || !unreadMarkerMessageId || !onUnreadMarkerRead) return;
-    const container = scrollRef.current;
     const marker = unreadMarkerRef.current;
-    if (!container || !marker) return;
+    if (!scrollContainer || !marker) return;
 
     marker.scrollIntoView({ block: "center" });
-  }, [loading, onUnreadMarkerRead, unreadMarkerMessageId]);
+    stuckToBottomRef.current = isNearBottom(scrollContainer);
+  }, [loading, onUnreadMarkerRead, scrollContainer, unreadMarkerMessageId]);
 
   const startEditing = useCallback((message: ChatMessage) => {
     setEditingMessageId(message.id);
@@ -200,7 +202,7 @@ export const MessageList = memo(function MessageList({
   return (
     <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
       <div
-        ref={scrollRef}
+        ref={setScrollContainer}
         className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
       >
         <ol className="space-y-0.5">
@@ -265,7 +267,7 @@ export const MessageList = memo(function MessageList({
       {showJumpToLatest && (
         <button
           type="button"
-          onClick={jumpToLatest}
+          onClick={scrollToBottom}
           className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md"
         >
           Ir para a última mensagem

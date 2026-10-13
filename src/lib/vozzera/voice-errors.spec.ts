@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "@/lib/vozzera/api";
 import {
-  microphoneProblemFor,
+  MicrophoneUnavailableError,
+  microphoneErrorMessageFor,
+  microphoneToggleErrorMessageFor,
   voiceDisconnectMessageFor,
   voiceJoinErrorMessageFor,
 } from "@/lib/vozzera/voice-errors";
@@ -12,27 +14,31 @@ function domException(name: string): DOMException {
   return new DOMException("", name);
 }
 
-describe("microphoneProblemFor", () => {
+describe("microphoneErrorMessageFor", () => {
   it("explains a blocked microphone permission", () => {
-    expect(microphoneProblemFor(domException("NotAllowedError"))).toContain("bloqueou o microfone");
+    expect(microphoneErrorMessageFor(domException("NotAllowedError"))).toContain(
+      "bloqueou o microfone",
+    );
   });
 
   it("reports a missing microphone", () => {
-    expect(microphoneProblemFor(domException("NotFoundError"))).toContain("Nenhum microfone");
+    expect(microphoneErrorMessageFor(domException("NotFoundError"))).toContain("Nenhum microfone");
   });
 
   it("reports a microphone held by another app", () => {
-    expect(microphoneProblemFor(domException("NotReadableError"))).toContain("Feche o app");
+    expect(microphoneErrorMessageFor(domException("NotReadableError"))).toContain("Feche o app");
   });
 
   it("reports a selected microphone that is gone", () => {
-    expect(microphoneProblemFor(domException("OverconstrainedError"))).toContain(
+    expect(microphoneErrorMessageFor(domException("OverconstrainedError"))).toContain(
       "não está mais disponível",
     );
   });
 
   it("leaves other failures to the caller", () => {
-    expect(microphoneProblemFor(new Error("could not establish signal connection"))).toBe(null);
+    expect(microphoneErrorMessageFor(new Error("could not establish signal connection"))).toBe(
+      null,
+    );
   });
 });
 
@@ -73,9 +79,29 @@ describe("voiceJoinErrorMessageFor", () => {
     );
   });
 
+  it("explains a microphone that could not be prepared", () => {
+    expect(voiceJoinErrorMessageFor(new MicrophoneUnavailableError())).toBe(
+      "Não consegui preparar o microfone.",
+    );
+  });
+
   it("hides internal connection errors behind a generic message", () => {
     expect(voiceJoinErrorMessageFor(new Error("could not establish signal connection"))).toBe(
       "Não consegui entrar no canal.",
+    );
+  });
+});
+
+describe("microphoneToggleErrorMessageFor", () => {
+  it("translates microphone failures", () => {
+    expect(microphoneToggleErrorMessageFor(domException("NotAllowedError"))).toContain(
+      "bloqueou o microfone",
+    );
+  });
+
+  it("falls back to a generic message", () => {
+    expect(microphoneToggleErrorMessageFor(new Error("track ended"))).toBe(
+      "Não consegui alterar o microfone.",
     );
   });
 });

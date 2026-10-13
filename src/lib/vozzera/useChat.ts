@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
-  ApiError,
   createRoom as createRoomApi,
   deleteMessage as deleteMessageApi,
   deleteRoom as deleteRoomApi,
@@ -12,6 +11,7 @@ import {
   listMessages,
   listRooms,
   logout as logoutApi,
+  probeCurrentUser,
   setUnauthorizedHandler,
   updateEmail as updateEmailApi,
   updateRoom as updateRoomApi,
@@ -32,6 +32,7 @@ import {
   removeTypingUser,
   replaceOnlineUsers,
   totalUnread,
+  TYPING_EXPIRY_TICK_MS,
   TYPING_RESEND_INTERVAL_MS,
   TYPING_START_DELAY_MS,
   updateTypingUsers,
@@ -50,13 +51,11 @@ import {
   writeSoundEnabled,
 } from "@/lib/vozzera/notifications";
 import { canManageRooms, canModerateMessages, canSeeRoom } from "@/lib/vozzera/permissions";
-import { sessionRejected } from "@/lib/vozzera/session";
+import { isSessionRejected } from "@/lib/vozzera/session";
 import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
-
-const TYPING_EXPIRY_TICK_MS = 250;
 
 export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
@@ -100,6 +99,7 @@ export function useChat() {
   soundEnabledRef.current = soundEnabled;
 
   const endSession = useCallback(() => {
+    setBanner(null);
     clearUsername();
     setAuthed(false);
     setRooms([]);
@@ -108,6 +108,7 @@ export function useChat() {
     setCurrentUserId(null);
     setActiveRoom(null);
     setMessages({});
+    setUnread({});
     setUnreadMarker(null);
     setTypingUsers({});
     setVoicePresence({});
@@ -169,7 +170,7 @@ export function useChat() {
       });
       setAuthed(true);
     } catch (err) {
-      if (sessionRejected(err)) {
+      if (isSessionRejected(err)) {
         setAuthed(false);
         return;
       }
@@ -186,7 +187,7 @@ export function useChat() {
 
   const isSessionAlive = useCallback(async () => {
     try {
-      await getCurrentUser();
+      await probeCurrentUser();
       return true;
     } catch (err) {
       return !isUnauthorized(err);
@@ -451,7 +452,7 @@ export function useChat() {
           setUnreadMarker({ roomId: room.id, messageId: markerId });
         }
       } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
+        if (isUnauthorized(err)) {
           setAuthed(false);
           return;
         }
@@ -537,7 +538,7 @@ export function useChat() {
           ),
         }));
       } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
+        if (isUnauthorized(err)) {
           setAuthed(false);
           return;
         }

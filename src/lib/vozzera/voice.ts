@@ -357,6 +357,23 @@ export function effectiveParticipantVolume(savedVolume: number | undefined): num
   return savedVolume ?? 1;
 }
 
+type ParticipantMuteContext = {
+  name: string;
+  username: string | null;
+  micEnabled: boolean;
+  mutedParticipants: Record<string, boolean>;
+};
+
+export function isParticipantMuted({
+  name,
+  username,
+  micEnabled,
+  mutedParticipants,
+}: ParticipantMuteContext): boolean {
+  if (name === username) return !micEnabled;
+  return mutedParticipants[name] === true;
+}
+
 export function isParticipantLocallyInaudible(
   isCurrentUser: boolean,
   savedVolume: number | undefined,
