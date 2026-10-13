@@ -6,13 +6,18 @@
       "title": "feat(pwa): Vozzera instalável, com ícone do Papo e mini janela de voz",
       "kind": "feat",
       "pr": 168,
-      "summary": "Agora é app! Instala o Vozzera pelo navegador e ganha janela própria, o Papo na barra de tarefas com suas não lidas e uma mini janela de voz que fica por cima de tudo durante a call."
+      "summary": "O Vozzera virou app! Instala e esquece a aba do navegador: janela própria, o Papo na barra de tarefas contando suas não lidas e a call numa mini janela que flutua por cima das outras."
+    },
+    {
+      "title": "fix(auth): login no iPhone, no Safari e na aba anônima",
+      "kind": "fix",
+      "summary": "Entrava no iPhone ou no Safari e o login te chutava de volta? Acabou! Agora é entrar e ficar, até na aba anônima."
     },
     {
       "title": "fix: rolagem automática do chat e ajustes da revisão das PRs #166/#167",
       "kind": "fix",
       "pr": 169,
-      "summary": "Chegou mensagem, a conversa desce sozinha! Tá lendo o histórico? Ninguém te puxa — aparece só o atalho pra última mensagem."
+      "summary": "Chega de rolar na mão: o chat desce sozinho a cada mensagem nova. Subiu pra ler o histórico? Fica tranquilo, ninguém te arranca de lá."
     }
   ]
 }
