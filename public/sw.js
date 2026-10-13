@@ -1,6 +1,7 @@
 const CACHE_NAME = "vozzera-shell-v1";
 const SHELL_URL = "/";
 const MAX_CACHED_ASSETS = 200;
+const NAVIGATION_TIMEOUT_MS = 4000;
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -38,7 +39,7 @@ function isShellRequest(url) {
 
 async function networkFirstNavigation(request, url) {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { signal: AbortSignal.timeout(NAVIGATION_TIMEOUT_MS) });
     if (response.ok && isShellRequest(url)) {
       const cache = await caches.open(CACHE_NAME);
       await cache.put(SHELL_URL, response.clone());

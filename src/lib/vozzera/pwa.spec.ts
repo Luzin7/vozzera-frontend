@@ -10,9 +10,9 @@ import {
   readAppBadgeEnabled,
   writeAppBadgeEnabled,
 } from "@/lib/vozzera/pwa";
-import type { NotificationStorage } from "@/lib/vozzera/notifications";
+import type { PreferenceStorage } from "@/lib/vozzera/pwa";
 
-function memoryStorage(): NotificationStorage {
+function memoryStorage(): PreferenceStorage {
   const values = new Map<string, string>();
 
   return {

@@ -240,13 +240,13 @@ export function VoiceCallView({
                   >
                     <PictureInPicture2 className="h-4 w-4" />
                     <span className="sr-only">
-                      {miniWindowOpen ? "Fechar mini janela" : "Abrir mini janela"}
+                      {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
                     </span>
                   </Button>
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {miniWindowOpen ? "Fechar mini janela" : "Abrir mini janela de voz"}
+                {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

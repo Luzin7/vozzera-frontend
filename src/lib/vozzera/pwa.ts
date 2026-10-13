@@ -1,7 +1,7 @@
-import type { NotificationStorage } from "@/lib/vozzera/notifications";
-
 export const APP_BADGE_STORAGE_KEY = "vozzera:app-badge-enabled";
 export const APP_THEME_COLOR = "#121417";
+
+export type PreferenceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export type InstallOption = "installed" | "prompt" | "ios" | "unavailable";
 
@@ -42,12 +42,12 @@ export function launchTargetFor(targetUrl: string, currentUrl: string): string |
   return target.href;
 }
 
-export function readAppBadgeEnabled(storage: NotificationStorage | null): boolean {
+export function readAppBadgeEnabled(storage: PreferenceStorage | null): boolean {
   if (storage === null) return true;
   return storage.getItem(APP_BADGE_STORAGE_KEY) !== "0";
 }
 
-export function writeAppBadgeEnabled(storage: NotificationStorage | null, enabled: boolean): void {
+export function writeAppBadgeEnabled(storage: PreferenceStorage | null, enabled: boolean): void {
   if (storage === null) return;
   if (enabled) {
     storage.removeItem(APP_BADGE_STORAGE_KEY);

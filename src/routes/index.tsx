@@ -3,6 +3,7 @@ import { Bell, BellOff, Menu, Settings, Volume2 } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { AppViewport } from "@/components/vozzera/AppViewport";
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
@@ -222,26 +223,11 @@ function Index() {
 
   const installPrompt = useInstallPrompt();
   const appBadge = useAppBadge(totalUnread(unread));
-  const {
-    supported: miniWindowSupported,
-    container: miniWindowContainer,
-    open: openMiniWindow,
-    close: closeMiniWindow,
-  } = useVoiceMiniWindow();
+  const miniWindow = useVoiceMiniWindow({
+    active: voice.status === "connected",
+    onError: showBanner,
+  });
   const miniWindowRoomName = rooms.find((room) => room.id === voiceActiveRoomId)?.name ?? "";
-
-  const handleToggleMiniWindow = useCallback(() => {
-    if (miniWindowContainer) {
-      closeMiniWindow();
-      return;
-    }
-    void openMiniWindow();
-  }, [miniWindowContainer, closeMiniWindow, openMiniWindow]);
-
-  useEffect(() => {
-    if (voice.status === "connected") return;
-    closeMiniWindow();
-  }, [voice.status, closeMiniWindow]);
 
   const handleLogout = useCallback(() => {
     setSettingsOpen(false);
@@ -363,7 +349,7 @@ function Index() {
 
   if (authed === null) {
     return (
-      <div className="mt-[env(titlebar-area-height,0px)] flex h-[calc(100dvh_-_env(titlebar-area-height,0px))] overflow-hidden bg-background">
+      <AppViewport>
         <RoomSidebar {...sidebarProps} loading className="hidden md:flex" />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex h-14 w-full shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
@@ -388,7 +374,7 @@ function Index() {
             <Skeleton className="h-7 w-full" />
           </div>
         </aside>
-      </div>
+      </AppViewport>
     );
   }
 
@@ -401,7 +387,7 @@ function Index() {
   }
 
   return (
-    <div className="mt-[env(titlebar-area-height,0px)] flex h-[calc(100dvh_-_env(titlebar-area-height,0px))] overflow-hidden bg-background">
+    <AppViewport>
       {isMobile ? (
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetContent
@@ -533,12 +519,12 @@ function Index() {
                 screenShares={voice.screenShares}
                 localPreview={voice.localPreview}
                 remoteQualities={voice.remoteQualities}
-                miniWindowSupported={miniWindowSupported}
-                miniWindowOpen={miniWindowContainer !== null}
+                miniWindowSupported={miniWindow.supported}
+                miniWindowOpen={miniWindow.isOpen}
                 onToggleMic={handleToggleMic}
                 onToggleScreenShare={handleToggleScreenShare}
                 onReduceLocalQuality={reduceScreenQuality}
-                onToggleMiniWindow={handleToggleMiniWindow}
+                onToggleMiniWindow={miniWindow.toggle}
                 onLeave={handleLeaveVoice}
               />
             </Suspense>
@@ -635,7 +621,7 @@ function Index() {
           soundEnabled={soundEnabled}
           installOption={installPrompt.installOption}
           appBadgeEnabled={appBadge.enabled}
-          miniWindowSupported={miniWindowSupported}
+          miniWindowSupported={miniWindow.supported}
           onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
           onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
           onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
@@ -649,7 +635,7 @@ function Index() {
         />
       </Suspense>
 
-      {miniWindowContainer &&
+      {miniWindow.container &&
         createPortal(
           <VoiceMiniWindow
             roomName={miniWindowRoomName}
@@ -663,7 +649,7 @@ function Index() {
             onToggleDeafen={handleToggleDeafen}
             onLeave={handleLeaveVoice}
           />,
-          miniWindowContainer,
+          miniWindow.container,
         )}
 
       <WhatsNewDialog
@@ -672,6 +658,6 @@ function Index() {
         version={changelog?.version ?? ""}
         onDismiss={dismissChangelog}
       />
-    </div>
+    </AppViewport>
   );
 }

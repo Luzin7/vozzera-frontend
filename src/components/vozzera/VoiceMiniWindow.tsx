@@ -2,6 +2,7 @@ import { HeadphoneOff, Headphones, Mic, MicOff, PhoneOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/vozzera/avatar";
+import { isParticipantMuted } from "@/lib/vozzera/voice";
 
 type Props = {
   roomName: string;
@@ -36,7 +37,7 @@ export function VoiceMiniWindow({
 
       <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
         {participants.map((name) => {
-          const isMuted = name === username ? !micEnabled : mutedParticipants[name] === true;
+          const isMuted = isParticipantMuted({ name, username, micEnabled, mutedParticipants });
 
           return (
             <li key={name} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
