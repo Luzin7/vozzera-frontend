@@ -120,7 +120,7 @@ function Index() {
   } = voice;
 
   const handleDeleteMessage = useCallback(
-    (message: ChatMessage) => void deleteMessage(message.id),
+    (message: ChatMessage) => void deleteMessage(message),
     [deleteMessage],
   );
 
