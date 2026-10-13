@@ -11,7 +11,8 @@ import { useScreenShare } from "./use-screen-share";
 import type { ScreenShare as ScreenShareType } from "./use-screen-share";
 import { useScreenShareHealth } from "./use-screen-share-health";
 import {
-  microphoneProblemFor,
+  MicrophoneUnavailableError,
+  microphoneToggleErrorMessageFor,
   voiceDisconnectMessageFor,
   voiceJoinErrorMessageFor,
 } from "./voice-errors";
@@ -648,7 +649,7 @@ export function useVoice() {
           video: false,
         });
         preparedMicTrack = createdTrack ? (createdTrack as LocalAudioTrack) : null;
-        if (!preparedMicTrack) throw new Error("Não consegui preparar o microfone.");
+        if (!preparedMicTrack) throw new MicrophoneUnavailableError();
         preparedMicTrack.setAudioContext(voiceAudioContext);
 
         if (initialProcessor) {
@@ -804,7 +805,7 @@ export function useVoice() {
       const transition = pushToTalkTransitionRef.current.then(() => setMicEnabled(enabled));
       pushToTalkTransitionRef.current = transition.then(
         () => undefined,
-        () => setError("Não consegui alterar o microfone."),
+        (err: unknown) => setError(microphoneToggleErrorMessageFor(err)),
       );
     },
     [setMicEnabled],
@@ -840,7 +841,7 @@ export function useVoice() {
       return;
     }
     setMicEnabled(!micOn).catch((err: unknown) => {
-      setError(microphoneProblemFor(err) ?? "Não consegui alterar o microfone.");
+      setError(microphoneToggleErrorMessageFor(err));
     });
   }, [applyDeafen, micOn, setMicEnabled]);
 

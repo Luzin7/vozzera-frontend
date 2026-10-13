@@ -13,6 +13,14 @@ const MICROPHONE_MESSAGES: Readonly<Record<string, string>> = {
 };
 
 const JOIN_FAILED_MESSAGE = "Não consegui entrar no canal.";
+const MICROPHONE_TOGGLE_FAILED_MESSAGE = "Não consegui alterar o microfone.";
+
+export class MicrophoneUnavailableError extends Error {
+  constructor() {
+    super("Não consegui preparar o microfone.");
+    this.name = "MicrophoneUnavailableError";
+  }
+}
 const CHANNEL_CLOSED_MESSAGE = "O canal de voz foi encerrado.";
 const CONNECTION_LOST_MESSAGE = "A conexão de voz caiu. Entre no canal de novo.";
 
@@ -24,7 +32,7 @@ const DISCONNECT_MESSAGES: ReadonlyMap<DisconnectReason, string | null> = new Ma
   [DisconnectReason.ROOM_CLOSED, CHANNEL_CLOSED_MESSAGE],
 ]);
 
-export function microphoneProblemFor(error: unknown): string | null {
+export function microphoneErrorMessageFor(error: unknown): string | null {
   if (!(error instanceof DOMException)) return null;
   return MICROPHONE_MESSAGES[error.name] ?? null;
 }
@@ -37,8 +45,13 @@ export function voiceDisconnectMessageFor(reason: DisconnectReason | undefined):
 }
 
 export function voiceJoinErrorMessageFor(error: unknown): string {
-  const microphoneProblem = microphoneProblemFor(error);
-  if (microphoneProblem) return microphoneProblem;
-  if (error instanceof ApiError) return error.message;
+  const microphoneMessage = microphoneErrorMessageFor(error);
+  if (microphoneMessage) return microphoneMessage;
+  if (error instanceof ApiError || error instanceof MicrophoneUnavailableError)
+    return error.message;
   return JOIN_FAILED_MESSAGE;
+}
+
+export function microphoneToggleErrorMessageFor(error: unknown): string {
+  return microphoneErrorMessageFor(error) ?? MICROPHONE_TOGGLE_FAILED_MESSAGE;
 }

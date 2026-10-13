@@ -5,7 +5,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import { initials } from "@/lib/vozzera/avatar";
 import type { ScreenShareHealth } from "@/lib/vozzera/voice";
-import { isParticipantLocallyInaudible, screenShareHealthMessageFor } from "@/lib/vozzera/voice";
+import {
+  isParticipantLocallyInaudible,
+  isParticipantMuted,
+  screenShareHealthMessageFor,
+} from "@/lib/vozzera/voice";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
 import type { ConnectionState, ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
 
@@ -86,8 +90,12 @@ export function VoiceCallView({
               >
                 {participants.map((name, index) => {
                   const isSpeaking = speakingNames.includes(name);
-                  const isMuted =
-                    name === username ? !micEnabled : mutedParticipants[name] === true;
+                  const isMuted = isParticipantMuted({
+                    name,
+                    username,
+                    micEnabled,
+                    mutedParticipants,
+                  });
                   const isLocallyInaudible = isParticipantLocallyInaudible(
                     name === username,
                     volumes[name],
