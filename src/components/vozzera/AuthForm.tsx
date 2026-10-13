@@ -25,7 +25,12 @@ function identifierMaxLengthFor(mode: Mode): number {
   return MAX_USERNAME_LENGTH;
 }
 
-export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: string) => void }) {
+type Props = {
+  notice?: string | null;
+  onAuthenticated: (username: string) => void;
+};
+
+export function AuthForm({ notice, onAuthenticated }: Readonly<Props>) {
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -94,6 +99,15 @@ export function AuthForm({ onAuthenticated }: { onAuthenticated: (username: stri
             Servidor privado de texto e voz. Só pra quem tem convite.
           </p>
         </div>
+
+        {notice && (
+          <p
+            role="status"
+            className="mb-4 rounded-md bg-muted px-3 py-2 text-center text-sm text-muted-foreground"
+          >
+            {notice}
+          </p>
+        )}
 
         <div className="rounded-xl border border-border bg-card p-6">
           {mode === "forgot" ? (

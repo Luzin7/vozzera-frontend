@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   canNotify,
   initialNotificationsEnabled,
+  playMessageSound,
   NOTIFICATIONS_STORAGE_KEY,
   readNotificationsEnabled,
   readSoundEnabled,
@@ -123,5 +124,54 @@ describe("writeSoundEnabled", () => {
 
   it("does nothing when storage is unavailable", () => {
     expect(() => writeSoundEnabled(null, true)).not.toThrow();
+  });
+});
+
+describe("playMessageSound", () => {
+  class FakeAudioContext {
+    static instances: FakeAudioContext[] = [];
+    currentTime = 0;
+    destination = {};
+    resumed = false;
+
+    constructor() {
+      FakeAudioContext.instances.push(this);
+    }
+
+    resume() {
+      this.resumed = true;
+      return Promise.resolve();
+    }
+
+    createOscillator() {
+      return {
+        type: "",
+        frequency: { setValueAtTime: () => undefined },
+        connect: () => undefined,
+        start: () => undefined,
+        stop: () => undefined,
+      };
+    }
+
+    createGain() {
+      return {
+        gain: { setValueAtTime: () => undefined, exponentialRampToValueAtTime: () => undefined },
+        connect: () => undefined,
+      };
+    }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reuses one audio context and resumes it for every sound", () => {
+    vi.stubGlobal("window", { AudioContext: FakeAudioContext });
+
+    playMessageSound();
+    playMessageSound();
+
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    expect(FakeAudioContext.instances[0]?.resumed).toBe(true);
   });
 });

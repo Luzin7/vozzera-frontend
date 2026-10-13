@@ -29,7 +29,7 @@ import type { Room } from "@/lib/vozzera/types";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
 import type { ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
-import { isParticipantLocallyInaudible } from "@/lib/vozzera/voice";
+import { isParticipantLocallyInaudible, isParticipantMuted } from "@/lib/vozzera/voice";
 
 type Props = {
   className?: string;
@@ -364,8 +364,12 @@ export const RoomSidebar = memo(function RoomSidebar({
                   <ul className="mb-1 ml-8 mt-1.5 space-y-2">
                     {voiceParticipants.map((name) => {
                       const isSpeaking = speakingNames.includes(name);
-                      const isMuted =
-                        name === username ? !micEnabled : mutedParticipants[name] === true;
+                      const isMuted = isParticipantMuted({
+                        name,
+                        username,
+                        micEnabled,
+                        mutedParticipants,
+                      });
                       const isStreaming =
                         name === username
                           ? screenShareEnabled

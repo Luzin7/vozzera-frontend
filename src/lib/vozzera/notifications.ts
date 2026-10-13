@@ -45,12 +45,20 @@ export function canNotify(enabled: boolean, hidden: boolean): boolean {
   return enabled && hidden && notificationPermissionGranted();
 }
 
+let messageSoundContext: AudioContext | null = null;
+
+function messageSoundContextFor(): AudioContext {
+  messageSoundContext ??= new (
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+  )();
+  return messageSoundContext;
+}
+
 export function playMessageSound(): void {
   try {
-    const audioCtx = new (
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    )();
+    const audioCtx = messageSoundContextFor();
+    void audioCtx.resume().catch(() => null);
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);

@@ -21,6 +21,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 let onUnauthorized: (() => void) | null = null;
 
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
@@ -78,6 +82,11 @@ export const logout = () => api<void>("/api/logout", { method: "POST" });
 export const listRooms = () => api<Room[]>("/api/rooms");
 
 export const getCurrentUser = () => api<CurrentUser>("/api/me");
+
+const SESSION_PROBE_TIMEOUT_MS = 5000;
+
+export const probeCurrentUser = () =>
+  api<CurrentUser>("/api/me", { signal: AbortSignal.timeout(SESSION_PROBE_TIMEOUT_MS) });
 
 export const updateEmail = (email: string) =>
   api<UpdateEmailResponse>("/api/me", jsonRequest("PATCH", { email }));

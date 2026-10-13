@@ -6,7 +6,9 @@ import {
   createRoom,
   deleteRoom,
   getCurrentUser,
+  isUnauthorized,
   listRooms,
+  probeCurrentUser,
   register,
   requestPasswordReset,
   resetPassword,
@@ -284,5 +286,34 @@ describe("wsUrl", () => {
   it("derives ws:// from the api base", () => {
     (globalThis as WindowLike).window = { location: { origin: "http://example.com" } };
     expect(wsUrl()).toBe("ws://localhost:8080/api/ws");
+  });
+});
+
+describe("isUnauthorized", () => {
+  it("recognizes a rejected session", () => {
+    expect(isUnauthorized(new ApiError(401, "Token inválido"))).toBe(true);
+  });
+
+  it("does not treat server or network failures as a rejected session", () => {
+    expect(isUnauthorized(new ApiError(500, "Erro ao buscar usuário"))).toBe(false);
+    expect(isUnauthorized(new TypeError("Failed to fetch"))).toBe(false);
+  });
+});
+
+describe("probeCurrentUser", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("checks the session with a timeout", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ id: "u1" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await probeCurrentUser();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/me"),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 });

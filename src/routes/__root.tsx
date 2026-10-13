@@ -11,6 +11,9 @@ import {
 import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { TitleBar } from "@/components/vozzera/TitleBar";
+import { APP_THEME_COLOR } from "@/lib/vozzera/pwa";
+import { usePwaRuntime } from "@/lib/vozzera/use-pwa-runtime";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -78,6 +81,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Vozzera" },
       { name: "description", content: "Servidor privado de chat e voz por convite." },
       { name: "author", content: "Vozzera" },
+      { name: "theme-color", content: APP_THEME_COLOR },
+      { name: "apple-mobile-web-app-title", content: "Vozzera" },
       { property: "og:title", content: "Vozzera" },
       { property: "og:description", content: "Servidor privado de chat e voz por convite." },
       { property: "og:type", content: "website" },
@@ -88,8 +93,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", type: "image/png", href: "/favicon.png" },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "icon", href: "/favicon.ico", sizes: "16x16 24x24 32x32 48x48" },
+      { rel: "icon", type: "image/png", sizes: "192x192", href: "/icons/icon-192.png" },
+      { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -146,9 +153,11 @@ function RootShell({ children }: Readonly<{ children: ReactNode }>) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  usePwaRuntime();
 
   return (
     <QueryClientProvider client={queryClient}>
+      <TitleBar />
       <Outlet />
     </QueryClientProvider>
   );

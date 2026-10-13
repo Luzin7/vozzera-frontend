@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, BellOff, Menu, Settings, Volume2 } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { AppViewport } from "@/components/vozzera/AppViewport";
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
@@ -10,15 +12,20 @@ import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
 import { RoomSettingsView } from "@/components/vozzera/RoomSettingsView";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
+import { ServerUnavailableScreen } from "@/components/vozzera/ServerUnavailableScreen";
 import { VoiceChatDock } from "@/components/vozzera/VoiceChatDock";
+import { VoiceMiniWindow } from "@/components/vozzera/VoiceMiniWindow";
 import { WhatsNewDialog } from "@/components/vozzera/WhatsNewDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnline } from "@/hooks/useOnline";
-import { typingIndicatorText } from "@/lib/vozzera/chat";
+import { totalUnread, typingIndicatorText } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
+import { useAppBadge } from "@/lib/vozzera/use-app-badge";
+import { useInstallPrompt } from "@/lib/vozzera/use-install-prompt";
+import { useVoiceMiniWindow } from "@/lib/vozzera/use-voice-mini-window";
 import { useChangelog } from "@/lib/vozzera/useChangelog";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
@@ -58,6 +65,8 @@ function Index() {
     email,
     currentUserId,
     authed,
+    sessionUnavailable,
+    retrySession,
     rooms,
     canManageRooms,
     canModerateMessages,
@@ -117,7 +126,7 @@ function Index() {
   } = voice;
 
   const handleDeleteMessage = useCallback(
-    (message: ChatMessage) => void deleteMessage(message.id),
+    (message: ChatMessage) => void deleteMessage(message),
     [deleteMessage],
   );
 
@@ -211,6 +220,14 @@ function Index() {
   }, [screenShareEnabled, setScreenShare]);
 
   const handleToggleDeafen = useCallback(() => toggleDeafen(), [toggleDeafen]);
+
+  const installPrompt = useInstallPrompt();
+  const appBadge = useAppBadge(totalUnread(unread));
+  const miniWindow = useVoiceMiniWindow({
+    active: voice.status === "connected",
+    onError: showBanner,
+  });
+  const miniWindowRoomName = rooms.find((room) => room.id === voiceActiveRoomId)?.name ?? "";
 
   const handleLogout = useCallback(() => {
     setSettingsOpen(false);
@@ -326,9 +343,13 @@ function Index() {
     onToggleDeafen: handleToggleDeafen,
   };
 
+  if (sessionUnavailable) {
+    return <ServerUnavailableScreen onRetry={retrySession} />;
+  }
+
   if (authed === null) {
     return (
-      <div className="flex h-dvh overflow-hidden bg-background">
+      <AppViewport>
         <RoomSidebar {...sidebarProps} loading className="hidden md:flex" />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex h-14 w-full shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
@@ -353,12 +374,12 @@ function Index() {
             <Skeleton className="h-7 w-full" />
           </div>
         </aside>
-      </div>
+      </AppViewport>
     );
   }
 
   if (!authed) {
-    return <AuthForm onAuthenticated={authenticate} />;
+    return <AuthForm notice={banner} onAuthenticated={authenticate} />;
   }
 
   if (requiresEmailSetup(email)) {
@@ -366,7 +387,7 @@ function Index() {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <AppViewport>
       {isMobile ? (
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetContent
@@ -498,9 +519,12 @@ function Index() {
                 screenShares={voice.screenShares}
                 localPreview={voice.localPreview}
                 remoteQualities={voice.remoteQualities}
+                miniWindowSupported={miniWindow.supported}
+                miniWindowOpen={miniWindow.isOpen}
                 onToggleMic={handleToggleMic}
                 onToggleScreenShare={handleToggleScreenShare}
                 onReduceLocalQuality={reduceScreenQuality}
+                onToggleMiniWindow={miniWindow.toggle}
                 onLeave={handleLeaveVoice}
               />
             </Suspense>
@@ -595,16 +619,38 @@ function Index() {
           pushToTalkEnabled={voice.pushToTalkEnabled}
           pushToTalkKeyLabel={voice.pushToTalkBinding.label}
           soundEnabled={soundEnabled}
+          installOption={installPrompt.installOption}
+          appBadgeEnabled={appBadge.enabled}
+          miniWindowSupported={miniWindow.supported}
           onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
           onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
           onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
           onTogglePushToTalk={voice.setPushToTalkEnabled}
           onPushToTalkKeyChange={voice.setPushToTalkBinding}
           onToggleSound={toggleSound}
+          onInstall={() => void installPrompt.install()}
+          onToggleAppBadge={appBadge.setEnabled}
           onUpdateEmail={updateEmail}
           onLogout={handleLogout}
         />
       </Suspense>
+
+      {miniWindow.container &&
+        createPortal(
+          <VoiceMiniWindow
+            roomName={miniWindowRoomName}
+            participants={voice.participants}
+            username={username}
+            micEnabled={voice.micEnabled}
+            deafen={voice.deafen}
+            mutedParticipants={voice.mutedParticipants}
+            speakingNames={voice.speakingNames}
+            onToggleMic={handleToggleMic}
+            onToggleDeafen={handleToggleDeafen}
+            onLeave={handleLeaveVoice}
+          />,
+          miniWindow.container,
+        )}
 
       <WhatsNewDialog
         open={shouldShowChangelog}
@@ -612,6 +658,6 @@ function Index() {
         version={changelog?.version ?? ""}
         onDismiss={dismissChangelog}
       />
-    </div>
+    </AppViewport>
   );
 }

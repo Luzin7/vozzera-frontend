@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { wsUrl } from "@/lib/vozzera/api";
-import { backoffDelay, parseFrame, WebSocketProtocolError } from "@/lib/vozzera/chat";
+import {
+  backoffDelay,
+  isSessionRevokedClose,
+  parseFrame,
+  WebSocketProtocolError,
+} from "@/lib/vozzera/chat";
+import type { TypingAction } from "@/lib/vozzera/chat";
 import type { InboundEvent, OutboundEvent } from "@/lib/vozzera/types";
 import { inboundFrame } from "@/lib/vozzera/ws-schema";
 
@@ -12,23 +18,31 @@ type Options = {
   onEvent: (event: OutboundEvent) => void;
   onProtocolError?: (message: string) => void;
   onSessionExpired?: () => void;
+  isSessionAlive?: () => Promise<boolean>;
 };
 
-export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired }: Options) {
+export function useSocket({
+  enabled,
+  onEvent,
+  onProtocolError,
+  onSessionExpired,
+  isSessionAlive,
+}: Options) {
   const [status, setStatus] = useState<SocketStatus>("closed");
   const socketRef = useRef<WebSocket | null>(null);
   const desiredRooms = useRef<Set<string>>(new Set());
   const queue = useRef<InboundEvent[]>([]);
   const attempt = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const closedByUs = useRef(false);
   const onEventRef = useRef(onEvent);
   const onProtocolErrorRef = useRef(onProtocolError);
   const onSessionExpiredRef = useRef(onSessionExpired);
+  const isSessionAliveRef = useRef(isSessionAlive);
 
   onEventRef.current = onEvent;
   onProtocolErrorRef.current = onProtocolError;
   onSessionExpiredRef.current = onSessionExpired;
+  isSessionAliveRef.current = isSessionAlive;
 
   const rawSend = useCallback((event: InboundEvent) => {
     const socket = socketRef.current;
@@ -44,7 +58,7 @@ export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired 
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
-    closedByUs.current = false;
+    let disposed = false;
     const desiredRoomIds = desiredRooms.current;
 
     const connect = () => {
@@ -83,14 +97,17 @@ export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired 
         setStatus("closed");
         socketRef.current = null;
 
-        if (closedByUs.current) return;
+        if (disposed) return;
 
-        if (event.code === 1005) {
+        if (isSessionRevokedClose(event.code)) {
           onSessionExpiredRef.current?.();
           return;
         }
 
-        retryTimer.current = setTimeout(connect, backoffDelay(attempt.current));
+        retryTimer.current = setTimeout(() => {
+          retryTimer.current = null;
+          void reconnect();
+        }, backoffDelay(attempt.current));
 
         attempt.current += 1;
       };
@@ -100,14 +117,43 @@ export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired 
       };
     };
 
+    const reconnect = async () => {
+      const alive = (await isSessionAliveRef.current?.()) ?? true;
+      if (disposed) return;
+
+      if (!alive) {
+        onSessionExpiredRef.current?.();
+        return;
+      }
+
+      connect();
+    };
+
+    const reconnectNow = () => {
+      if (!retryTimer.current) return;
+      clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+      void reconnect();
+    };
+
+    const reconnectWhenVisible = () => {
+      if (document.visibilityState === "visible") reconnectNow();
+    };
+
+    window.addEventListener("online", reconnectNow);
+    document.addEventListener("visibilitychange", reconnectWhenVisible);
+
     connect();
 
     return () => {
-      closedByUs.current = true;
+      disposed = true;
+      window.removeEventListener("online", reconnectNow);
+      document.removeEventListener("visibilitychange", reconnectWhenVisible);
 
       if (retryTimer.current) {
         clearTimeout(retryTimer.current);
       }
+      retryTimer.current = null;
 
       socketRef.current?.close();
       socketRef.current = null;
@@ -150,12 +196,13 @@ export function useSocket({ enabled, onEvent, onProtocolError, onSessionExpired 
     [rawSend],
   );
 
-  const sendTyping = useCallback(
-    (roomId: string, action: "start" | "stop") => {
-      rawSend(inboundFrame(action === "start" ? "typing.start" : "typing.stop", roomId));
-    },
-    [rawSend],
-  );
+  const sendTyping = useCallback((roomId: string, action: TypingAction) => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    socket.send(
+      JSON.stringify(inboundFrame(action === "start" ? "typing.start" : "typing.stop", roomId)),
+    );
+  }, []);
 
   return {
     status,

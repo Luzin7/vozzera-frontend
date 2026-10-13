@@ -16,6 +16,12 @@ export function backoffDelay(attempt: number): number {
   return Math.min(1000 * 2 ** attempt, 15000);
 }
 
+const SESSION_REVOKED_CLOSE_CODE = 4001;
+
+export function isSessionRevokedClose(code: number): boolean {
+  return code === SESSION_REVOKED_CLOSE_CODE;
+}
+
 export function nextRoomIndex(key: string, currentIndex: number, length: number): number | null {
   if (key === "ArrowDown") return currentIndex + 1 < length ? currentIndex + 1 : 0;
   if (key === "ArrowUp") return currentIndex - 1 >= 0 ? currentIndex - 1 : length - 1;
@@ -37,6 +43,14 @@ export function clearUnread(
   const next = { ...unread };
   delete next[roomId];
   return next;
+}
+
+const STICK_TO_BOTTOM_THRESHOLD_PX = 80;
+
+type ScrollMetrics = Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">;
+
+export function isNearBottom({ scrollHeight, scrollTop, clientHeight }: ScrollMetrics): boolean {
+  return scrollHeight - scrollTop - clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
 }
 
 export function totalUnread(unread: Record<string, number>): number {
@@ -153,13 +167,23 @@ export function replaceOnlineUsers(users: OnlineUsers, onlineUsers: UserIdentity
   return next;
 }
 
+export const TYPING_START_DELAY_MS = 1500;
+export const TYPING_RESEND_INTERVAL_MS = 1000;
+const TYPING_STOP_DELAY_MS = 2000;
+export const TYPING_EXPIRY_TICK_MS = 250;
+const TYPING_START_LIFETIME_MS = TYPING_RESEND_INTERVAL_MS + TYPING_STOP_DELAY_MS;
+
 export type TypingUser = {
   userId: string;
   username: string;
-  lastTypedAt: number;
+  expiresAt: number;
 };
 
 export type TypingUsers = Record<string, Record<string, TypingUser>>;
+
+function withTypingUser(users: TypingUsers, roomId: string, user: TypingUser): TypingUsers {
+  return { ...users, [roomId]: { ...(users[roomId] ?? {}), [user.userId]: user } };
+}
 
 export function updateTypingUsers(
   users: TypingUsers,
@@ -169,31 +193,76 @@ export function updateTypingUsers(
 ): TypingUsers {
   if (event.user_id === currentUserId) return users;
 
-  const roomUsers = users[event.room_id] ?? {};
-
   if (event.action === "start") {
-    return {
-      ...users,
-      [event.room_id]: {
-        ...roomUsers,
-        [event.user_id]: {
-          userId: event.user_id,
-          username: event.username,
-          lastTypedAt: now,
-        },
-      },
-    };
+    return withTypingUser(users, event.room_id, {
+      userId: event.user_id,
+      username: event.username,
+      expiresAt: now + TYPING_START_LIFETIME_MS,
+    });
   }
 
-  return removeTypingUser(users, event.room_id, event.user_id);
+  const current = users[event.room_id]?.[event.user_id];
+  if (!current) return users;
+
+  return withTypingUser(users, event.room_id, {
+    ...current,
+    expiresAt: now + TYPING_STOP_DELAY_MS,
+  });
 }
 
-export function expireTypingUsers(users: TypingUsers, now: number, timeout: number): TypingUsers {
+export type TypingAction = "start" | "stop";
+
+type TypingAnnouncerOptions = {
+  send: (roomId: string, action: TypingAction) => void;
+  startDelayMs: number;
+  resendIntervalMs: number;
+};
+
+export type TypingAnnouncer = {
+  typing: (roomId: string) => void;
+  stop: () => void;
+};
+
+export function createTypingAnnouncer({
+  send,
+  startDelayMs,
+  resendIntervalMs,
+}: TypingAnnouncerOptions): TypingAnnouncer {
+  let currentRoomId: string | null = null;
+  let startedAt = 0;
+  let announcedAt: number | null = null;
+
+  const stop = () => {
+    if (announcedAt !== null && currentRoomId) send(currentRoomId, "stop");
+    currentRoomId = null;
+    announcedAt = null;
+  };
+
+  const typing = (roomId: string) => {
+    if (currentRoomId !== roomId) {
+      stop();
+      currentRoomId = roomId;
+      startedAt = Date.now();
+      return;
+    }
+
+    const now = Date.now();
+    if (now - startedAt < startDelayMs) return;
+    if (announcedAt !== null && now - announcedAt < resendIntervalMs) return;
+
+    announcedAt = now;
+    send(roomId, "start");
+  };
+
+  return { typing, stop };
+}
+
+export function expireTypingUsers(users: TypingUsers, now: number): TypingUsers {
   let next = users;
 
   for (const [roomId, roomUsers] of Object.entries(users)) {
     for (const user of Object.values(roomUsers)) {
-      if (now - user.lastTypedAt < timeout) continue;
+      if (now < user.expiresAt) continue;
       next = removeTypingUser(next, roomId, user.userId);
     }
   }
@@ -209,7 +278,7 @@ export function typingIndicatorText(users: TypingUser[]): string | null {
   return "Várias pessoas estão digitando ao mesmo tempo...";
 }
 
-function removeTypingUser(users: TypingUsers, roomId: string, userId: string): TypingUsers {
+export function removeTypingUser(users: TypingUsers, roomId: string, userId: string): TypingUsers {
   const roomUsers = users[roomId];
   if (!roomUsers || !(userId in roomUsers)) return users;
 
