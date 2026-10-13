@@ -524,30 +524,23 @@ export function useChat() {
     [queryClient, removeRoomLocally],
   );
 
-  const deleteMessage = useCallback(
-    async (messageId: string) => {
-      if (!activeRoom) return;
+  const deleteMessage = useCallback(async ({ id, roomId }: ChatMessage) => {
+    try {
+      await deleteMessageApi(roomId, id);
 
-      try {
-        await deleteMessageApi(activeRoom.id, messageId);
-
-        setMessages((prev) => ({
-          ...prev,
-          [activeRoom.id]: (prev[activeRoom.id] ?? []).filter(
-            (message) => message.id !== messageId,
-          ),
-        }));
-      } catch (err) {
-        if (isUnauthorized(err)) {
-          setAuthed(false);
-          return;
-        }
-
-        setBanner("Não consegui excluir a mensagem.");
+      setMessages((prev) => ({
+        ...prev,
+        [roomId]: (prev[roomId] ?? []).filter((message) => message.id !== id),
+      }));
+    } catch (err) {
+      if (isUnauthorized(err)) {
+        setAuthed(false);
+        return;
       }
-    },
-    [activeRoom],
-  );
+
+      setBanner("Não consegui excluir a mensagem.");
+    }
+  }, []);
 
   const authenticate = useCallback(
     (name: string) => {
