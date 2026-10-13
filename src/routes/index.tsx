@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, BellOff, Menu, Settings, Volume2 } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { AuthForm } from "@/components/vozzera/AuthForm";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
@@ -12,14 +13,18 @@ import { RoomSettingsView } from "@/components/vozzera/RoomSettingsView";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
 import { ServerUnavailableScreen } from "@/components/vozzera/ServerUnavailableScreen";
 import { VoiceChatDock } from "@/components/vozzera/VoiceChatDock";
+import { VoiceMiniWindow } from "@/components/vozzera/VoiceMiniWindow";
 import { WhatsNewDialog } from "@/components/vozzera/WhatsNewDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnline } from "@/hooks/useOnline";
-import { typingIndicatorText } from "@/lib/vozzera/chat";
+import { totalUnread, typingIndicatorText } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
+import { useAppBadge } from "@/lib/vozzera/use-app-badge";
+import { useInstallPrompt } from "@/lib/vozzera/use-install-prompt";
+import { useVoiceMiniWindow } from "@/lib/vozzera/use-voice-mini-window";
 import { useChangelog } from "@/lib/vozzera/useChangelog";
 import { useChat } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
@@ -215,6 +220,29 @@ function Index() {
 
   const handleToggleDeafen = useCallback(() => toggleDeafen(), [toggleDeafen]);
 
+  const installPrompt = useInstallPrompt();
+  const appBadge = useAppBadge(totalUnread(unread));
+  const {
+    supported: miniWindowSupported,
+    container: miniWindowContainer,
+    open: openMiniWindow,
+    close: closeMiniWindow,
+  } = useVoiceMiniWindow();
+  const miniWindowRoomName = rooms.find((room) => room.id === voiceActiveRoomId)?.name ?? "";
+
+  const handleToggleMiniWindow = useCallback(() => {
+    if (miniWindowContainer) {
+      closeMiniWindow();
+      return;
+    }
+    void openMiniWindow();
+  }, [miniWindowContainer, closeMiniWindow, openMiniWindow]);
+
+  useEffect(() => {
+    if (voice.status === "connected") return;
+    closeMiniWindow();
+  }, [voice.status, closeMiniWindow]);
+
   const handleLogout = useCallback(() => {
     setSettingsOpen(false);
     void disconnect();
@@ -335,7 +363,7 @@ function Index() {
 
   if (authed === null) {
     return (
-      <div className="flex h-dvh overflow-hidden bg-background">
+      <div className="mt-[env(titlebar-area-height,0px)] flex h-[calc(100dvh_-_env(titlebar-area-height,0px))] overflow-hidden bg-background">
         <RoomSidebar {...sidebarProps} loading className="hidden md:flex" />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex h-14 w-full shrink-0 items-center gap-2 border-b border-border px-2 sm:px-4">
@@ -373,7 +401,7 @@ function Index() {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div className="mt-[env(titlebar-area-height,0px)] flex h-[calc(100dvh_-_env(titlebar-area-height,0px))] overflow-hidden bg-background">
       {isMobile ? (
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetContent
@@ -505,9 +533,12 @@ function Index() {
                 screenShares={voice.screenShares}
                 localPreview={voice.localPreview}
                 remoteQualities={voice.remoteQualities}
+                miniWindowSupported={miniWindowSupported}
+                miniWindowOpen={miniWindowContainer !== null}
                 onToggleMic={handleToggleMic}
                 onToggleScreenShare={handleToggleScreenShare}
                 onReduceLocalQuality={reduceScreenQuality}
+                onToggleMiniWindow={handleToggleMiniWindow}
                 onLeave={handleLeaveVoice}
               />
             </Suspense>
@@ -602,16 +633,38 @@ function Index() {
           pushToTalkEnabled={voice.pushToTalkEnabled}
           pushToTalkKeyLabel={voice.pushToTalkBinding.label}
           soundEnabled={soundEnabled}
+          installOption={installPrompt.installOption}
+          appBadgeEnabled={appBadge.enabled}
+          miniWindowSupported={miniWindowSupported}
           onSelectDevice={(deviceId) => void voice.setMicDevice(deviceId)}
           onToggleNoiseFilter={(enabled) => void voice.setNoiseFilter(enabled)}
           onToggleSelfMonitor={(enabled) => void voice.setSelfMonitor(enabled)}
           onTogglePushToTalk={voice.setPushToTalkEnabled}
           onPushToTalkKeyChange={voice.setPushToTalkBinding}
           onToggleSound={toggleSound}
+          onInstall={() => void installPrompt.install()}
+          onToggleAppBadge={appBadge.setEnabled}
           onUpdateEmail={updateEmail}
           onLogout={handleLogout}
         />
       </Suspense>
+
+      {miniWindowContainer &&
+        createPortal(
+          <VoiceMiniWindow
+            roomName={miniWindowRoomName}
+            participants={voice.participants}
+            username={username}
+            micEnabled={voice.micEnabled}
+            deafen={voice.deafen}
+            mutedParticipants={voice.mutedParticipants}
+            speakingNames={voice.speakingNames}
+            onToggleMic={handleToggleMic}
+            onToggleDeafen={handleToggleDeafen}
+            onLeave={handleLeaveVoice}
+          />,
+          miniWindowContainer,
+        )}
 
       <WhatsNewDialog
         open={shouldShowChangelog}

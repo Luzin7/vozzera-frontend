@@ -1,15 +1,17 @@
 import { Label } from "@/components/ui/label";
-import { LogOut, Mic2, User } from "lucide-react";
+import { AppWindow, LogOut, Mic2, User } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import type { InstallOption } from "@/lib/vozzera/pwa";
 import type { MicDevice } from "@/lib/vozzera/voice";
+import { AppSettings } from "./AppSettings";
 import { EmailChangeForm } from "./EmailChangeForm";
 import { MicSettings } from "./MicSettings";
 
-type Section = "microphone" | "account";
+type Section = "microphone" | "app" | "account";
 
 type Props = {
   open: boolean;
@@ -24,18 +26,24 @@ type Props = {
   pushToTalkEnabled: boolean;
   pushToTalkKeyLabel: string;
   soundEnabled: boolean;
+  installOption: InstallOption;
+  appBadgeEnabled: boolean;
+  miniWindowSupported: boolean;
   onSelectDevice: (deviceId: string) => void;
   onToggleNoiseFilter: (enabled: boolean) => void;
   onToggleSelfMonitor: (enabled: boolean) => void;
   onTogglePushToTalk: (enabled: boolean) => void;
   onPushToTalkKeyChange: (code: string, label: string) => void;
   onToggleSound: (enabled: boolean) => void;
+  onInstall: () => void;
+  onToggleAppBadge: (enabled: boolean) => void;
   onUpdateEmail: (email: string) => Promise<string>;
   onLogout: () => void;
 };
 
 const sections: { id: Section; label: string; icon: typeof Mic2 }[] = [
   { id: "microphone", label: "Microfone e voz", icon: Mic2 },
+  { id: "app", label: "App", icon: AppWindow },
   { id: "account", label: "Conta", icon: User },
 ];
 
@@ -52,12 +60,17 @@ export function SettingsDialog({
   pushToTalkEnabled,
   pushToTalkKeyLabel,
   soundEnabled,
+  installOption,
+  appBadgeEnabled,
+  miniWindowSupported,
   onSelectDevice,
   onToggleNoiseFilter,
   onToggleSelfMonitor,
   onTogglePushToTalk,
   onPushToTalkKeyChange,
   onToggleSound,
+  onInstall,
+  onToggleAppBadge,
   onUpdateEmail,
   onLogout,
 }: Readonly<Props>) {
@@ -84,7 +97,7 @@ export function SettingsDialog({
         </nav>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
-          {section === "microphone" ? (
+          {section === "microphone" && (
             <>
               <DialogTitle className="mb-4 text-base">Microfone e voz</DialogTitle>
               <DialogDescription className="sr-only">
@@ -114,7 +127,23 @@ export function SettingsDialog({
                 <Switch id="sound-toggle" checked={soundEnabled} onCheckedChange={onToggleSound} />
               </div>
             </>
-          ) : (
+          )}
+          {section === "app" && (
+            <>
+              <DialogTitle className="mb-4 text-base">App</DialogTitle>
+              <DialogDescription className="sr-only">
+                Instalação do Vozzera como app e preferências da janela
+              </DialogDescription>
+              <AppSettings
+                installOption={installOption}
+                appBadgeEnabled={appBadgeEnabled}
+                miniWindowSupported={miniWindowSupported}
+                onInstall={onInstall}
+                onToggleAppBadge={onToggleAppBadge}
+              />
+            </>
+          )}
+          {section === "account" && (
             <div className="flex min-h-full flex-1 flex-col">
               <DialogTitle className="mb-4 text-base">Conta</DialogTitle>
               <DialogDescription className="sr-only">Sessão e saída da conta</DialogDescription>
