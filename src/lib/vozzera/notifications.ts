@@ -45,12 +45,20 @@ export function canNotify(enabled: boolean, hidden: boolean): boolean {
   return enabled && hidden && notificationPermissionGranted();
 }
 
+let messageSoundContext: AudioContext | null = null;
+
+function messageSoundContextFor(): AudioContext {
+  messageSoundContext ??= new (
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+  )();
+  return messageSoundContext;
+}
+
 export function playMessageSound(): void {
   try {
-    const audioCtx = new (
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    )();
+    const audioCtx = messageSoundContextFor();
+    void audioCtx.resume().catch(() => null);
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
@@ -60,7 +68,6 @@ export function playMessageSound(): void {
     osc.frequency.setValueAtTime(660, audioCtx.currentTime + 0.08);
     gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
-    osc.onended = () => void audioCtx.close();
     osc.start(audioCtx.currentTime);
     osc.stop(audioCtx.currentTime + 0.25);
   } catch {
