@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -21,6 +21,7 @@ import {
   addOnlineUser,
   clearActiveRoomId,
   clearUnread,
+  createTypingAnnouncer,
   expireTypingUsers,
   firstTextRoom,
   firstUnreadMessageId,
@@ -28,8 +29,11 @@ import {
   readActiveRoomId,
   removeOnlineUser,
   removeRoom,
+  removeTypingUser,
   replaceOnlineUsers,
   totalUnread,
+  TYPING_RESEND_INTERVAL_MS,
+  TYPING_START_DELAY_MS,
   updateTypingUsers,
   updateVoicePresence,
   upsertRoom,
@@ -52,8 +56,7 @@ import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
 
-const TYPING_EVENT_INTERVAL_MS = 1000;
-const TYPING_EXPIRATION_MS = 3000;
+const TYPING_EXPIRY_TICK_MS = 250;
 
 export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
@@ -89,8 +92,6 @@ export function useChat() {
   const notificationsEnabledRef = useRef(notificationsEnabled);
   const soundEnabledRef = useRef(soundEnabled);
   const selectedInitialRoomRef = useRef(false);
-  const typingRoomRef = useRef<string | null>(null);
-  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resubscribeRoomRef = useRef<((roomId: string) => void) | null>(null);
 
   activeRoomRef.current = activeRoom;
@@ -256,6 +257,7 @@ export function useChat() {
 
       if (event.action === "created") {
         setMessages((prev) => appendMessage(prev, fromEvent(event)));
+        setTypingUsers((prev) => removeTypingUser(prev, event.room_id, event.user_id));
 
         if (event.room_id !== activeRoomRef.current?.id) {
           setUnread((prev) => incrementUnread(prev, event.room_id));
@@ -379,43 +381,39 @@ export function useChat() {
     setVoicePresence({});
   }, [status]);
 
+  const typingAnnouncer = useMemo(
+    () =>
+      createTypingAnnouncer({
+        send: sendTyping,
+        startDelayMs: TYPING_START_DELAY_MS,
+        resendIntervalMs: TYPING_RESEND_INTERVAL_MS,
+      }),
+    [sendTyping],
+  );
+
   const setTyping = useCallback(
     (typing: boolean) => {
       const roomId = activeRoomRef.current?.id;
 
-      if (!typing) {
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-        typingTimerRef.current = null;
-        if (typingRoomRef.current) sendTyping(typingRoomRef.current, "stop");
-        typingRoomRef.current = null;
+      if (!typing || !roomId) {
+        typingAnnouncer.stop();
         return;
       }
 
-      if (!roomId || typingTimerRef.current) return;
-
-      sendTyping(roomId, "start");
-      typingRoomRef.current = roomId;
-      typingTimerRef.current = setTimeout(() => {
-        typingTimerRef.current = null;
-      }, TYPING_EVENT_INTERVAL_MS);
+      typingAnnouncer.typing(roomId);
     },
-    [sendTyping],
+    [typingAnnouncer],
   );
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTypingUsers((prev) => expireTypingUsers(prev, Date.now(), TYPING_EXPIRATION_MS));
-    }, TYPING_EVENT_INTERVAL_MS);
+      setTypingUsers((prev) => expireTypingUsers(prev, Date.now()));
+    }, TYPING_EXPIRY_TICK_MS);
 
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(
-    () => () => {
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    },
-    [],
-  );
+  useEffect(() => () => typingAnnouncer.stop(), [typingAnnouncer]);
 
   const openRoom = useCallback(
     async (room: Room) => {

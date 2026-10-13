@@ -285,6 +285,7 @@ Regras:
 - Sem otimismo na UI: a mensagem aparece quando o eco volta (não há `client_msg_id` pra deduplicar).
 - Uma inscrição negada não confirma estado local nem produz mensagem otimista; sem eco, o histórico permanece íntegro.
 - `room.created`, `room.updated` e `room.deleted` atualizam a lista local; exclusão também remove o histórico local sem encerrar o WebSocket.
+- **Digitando**: o front só manda `typing.start` depois de 1,5 s digitando (mensagem rápida não anuncia nada) e reenvia no máximo 1x/s. Quem recebe mantém o aviso por 3 s após cada `start`, por 2 s após um `typing.stop`, e tira na hora quando chega a mensagem da pessoa.
 - `voice.presence.*` substitui o snapshot da sala na UI de voz; participantes são deduplicados por `user_id` e exibidos na barra lateral.
 - **Presença global** (`__presence__`): o snapshot inicial de presença (`presence.snapshot`) é enviado automaticamente na conexão WebSocket, contendo estatísticas (`online`, `offline`, `total`) e a lista de usuários online (`online_users`). Os eventos `user.online` e `user.offline` mantêm a lista atualizada durante a sessão. A contagem `total` é atualizada periodicamente no servidor (a cada 15 min) e reflete o total de contas registradas.
 - Ao reconectar o WebSocket, o cliente descarta a presença anterior e aguarda novos snapshots das salas de voz assinadas.
