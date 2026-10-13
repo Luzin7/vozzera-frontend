@@ -1,5 +1,12 @@
 {
-  "version": "v1.20.0",
+  "version": "v1.20.1",
   "releasedAt": "2026-10-13",
-  "items": []
+  "items": [
+    {
+      "title": "fix: rolagem automática do chat e ajustes da revisão das PRs #166/#167",
+      "kind": "fix",
+      "pr": 169,
+      "summary": ""
+    }
+  ]
 }
