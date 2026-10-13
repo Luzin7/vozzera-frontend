@@ -665,15 +665,26 @@ describe("createTypingAnnouncer", () => {
     vi.useRealTimers();
   });
 
-  it("announces typing only after the start delay", () => {
+  it("announces once the person has been typing for the start delay", () => {
     const announcer = createTypingAnnouncer({ send, ...options });
 
     announcer.typing("r1");
     vi.advanceTimersByTime(1499);
+    announcer.typing("r1");
     expect(sent).toEqual([]);
 
     vi.advanceTimersByTime(1);
+    announcer.typing("r1");
     expect(sent).toEqual(["start:r1"]);
+  });
+
+  it("stays silent when the person types once and stops", () => {
+    const announcer = createTypingAnnouncer({ send, ...options });
+
+    announcer.typing("r1");
+    vi.advanceTimersByTime(5000);
+
+    expect(sent).toEqual([]);
   });
 
   it("stays silent for a message sent before the delay", () => {
@@ -682,7 +693,6 @@ describe("createTypingAnnouncer", () => {
     announcer.typing("r1");
     vi.advanceTimersByTime(1000);
     announcer.stop();
-    vi.advanceTimersByTime(5000);
 
     expect(sent).toEqual([]);
   });
@@ -692,6 +702,7 @@ describe("createTypingAnnouncer", () => {
 
     announcer.typing("r1");
     vi.advanceTimersByTime(1500);
+    announcer.typing("r1");
     announcer.stop();
 
     expect(sent).toEqual(["start:r1", "stop:r1"]);
@@ -716,8 +727,10 @@ describe("createTypingAnnouncer", () => {
 
     announcer.typing("r1");
     vi.advanceTimersByTime(1500);
+    announcer.typing("r1");
     announcer.typing("r2");
     vi.advanceTimersByTime(1500);
+    announcer.typing("r2");
 
     expect(sent).toEqual(["start:r1", "stop:r1", "start:r2"]);
   });

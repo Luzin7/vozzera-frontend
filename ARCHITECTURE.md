@@ -48,8 +48,8 @@ src/
 ## Como o estado flui
 
 1. **Auth** — `useAuth` guarda só o `username` em `localStorage` (exibição). A sessão real é o cookie HttpOnly do backend; `GET /api/me` fornece a identidade e a `role` atual.
-2. **Bootstrap** — `useChat` carrega as salas e o usuário atual; `401` → tela de auth, `200` → aplica as permissões e abre o WebSocket.
-3. **Socket** — `useSocket` conecta com backoff exponencial, fila envios antes do `open` e re-envia `join` de todas as salas conhecidas a cada reconexão.
+2. **Bootstrap** — `useChat` carrega as salas e o usuário atual; `401` → tela de auth, `200` → aplica as permissões e abre o WebSocket, qualquer outra falha → `ServerUnavailableScreen` com "Tentar de novo" (servidor fora não é "deslogado").
+3. **Socket** — `useSocket` conecta com backoff exponencial, enfileira mensagens antes do `open` (digitando não entra na fila: é efêmero) e reenvia `room.subscribe` de todas as salas a cada reconexão. Fechamento `4001` desloga; qualquer outro confere `GET /api/me` (com timeout) antes de reconectar: `401` desloga, o resto reconecta.
 4. **Mensagens** — chegam do histórico REST ou do WS; `appendMessage` (em `chat.ts`) faz dedup por `id`. Sem otimismo: a mensagem só aparece quando o eco volta.
 5. **Salas** — `mod` e `admin` podem criar, renomear e apagar. Uma sala sempre tem chat de texto; `has_voice` (imutável) adiciona a capacidade de call, e `staff_only` restringe visibilidade/acesso à moderação. Eventos `room.created`, `room.updated` e `room.deleted` mantêm todos os clientes sincronizados sem encerrar o WebSocket; virar `staff_only` derruba as assinaturas ativas da sala.
 
