@@ -82,8 +82,15 @@ Estas regras valem em todo arquivo deste repo:
 
 ## Produção
 
-- Build servido pelo **próprio Go na mesma origem** — `VITE_API_URL` vazio.
+- Front na Vercel (`vozzera.vercel.app`), API no Render; `VITE_API_URL` aponta pra API.
 - Cookie `SameSite=None; Secure; Partitioned` + `credentials: "include"`: front e API estão em sites diferentes; detalhes e limitações em [`docs/CONTRATO-FRONTEND.md`](./docs/CONTRATO-FRONTEND.md).
 - Rede de erro de formulário em pt-BR, identificadores em inglês.
+
+## PWA
+
+- `public/manifest.webmanifest`: app instalável em janela própria, com barra de título própria opcional (Window Controls Overlay, `TitleBar.tsx`) e instância única (`launch_handler: focus-existing`). Link aberto com o app já aberto chega pelo `launchQueue` em `use-pwa-runtime.ts`.
+- `public/sw.js`: guarda só os arquivos do app. `/assets/*` é cache-first (nome com hash) e navegação é network-first, com `/` de reserva offline. Nunca intercepta outra origem (a API) nem guarda URL com query. Registrado só no build de produção.
+- Ícones em `public/icons/`, gerados dos SVGs do Papo (rosto de 32px pra cima, glifo em 16 e 24px) sobre `--background`.
+- O que muda a experiência é opção da pessoa. Configurações › App só aparece quando há como instalar (prompt do Chrome/Edge capturado ao carregar o app em `install-prompt.ts`, ou instrução no iPhone) ou dentro do app instalado, onde fica o contador de não lidas no ícone. A mini janela de voz (Document Picture-in-Picture, `use-voice-mini-window.ts`) só abre pelo botão na chamada e fecha sozinha quando a chamada acaba.
 
 Veja [`CONTRIBUTING.md`](./CONTRIBUTING.md) para comandos e checklist de PR.

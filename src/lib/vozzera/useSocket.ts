@@ -104,7 +104,10 @@ export function useSocket({
           return;
         }
 
-        retryTimer.current = setTimeout(() => void reconnect(), backoffDelay(attempt.current));
+        retryTimer.current = setTimeout(() => {
+          retryTimer.current = null;
+          void reconnect();
+        }, backoffDelay(attempt.current));
 
         attempt.current += 1;
       };
@@ -126,10 +129,26 @@ export function useSocket({
       connect();
     };
 
+    const reconnectNow = () => {
+      if (!retryTimer.current) return;
+      clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+      void reconnect();
+    };
+
+    const reconnectWhenVisible = () => {
+      if (document.visibilityState === "visible") reconnectNow();
+    };
+
+    window.addEventListener("online", reconnectNow);
+    document.addEventListener("visibilitychange", reconnectWhenVisible);
+
     connect();
 
     return () => {
       disposed = true;
+      window.removeEventListener("online", reconnectNow);
+      document.removeEventListener("visibilitychange", reconnectWhenVisible);
 
       if (retryTimer.current) {
         clearTimeout(retryTimer.current);
