@@ -765,6 +765,7 @@ function Index() {
         open={shouldShowChangelog}
         items={changelog?.items ?? []}
         version={changelog?.version ?? ""}
+        releasedAt={changelog?.releasedAt}
         onDismiss={dismissChangelog}
       />
     </AppViewport>

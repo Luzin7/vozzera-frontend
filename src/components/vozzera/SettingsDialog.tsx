@@ -1,5 +1,5 @@
 import { Label } from "@/components/ui/label";
-import { AppWindow, LogOut, Mic2, User } from "lucide-react";
+import { AppWindow, LogOut, Mic2, Sparkles, User } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,11 @@ import { appSettingsAvailable } from "@/lib/vozzera/pwa";
 import type { InstallOption } from "@/lib/vozzera/pwa";
 import type { MicDevice } from "@/lib/vozzera/voice";
 import { AppSettings } from "./AppSettings";
+import { ChangelogSettings } from "./ChangelogSettings";
 import { EmailChangeForm } from "./EmailChangeForm";
 import { MicSettings } from "./MicSettings";
 
-type Section = "microphone" | "app" | "account";
+type Section = "microphone" | "app" | "whats-new" | "account";
 
 type Props = {
   open: boolean;
@@ -45,6 +46,7 @@ type Props = {
 const sections: { id: Section; label: string; icon: typeof Mic2 }[] = [
   { id: "microphone", label: "Microfone e voz", icon: Mic2 },
   { id: "app", label: "App", icon: AppWindow },
+  { id: "whats-new", label: "Novidades", icon: Sparkles },
   { id: "account", label: "Conta", icon: User },
 ];
 
@@ -145,6 +147,15 @@ export function SettingsDialog({
                 onInstall={onInstall}
                 onToggleAppBadge={onToggleAppBadge}
               />
+            </>
+          )}
+          {section === "whats-new" && (
+            <>
+              <DialogTitle className="mb-4 text-base">Novidades</DialogTitle>
+              <DialogDescription className="sr-only">
+                Principais atualizações que chegaram ao Vozzera
+              </DialogDescription>
+              <ChangelogSettings />
             </>
           )}
           {section === "account" && (

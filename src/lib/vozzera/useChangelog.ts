@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  ChangelogLoadError,
   changelogSchema,
   readSeenRelease,
   shouldShowChangelog,
@@ -16,14 +17,26 @@ function changelogStorage(): Storage | null {
   return window.localStorage;
 }
 
-async function fetchChangelog(): Promise<Changelog | null> {
+async function fetchChangelog(): Promise<Changelog> {
   const res = await fetch(CHANGELOG_PATH);
 
-  if (!res.ok) return null;
+  if (!res.ok) throw new ChangelogLoadError();
 
   const parsed = changelogSchema.safeParse(await res.json().catch(() => null));
 
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) throw new ChangelogLoadError();
+
+  return parsed.data;
+}
+
+export function useChangelogQuery(enabled: boolean) {
+  return useQuery({
+    queryKey: ["changelog"],
+    queryFn: fetchChangelog,
+    staleTime: Infinity,
+    retry: false,
+    enabled,
+  });
 }
 
 export function useChangelog(enabled: boolean) {
@@ -33,13 +46,7 @@ export function useChangelog(enabled: boolean) {
     setSeen(readSeenRelease(changelogStorage()));
   }, []);
 
-  const query = useQuery({
-    queryKey: ["changelog"],
-    queryFn: fetchChangelog,
-    staleTime: Infinity,
-    retry: false,
-    enabled,
-  });
+  const query = useChangelogQuery(enabled);
 
   const dismiss = useCallback(() => {
     const changelog = query.data ?? null;

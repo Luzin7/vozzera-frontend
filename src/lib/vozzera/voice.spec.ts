@@ -37,7 +37,6 @@ import {
   screenShareProfileFor,
   screenSharePublishOptions,
   canShareScreen,
-  shouldReleaseMicrophoneInBackground,
   shouldShowLocalVoiceActivity,
   shouldHandlePushToTalk,
   pushToTalkLabelFor,
@@ -199,16 +198,6 @@ describe("microphonePublishOptions", () => {
       dtx: true,
       forceStereo: false,
     });
-  });
-});
-
-describe("shouldReleaseMicrophoneInBackground", () => {
-  it("releases the microphone when the page goes to the background", () => {
-    expect(shouldReleaseMicrophoneInBackground(true)).toBe(true);
-  });
-
-  it("keeps the microphone while the page is visible", () => {
-    expect(shouldReleaseMicrophoneInBackground(false)).toBe(false);
   });
 });
 

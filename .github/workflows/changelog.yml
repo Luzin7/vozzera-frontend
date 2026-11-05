@@ -4,13 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versão da release (ex.: v1.1.0). Vazio = bump automático de patch."
+        description: "Versão da release (ex.: v1.1.0). Vazio = automático: feat sobe minor, breaking sobe major, o resto sobe patch."
         required: false
         default: ""
+
+concurrency:
+  group: changelog
+  cancel-in-progress: false
 
 jobs:
   changelog:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     permissions:
       contents: write
@@ -23,14 +28,25 @@ jobs:
           ref: develop
           fetch-depth: 0
 
-      - name: Gerar public/changelog.json
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Atualizar destaques pendentes
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/changelog.mjs
+
+      - name: Lançar versão (falha se faltar summary)
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            node scripts/changelog.mjs --version "${{ inputs.version }}"
+          if [ -n "$RELEASE_VERSION" ]; then
+            node scripts/changelog.mjs --release --version "$RELEASE_VERSION"
           else
-            node scripts/changelog.mjs
+            node scripts/changelog.mjs --release
           fi
 
       - name: Commitar no develop
@@ -46,4 +62,5 @@ jobs:
           fi
 
           git commit -m "chore(changelog): atualizar public/changelog.json"
+          git pull --rebase origin develop
           git push origin develop
