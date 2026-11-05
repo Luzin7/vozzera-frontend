@@ -1,5 +1,9 @@
 import type { ChatMessage, OutboundEvent, Room, VoiceParticipant } from "@/lib/vozzera/types";
-import { MAX_FRAME_BYTES, outboundFrameSchema } from "@/lib/vozzera/ws-schema";
+import {
+  KNOWN_OUTBOUND_TYPES,
+  MAX_FRAME_BYTES,
+  outboundFrameSchema,
+} from "@/lib/vozzera/ws-schema";
 import { format, isSameDay, isValid, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -288,7 +292,22 @@ export function removeTypingUser(users: TypingUsers, roomId: string, userId: str
   return { ...users, [roomId]: nextRoomUsers };
 }
 
-export function parseFrame(raw: MessageEvent): OutboundEvent {
+const loggedUnknownTypes = new Set<string>();
+
+function unknownFrameType(json: unknown): string | null {
+  if (typeof json !== "object" || json === null) return null;
+  const { v, type } = json as { v?: unknown; type?: unknown };
+  if (v !== 1 || typeof type !== "string") return null;
+  return KNOWN_OUTBOUND_TYPES.has(type) ? null : type;
+}
+
+function logUnknownTypeOnce(type: string): void {
+  if (loggedUnknownTypes.has(type)) return;
+  loggedUnknownTypes.add(type);
+  console.debug(`Evento WebSocket ignorado: ${type}`);
+}
+
+export function parseFrame(raw: MessageEvent): OutboundEvent | null {
   const data = raw.data;
 
   if (typeof data !== "string") {
@@ -300,7 +319,13 @@ export function parseFrame(raw: MessageEvent): OutboundEvent {
   }
 
   try {
-    return outboundFrameSchema.parse(JSON.parse(data));
+    const json: unknown = JSON.parse(data);
+    const unknownType = unknownFrameType(json);
+    if (unknownType !== null) {
+      logUnknownTypeOnce(unknownType);
+      return null;
+    }
+    return outboundFrameSchema.parse(json);
   } catch {
     throw new WebSocketProtocolError("O servidor enviou um evento WebSocket incompatível.");
   }
