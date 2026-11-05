@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyMicDeviceChoice,
   applyVideoPlaybackDelay,
   applyVolumeWithElementMuted,
   audioCaptureOptions,
@@ -21,6 +22,7 @@ import {
   readParticipantVolumes,
   readPushToTalkBinding,
   readPushToTalkEnabled,
+  roomAudioCaptureDefaults,
   microphonePublishOptions,
   participantConnectionWarningFor,
   screenShareAdaptiveStreamSettings,
@@ -174,6 +176,11 @@ describe("audioCaptureOptions", () => {
     });
   });
 
+  it("requests voice isolation off with and without a device", () => {
+    expect(audioCaptureOptions(null).voiceIsolation).toBe(false);
+    expect(audioCaptureOptions("mic-1").voiceIsolation).toBe(false);
+  });
+
   it("adds the device id only when selected", () => {
     expect(audioCaptureOptions("mic-1").deviceId).toBe("mic-1");
     expect(audioCaptureOptions(null).deviceId).toBeUndefined();
@@ -282,6 +289,77 @@ describe("readMicDeviceId / writeMicDeviceId", () => {
 
     writeMicDeviceId(storage, "mic-9");
     expect(readMicDeviceId(storage)).toBe("mic-9");
+  });
+});
+
+describe("roomAudioCaptureDefaults", () => {
+  it("matches the capture options without a device", () => {
+    expect(roomAudioCaptureDefaults()).toEqual({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      voiceIsolation: false,
+    });
+  });
+});
+
+describe("applyMicDeviceChoice", () => {
+  const createStorage = () => {
+    const store = new Map<string, string>();
+    return {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    } as Storage;
+  };
+
+  it("selects and persists the device without a room", async () => {
+    const storage = createStorage();
+    const selected: string[] = [];
+
+    await applyMicDeviceChoice({
+      deviceId: "mic-2",
+      room: null,
+      storage,
+      onSelected: (deviceId) => selected.push(deviceId),
+    });
+
+    expect(selected).toEqual(["mic-2"]);
+    expect(readMicDeviceId(storage)).toBe("mic-2");
+  });
+
+  it("keeps selection and storage untouched when the switch rejects", async () => {
+    const storage = createStorage();
+    const onSelected = vi.fn();
+    const switchActiveDevice = vi.fn().mockRejectedValue(new Error("switch failed"));
+
+    await expect(
+      applyMicDeviceChoice({
+        deviceId: "mic-4",
+        room: { switchActiveDevice },
+        storage,
+        onSelected,
+      }),
+    ).rejects.toThrow("switch failed");
+
+    expect(onSelected).not.toHaveBeenCalled();
+    expect(readMicDeviceId(storage)).toBeNull();
+  });
+
+  it("switches the active device when a room exists", async () => {
+    const storage = createStorage();
+    const switchActiveDevice = vi.fn().mockResolvedValue(true);
+
+    await applyMicDeviceChoice({
+      deviceId: "mic-3",
+      room: { switchActiveDevice },
+      storage,
+      onSelected: () => undefined,
+    });
+
+    expect(switchActiveDevice).toHaveBeenCalledWith("audioinput", "mic-3");
+    expect(readMicDeviceId(storage)).toBe("mic-3");
   });
 });
 

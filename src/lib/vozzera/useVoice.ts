@@ -20,6 +20,7 @@ import { useKrispFilter } from "./use-krisp-filter";
 import { useLocalVoiceActivity } from "./use-local-voice-activity";
 import type { VoiceTokenResponse } from "./types";
 import {
+  applyMicDeviceChoice,
   applyVideoPlaybackDelay,
   applyVolumeWithElementMuted,
   audioCaptureOptions,
@@ -33,10 +34,10 @@ import {
   readMicDeviceId,
   readPushToTalkBinding,
   readPushToTalkEnabled,
+  roomAudioCaptureDefaults,
   screenShareAdaptiveStreamSettings,
   shouldHandlePushToTalk,
   VIDEO_PLAYBACK_DELAY_MS,
-  writeMicDeviceId,
   writePushToTalkBinding,
   writePushToTalkEnabled,
 } from "./voice";
@@ -604,6 +605,7 @@ export function useVoice() {
           adaptiveStream: screenShareAdaptiveStreamSettings(),
           dynacast: true,
           webAudioMix: { audioContext: voiceAudioContext },
+          audioCaptureDefaults: roomAudioCaptureDefaults(),
           publishDefaults: {
             videoCodec: "h264",
             simulcast: false,
@@ -740,13 +742,13 @@ export function useVoice() {
   );
 
   const setMicDevice = useCallback(async (deviceId: string) => {
-    const room = roomRef.current;
-    if (!room) return;
-
     try {
-      await room.switchActiveDevice("audioinput", deviceId);
-      setSelectedMic(deviceId);
-      writeMicDeviceId(typeof localStorage === "undefined" ? null : localStorage, deviceId);
+      await applyMicDeviceChoice({
+        deviceId,
+        room: roomRef.current,
+        storage: typeof localStorage === "undefined" ? null : localStorage,
+        onSelected: setSelectedMic,
+      });
     } catch {
       setError("Não consegui trocar o microfone.");
     }
