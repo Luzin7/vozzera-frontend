@@ -1,11 +1,12 @@
 import { toast } from "sonner";
 
 import { updateMessage } from "@/lib/vozzera/api";
-import { dateGroupLabelFor, isNearBottom } from "@/lib/vozzera/chat";
+import { anchoredScrollTop, dateGroupLabelFor, isNearBottom, isPrepend } from "@/lib/vozzera/chat";
 import { lastOwnMessage, shouldGroupMessages } from "@/lib/vozzera/message-display";
 import { useAuth } from "@/lib/vozzera/useAuth";
-import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import type { OlderHistory } from "@/lib/vozzera/chat-history";
 import type { ChatMessage } from "@/lib/vozzera/types";
 import {
   AlertDialog,
@@ -21,6 +22,13 @@ import { Button } from "@/components/ui/button";
 import { MessageItem } from "@/components/vozzera/MessageItem";
 import { Skeleton } from "@/components/ui/skeleton";
 
+function olderStatusText(history: OlderHistory): string {
+  if (history.failed) return "Não consegui carregar as mensagens antigas.";
+  if (history.loading) return "Carregando mensagens antigas…";
+  if (history.nextBefore === null) return "Início da conversa";
+  return "";
+}
+
 export const MessageList = memo(function MessageList({
   messages,
   loading,
@@ -35,6 +43,8 @@ export const MessageList = memo(function MessageList({
   historyFailed = false,
   onRetryHistory,
   editLastRequest = 0,
+  olderHistory,
+  onLoadOlder,
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
@@ -49,6 +59,8 @@ export const MessageList = memo(function MessageList({
   historyFailed?: boolean;
   onRetryHistory?: (roomId: string) => void;
   editLastRequest?: number;
+  olderHistory?: OlderHistory | undefined;
+  onLoadOlder?: ((roomId: string) => void) | undefined;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -56,6 +68,13 @@ export const MessageList = memo(function MessageList({
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
+  const [olderEnabled, setOlderEnabled] = useState(false);
+  const [olderSentinel, setOlderSentinel] = useState<HTMLLIElement | null>(null);
+  const listSnapshotRef = useRef<{
+    firstId: string | undefined;
+    lastId: string | undefined;
+    height: number;
+  } | null>(null);
   const unreadMarkerRef = useRef<HTMLLIElement>(null);
   const stuckToBottomRef = useRef(true);
   const editContentRef = useRef(editContent);
@@ -115,9 +134,47 @@ export const MessageList = memo(function MessageList({
   }, [scrollContainer]);
 
   useEffect(() => {
+    setOlderEnabled(false);
     if (loading) return;
     scrollToBottom();
+    setOlderEnabled(true);
   }, [loading, roomId, scrollToBottom]);
+
+  const firstMessageId = messages[0]?.id;
+  const lastMessageId = messages[messages.length - 1]?.id;
+
+  useLayoutEffect(() => {
+    const snapshot = listSnapshotRef.current;
+    const ends = { firstId: firstMessageId, lastId: lastMessageId };
+    if (scrollContainer && snapshot && isPrepend(snapshot, ends)) {
+      scrollContainer.scrollTop = anchoredScrollTop({
+        scrollTop: scrollContainer.scrollTop,
+        previousHeight: snapshot.height,
+        height: scrollContainer.scrollHeight,
+      });
+    }
+    listSnapshotRef.current = scrollContainer
+      ? { ...ends, height: scrollContainer.scrollHeight }
+      : null;
+  }, [firstMessageId, lastMessageId, scrollContainer]);
+
+  const hasMoreOlder = olderHistory !== undefined && olderHistory.nextBefore !== null;
+  const olderIdle = hasMoreOlder && !olderHistory.loading && !olderHistory.failed;
+
+  useEffect(() => {
+    if (!scrollContainer || !olderSentinel || !olderEnabled || !olderIdle || !onLoadOlder) return;
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) onLoadOlder(roomId);
+      },
+      { root: scrollContainer, rootMargin: "200px 0px 0px 0px" },
+    );
+    observer.observe(olderSentinel);
+
+    return () => observer.disconnect();
+  }, [olderEnabled, olderIdle, olderSentinel, onLoadOlder, roomId, scrollContainer]);
 
   const latestMessage = messages[messages.length - 1];
   const latestMessageId = latestMessage?.id;
@@ -290,9 +347,27 @@ export const MessageList = memo(function MessageList({
       )}
       <div
         ref={setScrollContainer}
-        className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
+        className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 [overflow-anchor:none] sm:px-4"
       >
         <ol className="space-y-0.5">
+          {olderHistory && (
+            <li
+              ref={setOlderSentinel}
+              className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"
+            >
+              <span role="status">{olderStatusText(olderHistory)}</span>
+              {olderHistory.failed && (
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => onLoadOlder?.(roomId)}
+                >
+                  Tentar de novo
+                </Button>
+              )}
+            </li>
+          )}
           {messages.map((message, index) => {
             const previous = messages[index - 1];
             const dateLabel = dateGroupLabelFor(message.createdAt);

@@ -34,7 +34,7 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
-export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T> {
+async function request(path: string, opts: RequestInit): Promise<Response> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
     ...opts,
@@ -48,6 +48,12 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
     const text = await res.text().catch(() => "");
     throw new ApiError(res.status, text.trim());
   }
+
+  return res;
+}
+
+export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T> {
+  const res = await request(path, opts);
 
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -114,10 +120,28 @@ export const deleteRoom = (roomId: string) =>
 
 const HISTORY_FETCH_TIMEOUT_MS = 10_000;
 
-export const listMessages = (roomId: string, limit = 50) =>
-  api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`, {
+export type MessagesPage = { messages: HistoryMessage[]; nextBefore: string | null };
+
+export function parseNextBefore(headers: Headers): string | null {
+  const cursor = headers.get("X-Next-Before")?.trim();
+  return cursor || null;
+}
+
+export async function listMessages(
+  roomId: string,
+  limit = 50,
+  before?: string,
+): Promise<MessagesPage> {
+  const cursor = before ? `&before=${encodeURIComponent(before)}` : "";
+  const res = await request(`/api/rooms/${roomId}/messages?limit=${limit}${cursor}`, {
     signal: AbortSignal.timeout(HISTORY_FETCH_TIMEOUT_MS),
   });
+
+  return {
+    messages: (await res.json()) as HistoryMessage[],
+    nextBefore: parseNextBefore(res.headers),
+  };
+}
 
 export const updateMessage = (roomId: string, messageId: string, content: string) =>
   api<HistoryMessage>(`/api/rooms/${roomId}/messages/${messageId}`, {

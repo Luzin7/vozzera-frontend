@@ -9,6 +9,7 @@ import {
   isUnauthorized,
   listMessages,
   listRooms,
+  parseNextBefore,
   probeCurrentUser,
   register,
   requestPasswordReset,
@@ -319,6 +320,12 @@ describe("probeCurrentUser", () => {
   });
 });
 
+describe("parseNextBefore", () => {
+  it("treats a blank header as no cursor", () => {
+    expect(parseNextBefore(new Headers({ "X-Next-Before": "  " }))).toBeNull();
+  });
+});
+
 describe("listMessages", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -331,6 +338,39 @@ describe("listMessages", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/rooms/r1/messages?limit=50"),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("returns messages and the next cursor from the header", async () => {
+    const body = JSON.stringify([{ id: "m1" }]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200, headers: { "X-Next-Before": "abc==" } })),
+    );
+
+    const page = await listMessages("r1", 50);
+
+    expect(page).toEqual({ messages: [{ id: "m1" }], nextBefore: "abc==" });
+  });
+
+  it("returns a null cursor when there is no older history", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("[]", { status: 200 })),
+    );
+
+    expect((await listMessages("r1", 50)).nextBefore).toBeNull();
+  });
+
+  it("sends the cursor url-encoded as before", async () => {
+    const fetchMock = vi.fn(async () => new Response("[]", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listMessages("r1", 50, "a+b/c=");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/rooms/r1/messages?limit=50&before=a%2Bb%2Fc%3D"),
+      expect.anything(),
     );
   });
 });
