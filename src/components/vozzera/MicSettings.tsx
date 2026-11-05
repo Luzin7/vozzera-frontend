@@ -26,6 +26,7 @@ type Props = {
   onToggleSelfMonitor: (enabled: boolean) => void;
   onTogglePushToTalk: (enabled: boolean) => void;
   onPushToTalkKeyChange: (code: string, label: string) => void;
+  onPushToTalkCaptureChange: (capturing: boolean) => void;
 };
 
 export function MicSettings({
@@ -41,9 +42,15 @@ export function MicSettings({
   onToggleSelfMonitor,
   onTogglePushToTalk,
   onPushToTalkKeyChange,
+  onPushToTalkCaptureChange,
 }: Readonly<Props>) {
   const hasSelectedDevice = micDevices.some((device) => device.deviceId === selectedDeviceId);
   const [capturingPushToTalkKey, setCapturingPushToTalkKey] = useState(false);
+
+  useEffect(() => {
+    onPushToTalkCaptureChange(capturingPushToTalkKey);
+    return () => onPushToTalkCaptureChange(false);
+  }, [capturingPushToTalkKey, onPushToTalkCaptureChange]);
 
   useEffect(() => {
     if (!capturingPushToTalkKey) return;
