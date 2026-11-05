@@ -29,6 +29,7 @@ import type { Room } from "@/lib/vozzera/types";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
 import type { ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
+import type { CallParticipant } from "@/lib/vozzera/call-participants";
 import { isParticipantLocallyInaudible, isParticipantMuted } from "@/lib/vozzera/voice";
 
 type Props = {
@@ -50,7 +51,7 @@ type Props = {
   status: SocketStatus;
   voiceStatus: VoiceStatus;
   voiceRoomId: string | null;
-  voiceParticipants: string[];
+  voiceParticipants: CallParticipant[];
   voicePresence: VoicePresence;
   micEnabled: boolean;
   onToggleMic: () => void;
@@ -67,7 +68,7 @@ type Props = {
   screenShares: ScreenShare[];
   mutedParticipants: Record<string, boolean>;
   deafenedParticipants: Record<string, boolean>;
-  speakingNames: string[];
+  speakingIdentities: string[];
   deafen: boolean;
   onToggleDeafen: () => void;
 };
@@ -171,7 +172,7 @@ export const RoomSidebar = memo(function RoomSidebar({
   screenShares,
   mutedParticipants,
   deafenedParticipants,
-  speakingNames,
+  speakingIdentities,
   deafen,
   onToggleDeafen,
 }: Readonly<Props>) {
@@ -362,25 +363,24 @@ export const RoomSidebar = memo(function RoomSidebar({
 
                 {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 && (
                   <ul className="mb-1 ml-8 mt-1.5 space-y-2">
-                    {voiceParticipants.map((name) => {
-                      const isSpeaking = speakingNames.includes(name);
+                    {voiceParticipants.map(({ identity, name, isLocal }) => {
+                      const isSpeaking = speakingIdentities.includes(identity);
                       const isMuted = isParticipantMuted({
-                        name,
-                        username,
+                        identity,
+                        isLocal,
                         micEnabled,
                         mutedParticipants,
                       });
-                      const isStreaming =
-                        name === username
-                          ? screenShareEnabled
-                          : screenShares.some((share) => share.name === name);
-                      const isLocalMuted = name !== username && volumes[name] === 0;
+                      const isStreaming = isLocal
+                        ? screenShareEnabled
+                        : screenShares.some((share) => share.identity === identity);
+                      const isLocalMuted = !isLocal && volumes[identity] === 0;
                       const isLocallyInaudible = isParticipantLocallyInaudible(
-                        name === username,
-                        volumes[name],
+                        isLocal,
+                        volumes[identity],
                       );
                       const isScreenShareLocallyMuted =
-                        name !== username && screenShareVolumes[name] === 0;
+                        !isLocal && screenShareVolumes[identity] === 0;
 
                       const row = (
                         <span className="flex items-center gap-1.5 truncate">
@@ -395,12 +395,10 @@ export const RoomSidebar = memo(function RoomSidebar({
                           </span>
                           <span className="truncate">{name}</span>
                           {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
-                          {((name === username && deafen) || deafenedParticipants[name]) && (
+                          {((isLocal && deafen) || deafenedParticipants[identity]) && (
                             <HeadphoneOff
                               aria-label={
-                                name === username
-                                  ? "Você está no mudo total"
-                                  : `${name} está no mudo total`
+                                isLocal ? "Você está no mudo total" : `${name} está no mudo total`
                               }
                               className="h-3 w-3 shrink-0 text-muted-foreground"
                             />
@@ -419,26 +417,26 @@ export const RoomSidebar = memo(function RoomSidebar({
                       );
 
                       return (
-                        <li key={name} className="text-xs text-muted-foreground">
-                          {name === username ? (
+                        <li key={identity} className="text-xs text-muted-foreground">
+                          {isLocal ? (
                             row
                           ) : (
                             <ParticipantMenu
                               name={name}
-                              volume={volumes[name] ?? 1}
-                              screenShareVolume={screenShareVolumes[name] ?? 1}
+                              volume={volumes[identity] ?? 1}
+                              screenShareVolume={screenShareVolumes[identity] ?? 1}
                               locallyMuted={isLocalMuted}
                               screenShareLocallyMuted={isScreenShareLocallyMuted}
                               isMuted={isMuted}
                               isStreaming={isStreaming}
                               isSpeaking={isSpeaking}
-                              onSetVolume={(volume) => onSetVolume(name, volume)}
+                              onSetVolume={(volume) => onSetVolume(identity, volume)}
                               onSetScreenShareVolume={(volume) =>
-                                onSetScreenShareVolume(name, volume)
+                                onSetScreenShareVolume(identity, volume)
                               }
-                              onToggleLocalMute={() => onToggleLocalMute(name)}
+                              onToggleLocalMute={() => onToggleLocalMute(identity)}
                               onToggleLocalScreenShareMute={() =>
-                                onToggleLocalScreenShareMute(name)
+                                onToggleLocalScreenShareMute(identity)
                               }
                             >
                               {row}

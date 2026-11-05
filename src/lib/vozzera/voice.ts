@@ -138,7 +138,10 @@ export function shouldShowLocalVoiceActivity(
   return silenceDurationMs < VOICE_RELEASE_DELAY_MS;
 }
 
-export function mergeActiveSpeakerNames(currentNames: string[], activeNames: string[]): string[] {
+export function mergeActiveSpeakerIdentities(
+  currentNames: string[],
+  activeNames: string[],
+): string[] {
   return Array.from(new Set([...currentNames, ...activeNames]));
 }
 
@@ -387,20 +390,20 @@ export function effectiveParticipantVolume(savedVolume: number | undefined): num
 }
 
 type ParticipantMuteContext = {
-  name: string;
-  username: string | null;
+  identity: string;
+  isLocal: boolean;
   micEnabled: boolean;
   mutedParticipants: Record<string, boolean>;
 };
 
 export function isParticipantMuted({
-  name,
-  username,
+  identity,
+  isLocal,
   micEnabled,
   mutedParticipants,
 }: ParticipantMuteContext): boolean {
-  if (name === username) return !micEnabled;
-  return mutedParticipants[name] === true;
+  if (isLocal) return !micEnabled;
+  return mutedParticipants[identity] === true;
 }
 
 export function isParticipantLocallyInaudible(

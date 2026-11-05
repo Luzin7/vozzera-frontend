@@ -2,16 +2,16 @@ import { HeadphoneOff, Headphones, Mic, MicOff, PhoneOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/vozzera/avatar";
+import type { CallParticipant } from "@/lib/vozzera/call-participants";
 import { isParticipantMuted } from "@/lib/vozzera/voice";
 
 type Props = {
   roomName: string;
-  participants: string[];
-  username: string | null;
+  participants: CallParticipant[];
   micEnabled: boolean;
   deafen: boolean;
   mutedParticipants: Record<string, boolean>;
-  speakingNames: string[];
+  speakingIdentities: string[];
   onToggleMic: () => void;
   onToggleDeafen: () => void;
   onLeave: () => void;
@@ -20,11 +20,10 @@ type Props = {
 export function VoiceMiniWindow({
   roomName,
   participants,
-  username,
   micEnabled,
   deafen,
   mutedParticipants,
-  speakingNames,
+  speakingIdentities,
   onToggleMic,
   onToggleDeafen,
   onLeave,
@@ -36,14 +35,19 @@ export function VoiceMiniWindow({
       </header>
 
       <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-        {participants.map((name) => {
-          const isMuted = isParticipantMuted({ name, username, micEnabled, mutedParticipants });
+        {participants.map(({ identity, name, isLocal }) => {
+          const isMuted = isParticipantMuted({
+            identity,
+            isLocal,
+            micEnabled,
+            mutedParticipants,
+          });
 
           return (
-            <li key={name} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
+            <li key={identity} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
               <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs ring-2 ${
-                  speakingNames.includes(name) ? "ring-primary" : "ring-transparent"
+                  speakingIdentities.includes(identity) ? "ring-primary" : "ring-transparent"
                 }`}
               >
                 {initials(name)}
