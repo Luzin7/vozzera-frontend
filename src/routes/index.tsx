@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, BellOff, Menu, Settings, Volume2 } from "lucide-react";
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { AppViewport } from "@/components/vozzera/AppViewport";
@@ -16,19 +16,23 @@ import { ServerUnavailableScreen } from "@/components/vozzera/ServerUnavailableS
 import { VoiceChatDock } from "@/components/vozzera/VoiceChatDock";
 import { VoiceMiniWindow } from "@/components/vozzera/VoiceMiniWindow";
 import { WhatsNewDialog } from "@/components/vozzera/WhatsNewDialog";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnline } from "@/hooks/useOnline";
 import { totalUnread, typingIndicatorText } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
+import { callTilesForView } from "@/lib/vozzera/away";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
 import { useEditLastRequest } from "@/lib/vozzera/use-edit-last-request";
+import { useInactivity } from "@/lib/vozzera/use-inactivity";
 import { useAppBadge } from "@/lib/vozzera/use-app-badge";
 import { useInstallPrompt } from "@/lib/vozzera/use-install-prompt";
 import { useVoiceMiniWindow } from "@/lib/vozzera/use-voice-mini-window";
 import { useChangelog } from "@/lib/vozzera/useChangelog";
 import { useChat } from "@/lib/vozzera/useChat";
+import type { AwayEndedEvent } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
 
 const VoiceCallView = lazy(() =>
@@ -61,6 +65,11 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const awayEndedRef = useRef<(event: AwayEndedEvent) => void>(() => undefined);
+  const handleAwayEndedEvent = useCallback(
+    (event: AwayEndedEvent) => awayEndedRef.current(event),
+    [],
+  );
   const {
     username,
     email,
@@ -82,6 +91,12 @@ function Index() {
     unreadMarker,
     typingUsers,
     voicePresence,
+    awayPresence,
+    awayPresenceRef,
+    voicePresenceRef,
+    setAwayIntent,
+    dropAwayIntent,
+    resendAwayIntent,
     onlineUsers,
     socketStatus,
     openRoom,
@@ -101,7 +116,7 @@ function Index() {
     sendMessage,
     setTyping,
     dismissUnreadMarker,
-  } = useChat();
+  } = useChat({ onAwayEnded: handleAwayEndedEvent });
   const {
     changelog,
     shouldShow: shouldShowChangelog,
@@ -121,6 +136,7 @@ function Index() {
   const {
     screenShareEnabled,
     activeRoomId: voiceActiveRoomId,
+    returnToRoom,
     connect,
     disconnect,
     setScreenShare,
@@ -129,6 +145,8 @@ function Index() {
     toggleDeafen,
     toggleMic,
   } = voice;
+  const voiceAwayRoomId = voice.awayInfo?.roomId ?? null;
+  const voiceExitNoticeRoomId = voice.exitNotice?.roomId ?? null;
 
   const handleDeleteMessage = useCallback(
     (message: ChatMessage) => void deleteMessage(message),
@@ -170,9 +188,10 @@ function Index() {
       setVoiceChatOpen(false);
       setSettingsRoomId(null);
       if (voiceActiveRoomId === room.id) return;
+      if (voiceAwayRoomId === room.id || voiceExitNoticeRoomId === room.id) return;
       void connect(room.id);
     },
-    [dismissBanner, voiceActiveRoomId, connect],
+    [dismissBanner, voiceActiveRoomId, voiceAwayRoomId, voiceExitNoticeRoomId, connect],
   );
 
   const handleOpenVoiceChat = useCallback(
@@ -232,6 +251,39 @@ function Index() {
     active: voice.status === "connected",
     onError: showBanner,
   });
+  const inactivity = useInactivity({
+    enabled: authed === true,
+    voice,
+    currentUserId,
+    awayPresenceRef,
+    voicePresenceRef,
+    notificationsEnabled,
+    miniWindowContainer: miniWindow.container,
+    setAwayIntent,
+    dropAwayIntent,
+    resendAwayIntent,
+  });
+  awayEndedRef.current = inactivity.handleAwayEnded;
+  const callTileRoomId = voice.activeRoomId ?? voice.awayInfo?.roomId ?? null;
+  const callTiles = useMemo(
+    () =>
+      callTilesForView({
+        status: voice.status,
+        liveKit: voice.participants,
+        presence: callTileRoomId ? (voicePresence[callTileRoomId] ?? []) : [],
+        away: callTileRoomId ? (awayPresence[callTileRoomId] ?? []) : [],
+        own: currentUserId && username ? { userId: currentUserId, username } : null,
+      }),
+    [
+      voice.status,
+      voice.participants,
+      callTileRoomId,
+      voicePresence,
+      awayPresence,
+      currentUserId,
+      username,
+    ],
+  );
   const miniWindowRoomName = rooms.find((room) => room.id === voiceActiveRoomId)?.name ?? "";
 
   const handleLogout = useCallback(() => {
@@ -277,6 +329,14 @@ function Index() {
   }, [rooms, voiceActiveRoomId, disconnect]);
 
   useEffect(() => {
+    const parkedRoomId = voiceAwayRoomId ?? voiceExitNoticeRoomId;
+    if (!parkedRoomId || rooms.some((room) => room.id === parkedRoomId)) return;
+
+    setVisibleVoiceRoomId(null);
+    void disconnect();
+  }, [rooms, voiceAwayRoomId, voiceExitNoticeRoomId, disconnect]);
+
+  useEffect(() => {
     if (voice.status !== "idle") return;
     if (!activeRoom?.has_voice) return;
 
@@ -289,8 +349,12 @@ function Index() {
   const typingText = activeRoom
     ? typingIndicatorText(Object.values(typingUsers[activeRoom.id] ?? {}))
     : null;
-  const visibleVoiceRoom =
-    voice.status === "idle" ? null : (rooms.find((room) => room.id === visibleVoiceRoomId) ?? null);
+  const isVoiceViewActive =
+    voice.status !== "idle" ||
+    (visibleVoiceRoomId !== null && voiceExitNoticeRoomId === visibleVoiceRoomId);
+  const visibleVoiceRoom = isVoiceViewActive
+    ? (rooms.find((room) => room.id === visibleVoiceRoomId) ?? null)
+    : null;
   const settingsRoom = settingsRoomId
     ? (rooms.find((room) => room.id === settingsRoomId) ?? null)
     : null;
@@ -328,6 +392,7 @@ function Index() {
     voiceRoomId: voice.activeRoomId,
     voiceParticipants: voice.participants,
     voicePresence,
+    awayPresence,
     micEnabled: voice.micEnabled,
     onToggleMic: handleToggleMic,
     onLeaveVoice: handleLeaveVoice,
@@ -393,6 +458,17 @@ function Index() {
 
   return (
     <AppViewport>
+      {inactivity.warning && (
+        <div
+          role="alert"
+          className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 border-b border-border bg-muted px-4 py-2 text-sm text-foreground"
+        >
+          <span>{inactivity.warning.text}</span>
+          <Button size="sm" onClick={inactivity.continueHere}>
+            Continuar aqui
+          </Button>
+        </div>
+      )}
       {isMobile ? (
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetContent
@@ -516,7 +592,15 @@ function Index() {
                 roomName={visibleVoiceRoom.name}
                 status={voice.status}
                 connectionState={voice.connectionState}
-                participants={voice.participants}
+                tiles={callTiles}
+                awayReason={
+                  voiceAwayRoomId === visibleVoiceRoom.id ? (voice.awayInfo?.reason ?? null) : null
+                }
+                exitNoticeReason={
+                  voiceExitNoticeRoomId === visibleVoiceRoom.id
+                    ? (voice.exitNotice?.reason ?? null)
+                    : null
+                }
                 micEnabled={voice.micEnabled}
                 deafen={voice.deafen}
                 volumes={voice.volumes}
@@ -540,6 +624,7 @@ function Index() {
                 onReduceLocalQuality={reduceScreenQuality}
                 onToggleMiniWindow={miniWindow.toggle}
                 onLeave={handleLeaveVoice}
+                onReturn={() => void returnToRoom()}
               />
             </Suspense>
           )
@@ -664,7 +749,7 @@ function Index() {
         createPortal(
           <VoiceMiniWindow
             roomName={miniWindowRoomName}
-            participants={voice.participants}
+            tiles={callTiles}
             micEnabled={voice.micEnabled}
             deafen={voice.deafen}
             mutedParticipants={voice.mutedParticipants}

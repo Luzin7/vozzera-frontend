@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
+import type { AwayPresence } from "@/lib/vozzera/away";
 import { VoicePresenceList } from "@/components/vozzera/VoicePresenceList";
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/vozzera/avatar";
@@ -53,6 +54,7 @@ type Props = {
   voiceRoomId: string | null;
   voiceParticipants: CallParticipant[];
   voicePresence: VoicePresence;
+  awayPresence: AwayPresence;
   micEnabled: boolean;
   onToggleMic: () => void;
   onLeaveVoice: () => void;
@@ -157,6 +159,7 @@ export const RoomSidebar = memo(function RoomSidebar({
   voiceRoomId,
   voiceParticipants,
   voicePresence,
+  awayPresence,
   micEnabled,
   onToggleMic,
   onLeaveVoice,
@@ -313,6 +316,7 @@ export const RoomSidebar = memo(function RoomSidebar({
             const isConnected = room.id === voiceRoomId;
             const isSelected = room.id === visibleVoiceRoomId;
             const onlineParticipants = voicePresence[room.id] ?? [];
+            const awayEntries = awayPresence[room.id] ?? [];
             return (
               <div key={room.id} className="group flex flex-col rounded-md py-0.5">
                 <div className="relative">
@@ -448,10 +452,16 @@ export const RoomSidebar = memo(function RoomSidebar({
                   </ul>
                 )}
 
-                {(!isConnected ||
-                  voiceStatus !== "connected" ||
-                  voiceParticipants.length === 0) && (
-                  <VoicePresenceList participants={onlineParticipants} />
+                {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 ? (
+                  <VoicePresenceList
+                    participants={[]}
+                    away={awayEntries.filter(
+                      (entry) =>
+                        !voiceParticipants.some(({ identity }) => identity === entry.userId),
+                    )}
+                  />
+                ) : (
+                  <VoicePresenceList participants={onlineParticipants} away={awayEntries} />
                 )}
               </div>
             );

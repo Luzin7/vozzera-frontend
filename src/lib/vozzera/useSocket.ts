@@ -8,8 +8,10 @@ import {
   WebSocketProtocolError,
 } from "@/lib/vozzera/chat";
 import type { TypingAction } from "@/lib/vozzera/chat";
+import { createAwayIntentTracker } from "@/lib/vozzera/away-intent";
+import type { AwayCommand, AwayIntent } from "@/lib/vozzera/away-intent";
 import type { InboundEvent, OutboundEvent } from "@/lib/vozzera/types";
-import { inboundFrame } from "@/lib/vozzera/ws-schema";
+import { awayFrame, inboundFrame } from "@/lib/vozzera/ws-schema";
 
 export type SocketStatus = "connecting" | "open" | "closed";
 
@@ -31,6 +33,7 @@ export function useSocket({
   const [status, setStatus] = useState<SocketStatus>("closed");
   const socketRef = useRef<WebSocket | null>(null);
   const desiredRooms = useRef<Set<string>>(new Set());
+  const awayTracker = useRef(createAwayIntentTracker());
   const queue = useRef<InboundEvent[]>([]);
   const attempt = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,6 +46,10 @@ export function useSocket({
   onProtocolErrorRef.current = onProtocolError;
   onSessionExpiredRef.current = onSessionExpired;
   isSessionAliveRef.current = isSessionAlive;
+
+  const sendAwayCommands = useCallback((socket: WebSocket, commands: AwayCommand[]) => {
+    for (const command of commands) socket.send(JSON.stringify(awayFrame(command)));
+  }, []);
 
   const rawSend = useCallback((event: InboundEvent) => {
     const socket = socketRef.current;
@@ -75,6 +82,8 @@ export function useSocket({
           socket.send(JSON.stringify(inboundFrame("room.subscribe", roomId)));
         }
 
+        sendAwayCommands(socket, awayTracker.current.onOpen());
+
         const pending = queue.current;
         queue.current = [];
 
@@ -86,7 +95,11 @@ export function useSocket({
       socket.onmessage = (raw) => {
         try {
           const event = parseFrame(raw);
-          if (event) onEventRef.current(event);
+          if (!event) return;
+          if (event.type === "voice.away.resync") {
+            sendAwayCommands(socket, awayTracker.current.onResync());
+          }
+          onEventRef.current(event);
         } catch (error) {
           if (error instanceof WebSocketProtocolError) {
             onProtocolErrorRef.current?.(error.message);
@@ -160,9 +173,10 @@ export function useSocket({
       socketRef.current = null;
       desiredRoomIds.clear();
       queue.current = [];
+      awayTracker.current = createAwayIntentTracker();
       setStatus("closed");
     };
-  }, [enabled]);
+  }, [enabled, sendAwayCommands]);
 
   const subscribeRoom = useCallback((roomId: string) => {
     if (desiredRooms.current.has(roomId)) return;
@@ -205,8 +219,29 @@ export function useSocket({
     );
   }, []);
 
+  const setAwayIntent = useCallback(
+    (intent: AwayIntent | null) => {
+      const socket = socketRef.current;
+      const open = socket?.readyState === WebSocket.OPEN;
+      const commands = awayTracker.current.set(intent, open);
+      if (open) sendAwayCommands(socket, commands);
+    },
+    [sendAwayCommands],
+  );
+
+  const resendAwayIntent = useCallback(() => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    sendAwayCommands(socket, awayTracker.current.onResync());
+  }, [sendAwayCommands]);
+
+  const dropAwayIntent = useCallback(() => awayTracker.current.drop(), []);
+
   return {
     status,
+    setAwayIntent,
+    dropAwayIntent,
+    resendAwayIntent,
     subscribeRoom,
     unsubscribeRoom,
     resubscribeRoom,

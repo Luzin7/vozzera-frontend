@@ -23,6 +23,9 @@ import {
   voiceDisconnectMessageFor,
   voiceJoinErrorMessageFor,
 } from "./voice-errors";
+import { disconnectRouteFor } from "./away";
+import type { ExitNoticeReason } from "./away";
+import type { AwayReason } from "./away-intent";
 import { useKrispFilter } from "./use-krisp-filter";
 import { useLocalVoiceActivity } from "./use-local-voice-activity";
 import type { VoiceTokenResponse } from "./types";
@@ -35,7 +38,10 @@ import {
   DEAFEN_DATA_TOPIC,
   deafenStateFromPayload,
   deafenStatePayload,
+  initialMicEnabled,
+  localSpoke,
   mergeActiveSpeakerIdentities,
+  micEnabledToRestore,
   microphoneEnabledAfterDeafenEnd,
   microphonePublishOptions,
   readMicDeviceId,
@@ -44,6 +50,7 @@ import {
   roomAudioCaptureDefaults,
   screenShareAdaptiveStreamSettings,
   shouldHandlePushToTalk,
+  visibleSpeakerIdentities,
   VIDEO_PLAYBACK_DELAY_MS,
   writePushToTalkBinding,
   writePushToTalkEnabled,
@@ -53,7 +60,17 @@ import { screenShareErrorMessageFor } from "./screen-share-errors";
 import { canNotify, initialNotificationsEnabled } from "./notifications";
 import { playVoiceActionSound } from "./voice-sounds";
 
-export type VoiceStatus = "idle" | "connecting" | "connected";
+export type VoiceStatus = "idle" | "connecting" | "connected" | "away";
+
+type SessionSnapshot = { roomId: string; micEnabled: boolean; deafen: boolean };
+
+export type AwayInfo = SessionSnapshot & { reason: AwayReason };
+
+export type ExitNotice = SessionSnapshot & { reason: ExitNoticeReason };
+
+export type ConnectOptions = { micEnabled?: boolean; deafen?: boolean };
+
+type UseVoiceOptions = { onReturned?: () => void };
 
 export type ConnectionState = "connected" | "reconnecting";
 
@@ -66,6 +83,16 @@ export type ScreenShareTrack = import("./use-screen-share").ScreenShareTrack;
 export type ScreenShare = ScreenShareType;
 
 const VOICE_RELEASE_DELAY_MS = 40;
+const AWAY_DISCONNECT_TIMEOUT_MS = 5_000;
+
+async function disconnectWithin(room: LiveKitRoom, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+  });
+  await Promise.race([room.disconnect().catch(() => undefined), timeout]);
+  clearTimeout(timer);
+}
 
 type DeafenTransition = {
   enabled: boolean;
@@ -134,15 +161,13 @@ type RoomEventHandlerCtx = {
   >;
   syncLocalMicTrack: (room: LiveKitRoom) => void;
   syncActiveSpeakerIdentities: (identities: string[]) => void;
+  onLocalSpeech: () => void;
+  onDisconnected: (reason: import("livekit-client").DisconnectReason | undefined) => void;
   setConnectionState: (state: ConnectionState) => void;
   setQualities: React.Dispatch<React.SetStateAction<Record<string, ConnectionQuality>>>;
   syncParticipants: (room: LiveKitRoom) => void;
   removeParticipant: (identity: string) => void;
   closeVoiceAudioContext: (ctx?: AudioContext | null) => Promise<void>;
-  resetRoomState: () => void;
-  setStatus: (s: VoiceStatus) => void;
-  setActiveRoomId: (id: string | null) => void;
-  setError: (message: string | null) => void;
 };
 
 function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
@@ -171,10 +196,8 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     syncParticipants,
     removeParticipant,
     closeVoiceAudioContext,
-    resetRoomState,
-    setStatus,
-    setActiveRoomId,
-    setError,
+    onLocalSpeech,
+    onDisconnected,
   } = ctx;
 
   room.on(RoomEvent.TrackPublished, (publication, participant) => {
@@ -258,13 +281,11 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
 
   room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
     const localIdentity = room.localParticipant.identity;
-    const activeIdentities = speakers
-      .map((p) => p.identity)
-      .filter((identity) => {
-        if (identity !== localIdentity) return true;
-        return !screenShareRef.current;
-      });
-    syncActiveSpeakerIdentities(activeIdentities);
+    const rawIdentities = speakers.map((p) => p.identity);
+    if (localSpoke(rawIdentities, localIdentity)) onLocalSpeech();
+    syncActiveSpeakerIdentities(
+      visibleSpeakerIdentities(rawIdentities, localIdentity, screenShareRef.current),
+    );
   });
 
   room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
@@ -344,16 +365,15 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     setConnectionState("connected");
     if (roomRef.current !== room) return;
     roomRef.current = null;
-    setStatus("idle");
-    setActiveRoomId(null);
-    resetRoomState();
-    setError(voiceDisconnectMessageFor(reason));
+    onDisconnected(reason);
   });
 }
 
-export function useVoice() {
+export function useVoice(options?: UseVoiceOptions) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [awayInfo, setAwayInfo] = useState<AwayInfo | null>(null);
+  const [exitNotice, setExitNotice] = useState<ExitNotice | null>(null);
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [micOn, setMicOn] = useState(true);
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
@@ -379,6 +399,14 @@ export function useVoice() {
   const [serverSpeakingIdentities, setServerSpeakingIdentities] = useState<string[]>([]);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
+  const statusRef = useRef(status);
+  const activeRoomIdRef = useRef(activeRoomId);
+  const awayInfoRef = useRef(awayInfo);
+  const exitNoticeRef = useRef(exitNotice);
+  const micOnRef = useRef(micOn);
+  const lastRemoteCountRef = useRef(0);
+  const lastLocalSpeechAtRef = useRef(0);
+  const onReturnedRef = useRef(options?.onReturned);
   const voiceAudioContextRef = useRef<AudioContext | null>(null);
   const connectionAttemptRef = useRef(0);
   const serverSpeakingIdentitiesRef = useRef<string[]>([]);
@@ -388,6 +416,12 @@ export function useVoice() {
   const screenShareRef = useRef(false);
   const deafenRef = useRef(deafen);
   deafenRef.current = deafen;
+  statusRef.current = status;
+  activeRoomIdRef.current = activeRoomId;
+  awayInfoRef.current = awayInfo;
+  exitNoticeRef.current = exitNotice;
+  micOnRef.current = micOn;
+  onReturnedRef.current = options?.onReturned;
   const screenShareAudioSourceRef = useRef<ScreenShareAudioSource | null>(null);
   const deafenTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const micEnabledBeforeDeafenRef = useRef(true);
@@ -480,6 +514,7 @@ export function useVoice() {
   const syncParticipants = useCallback(
     (room: LiveKitRoom) => {
       const remoteParticipants = Array.from(room.remoteParticipants.values());
+      lastRemoteCountRef.current = remoteParticipants.length;
       const localIdentity = room.localParticipant.identity;
       const next = [room.localParticipant, ...remoteParticipants].map((participant) =>
         callParticipantFrom(participant, localIdentity),
@@ -561,8 +596,112 @@ export function useVoice() {
     setStatus("idle");
     setActiveRoomId(null);
     resetRoomState();
+    setAwayInfo(null);
+    setExitNotice(null);
     if (wasConnected) playVoiceActionSound("leave");
   }, [closeVoiceAudioContext, resetRoomState]);
+
+  const captureSession = useCallback(
+    (roomId: string): SessionSnapshot => ({
+      roomId,
+      deafen: deafenRef.current,
+      micEnabled: micEnabledToRestore({
+        deafen: deafenRef.current,
+        micBeforeDeafen: micEnabledBeforeDeafenRef.current,
+        micOn: micOnRef.current,
+      }),
+    }),
+    [],
+  );
+
+  const leaveRoomQuietly = useCallback(async () => {
+    const room = roomRef.current;
+    connectionAttemptRef.current += 1;
+    roomRef.current = null;
+    if (room) await disconnectWithin(room, AWAY_DISCONNECT_TIMEOUT_MS);
+    await closeVoiceAudioContext();
+    setConnectionState("connected");
+    setActiveRoomId(null);
+    resetRoomState();
+  }, [closeVoiceAudioContext, resetRoomState]);
+
+  const parkSession = useCallback(
+    async (park: (snapshot: SessionSnapshot) => void) => {
+      const roomId = activeRoomIdRef.current;
+      if (statusRef.current !== "connected" || roomId === null) return;
+
+      const snapshot = captureSession(roomId);
+      await leaveRoomQuietly();
+      park(snapshot);
+    },
+    [captureSession, leaveRoomQuietly],
+  );
+
+  const goAway = useCallback(
+    (reason: AwayReason) =>
+      parkSession((snapshot) => {
+        setAwayInfo({ ...snapshot, reason });
+        setStatus("away");
+      }),
+    [parkSession],
+  );
+
+  const leaveForInactivity = useCallback(
+    () =>
+      parkSession((snapshot) => {
+        setExitNotice({ ...snapshot, reason: "inactivity" });
+        setStatus("idle");
+      }),
+    [parkSession],
+  );
+
+  const endAway = useCallback((reason: "room_empty" | "quiet") => {
+    const info = awayInfoRef.current;
+    if (statusRef.current !== "away" || info === null) return;
+
+    setAwayInfo(null);
+    if (reason === "quiet") {
+      setStatus("idle");
+      return;
+    }
+    setExitNotice({
+      roomId: info.roomId,
+      micEnabled: info.micEnabled,
+      deafen: info.deafen,
+      reason,
+    });
+    setStatus("idle");
+  }, []);
+
+  const handleDisconnected = useCallback(
+    (reason: import("livekit-client").DisconnectReason | undefined) => {
+      const roomId = activeRoomIdRef.current;
+      const snapshot = roomId === null ? null : captureSession(roomId);
+      const route = disconnectRouteFor(reason, lastRemoteCountRef.current);
+      setActiveRoomId(null);
+      resetRoomState();
+
+      if (route === "default" || snapshot === null) {
+        setStatus("idle");
+        setError(voiceDisconnectMessageFor(reason));
+        return;
+      }
+      if (route === "away") {
+        setAwayInfo({ ...snapshot, reason: "connection" });
+        setStatus("away");
+        return;
+      }
+      setExitNotice({ ...snapshot, reason: "connection" });
+      setStatus("idle");
+    },
+    [captureSession, resetRoomState],
+  );
+
+  const onLocalSpeech = useCallback(() => {
+    lastLocalSpeechAtRef.current = Date.now();
+  }, []);
+
+  const getLastLocalSpeechAt = useCallback(() => lastLocalSpeechAtRef.current, []);
 
   const syncActiveSpeakerIdentities = useCallback(
     (activeIdentities: string[]) => {
@@ -592,177 +731,6 @@ export function useVoice() {
       );
     },
     [publishServerSpeakers],
-  );
-
-  const connect = useCallback(
-    async (roomId: string) => {
-      if (roomRef.current) await disconnect();
-      const attemptId = connectionAttemptRef.current + 1;
-      connectionAttemptRef.current = attemptId;
-
-      setError(null);
-      setStatus("connecting");
-      setActiveRoomId(roomId);
-      let preparedMicTrack: LocalAudioTrack | null = null;
-      let attemptAudioContext: AudioContext | null = null;
-      let connectingRoom: LiveKitRoom | null = null;
-
-      try {
-        const [client, tokenResponse, initialProcessor] = await Promise.all([
-          (async () => {
-            const c = await import("livekit-client");
-            screenShareAudioSourceRef.current = c.Track.Source.ScreenShareAudio;
-            return c;
-          })(),
-          api<VoiceTokenResponse>("/api/voice/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ room_id: roomId }),
-          }),
-          createKrispProcessor(),
-        ]);
-        if (connectionAttemptRef.current !== attemptId) return;
-        const { Room, RoomEvent, ParticipantEvent, TrackEvent, Track } = client;
-        const { token, url } = tokenResponse;
-
-        const voiceAudioContext = new (
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        )();
-        attemptAudioContext = voiceAudioContext;
-        voiceAudioContextRef.current = voiceAudioContext;
-        const room = new Room({
-          adaptiveStream: screenShareAdaptiveStreamSettings(),
-          dynacast: true,
-          webAudioMix: { audioContext: voiceAudioContext },
-          audioCaptureDefaults: roomAudioCaptureDefaults(),
-          publishDefaults: {
-            videoCodec: "h264",
-            simulcast: false,
-          },
-        });
-        connectingRoom = room;
-        roomRef.current = room;
-
-        setupRoomHandlers({
-          room,
-          RoomEvent,
-          ParticipantEvent,
-          TrackEvent,
-          Track,
-          notificationsEnabledRef,
-          roomRef,
-          screenShareRef,
-          voiceAudioContextRef,
-          deafenRef,
-          setRemoteMuted,
-          setRemoteDeafened,
-          applyParticipantVolumes,
-          onTrackSubscribed,
-          onTrackUnsubscribed,
-          onLocalTrackUnpublished,
-          liveShare: {
-            onShareTrackPublished,
-            onShareTrackUnpublished,
-            onParticipantDisconnected,
-            refreshLiveShares,
-            applyInitialShares,
-            hasWatchIntent,
-          },
-          syncLocalMicTrack,
-          syncActiveSpeakerIdentities,
-          setConnectionState,
-          setQualities,
-          syncParticipants,
-          removeParticipant,
-          closeVoiceAudioContext,
-          resetRoomState,
-          setStatus,
-          setActiveRoomId,
-          setError,
-        });
-
-        const [createdTrack] = await room.localParticipant.createTracks({
-          audio: audioCaptureOptions(selectedDeviceIdRef.current),
-          video: false,
-        });
-        preparedMicTrack = createdTrack ? (createdTrack as LocalAudioTrack) : null;
-        if (!preparedMicTrack) throw new MicrophoneUnavailableError();
-        preparedMicTrack.setAudioContext(voiceAudioContext);
-
-        if (initialProcessor) {
-          await applyInitialProcessor(preparedMicTrack, initialProcessor);
-        }
-
-        if (connectionAttemptRef.current !== attemptId) {
-          preparedMicTrack.stop();
-          if (roomRef.current === room) roomRef.current = null;
-          await closeVoiceAudioContext(voiceAudioContext);
-          return;
-        }
-
-        await room.connect(url, token);
-        if (connectionAttemptRef.current !== attemptId) {
-          await room.disconnect();
-          preparedMicTrack.stop();
-          await closeVoiceAudioContext(voiceAudioContext);
-          return;
-        }
-        await room.localParticipant.publishTrack(
-          preparedMicTrack as Parameters<typeof room.localParticipant.publishTrack>[0],
-          microphonePublishOptions(),
-        );
-
-        if (pushToTalkEnabledRef.current) {
-          await room.localParticipant.setMicrophoneEnabled(false);
-        }
-
-        setMicOn(!pushToTalkEnabledRef.current);
-        syncLocalMicTrack(room);
-        micPermissionRef.current = true;
-        setStatus("connected");
-        setConnectedAt(Date.now());
-        setConnectionState("connected");
-        setActiveRoomId(roomId);
-        syncParticipants(room);
-        applyInitialShares(room);
-        playVoiceActionSound("join");
-      } catch (err) {
-        if (connectingRoom && roomRef.current === connectingRoom) roomRef.current = null;
-        await connectingRoom?.disconnect().catch(() => undefined);
-        preparedMicTrack?.stop();
-        await closeVoiceAudioContext(attemptAudioContext);
-        if (connectionAttemptRef.current !== attemptId) return;
-        setError(voiceJoinErrorMessageFor(err));
-        setStatus("idle");
-        setActiveRoomId(null);
-        resetRoomState();
-        roomRef.current = null;
-      }
-    },
-    [
-      disconnect,
-      applyParticipantVolumes,
-      setRemoteMuted,
-      setRemoteDeafened,
-      createKrispProcessor,
-      applyInitialProcessor,
-      closeVoiceAudioContext,
-      syncParticipants,
-      removeParticipant,
-      syncActiveSpeakerIdentities,
-      syncLocalMicTrack,
-      onTrackSubscribed,
-      onTrackUnsubscribed,
-      onLocalTrackUnpublished,
-      onShareTrackPublished,
-      onShareTrackUnpublished,
-      onParticipantDisconnected,
-      refreshLiveShares,
-      applyInitialShares,
-      hasWatchIntent,
-      resetRoomState,
-    ],
   );
 
   const watchShare = useCallback(
@@ -850,6 +818,208 @@ export function useVoice() {
     },
     [updateDeafenState],
   );
+
+  const connect = useCallback(
+    async (roomId: string, connectOptions?: ConnectOptions): Promise<boolean> => {
+      if (roomRef.current) await disconnect();
+      const attemptId = connectionAttemptRef.current + 1;
+      connectionAttemptRef.current = attemptId;
+
+      setError(null);
+      setStatus("connecting");
+      setActiveRoomId(roomId);
+      let preparedMicTrack: LocalAudioTrack | null = null;
+      let attemptAudioContext: AudioContext | null = null;
+      let connectingRoom: LiveKitRoom | null = null;
+
+      try {
+        const [client, tokenResponse, initialProcessor] = await Promise.all([
+          (async () => {
+            const c = await import("livekit-client");
+            screenShareAudioSourceRef.current = c.Track.Source.ScreenShareAudio;
+            return c;
+          })(),
+          api<VoiceTokenResponse>("/api/voice/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ room_id: roomId }),
+          }),
+          createKrispProcessor(),
+        ]);
+        if (connectionAttemptRef.current !== attemptId) return false;
+        const { Room, RoomEvent, ParticipantEvent, TrackEvent, Track } = client;
+        const { token, url } = tokenResponse;
+
+        const voiceAudioContext = new (
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+        )();
+        attemptAudioContext = voiceAudioContext;
+        voiceAudioContextRef.current = voiceAudioContext;
+        const room = new Room({
+          adaptiveStream: screenShareAdaptiveStreamSettings(),
+          dynacast: true,
+          webAudioMix: { audioContext: voiceAudioContext },
+          audioCaptureDefaults: roomAudioCaptureDefaults(),
+          publishDefaults: {
+            videoCodec: "h264",
+            simulcast: false,
+          },
+        });
+        connectingRoom = room;
+        roomRef.current = room;
+
+        setupRoomHandlers({
+          room,
+          RoomEvent,
+          ParticipantEvent,
+          TrackEvent,
+          Track,
+          notificationsEnabledRef,
+          roomRef,
+          screenShareRef,
+          voiceAudioContextRef,
+          deafenRef,
+          setRemoteMuted,
+          setRemoteDeafened,
+          applyParticipantVolumes,
+          onTrackSubscribed,
+          onTrackUnsubscribed,
+          onLocalTrackUnpublished,
+          liveShare: {
+            onShareTrackPublished,
+            onShareTrackUnpublished,
+            onParticipantDisconnected,
+            refreshLiveShares,
+            applyInitialShares,
+            hasWatchIntent,
+          },
+          syncLocalMicTrack,
+          syncActiveSpeakerIdentities,
+          onLocalSpeech,
+          onDisconnected: handleDisconnected,
+          setConnectionState,
+          setQualities,
+          syncParticipants,
+          removeParticipant,
+          closeVoiceAudioContext,
+        });
+
+        const [createdTrack] = await room.localParticipant.createTracks({
+          audio: audioCaptureOptions(selectedDeviceIdRef.current),
+          video: false,
+        });
+        preparedMicTrack = createdTrack ? (createdTrack as LocalAudioTrack) : null;
+        if (!preparedMicTrack) throw new MicrophoneUnavailableError();
+        preparedMicTrack.setAudioContext(voiceAudioContext);
+
+        if (initialProcessor) {
+          await applyInitialProcessor(preparedMicTrack, initialProcessor);
+        }
+
+        if (connectionAttemptRef.current !== attemptId) {
+          preparedMicTrack.stop();
+          if (roomRef.current === room) roomRef.current = null;
+          await closeVoiceAudioContext(voiceAudioContext);
+          return false;
+        }
+
+        await room.connect(url, token);
+        if (connectionAttemptRef.current !== attemptId) {
+          await room.disconnect();
+          preparedMicTrack.stop();
+          await closeVoiceAudioContext(voiceAudioContext);
+          return false;
+        }
+        await room.localParticipant.publishTrack(
+          preparedMicTrack as Parameters<typeof room.localParticipant.publishTrack>[0],
+          microphonePublishOptions(),
+        );
+
+        const micEnabledAtStart = initialMicEnabled(
+          pushToTalkEnabledRef.current,
+          connectOptions?.micEnabled,
+        );
+        if (!micEnabledAtStart) {
+          await room.localParticipant.setMicrophoneEnabled(false);
+        }
+
+        setMicOn(micEnabledAtStart);
+        syncLocalMicTrack(room);
+        micPermissionRef.current = true;
+        setStatus("connected");
+        setConnectedAt(Date.now());
+        setConnectionState("connected");
+        setActiveRoomId(roomId);
+        syncParticipants(room);
+        applyInitialShares(room);
+        setAwayInfo(null);
+        setExitNotice(null);
+        if (connectOptions?.deafen) {
+          micEnabledBeforeDeafenRef.current = connectOptions.micEnabled ?? true;
+          deafenRef.current = true;
+          setDeafen(true);
+          queueDeafenState({ enabled: true, micEnabled: micEnabledBeforeDeafenRef.current });
+        }
+        playVoiceActionSound("join");
+        return true;
+      } catch (err) {
+        if (connectingRoom && roomRef.current === connectingRoom) roomRef.current = null;
+        await connectingRoom?.disconnect().catch(() => undefined);
+        preparedMicTrack?.stop();
+        await closeVoiceAudioContext(attemptAudioContext);
+        if (connectionAttemptRef.current !== attemptId) return false;
+        setError(voiceJoinErrorMessageFor(err));
+        setStatus("idle");
+        setActiveRoomId(null);
+        resetRoomState();
+        roomRef.current = null;
+        return false;
+      }
+    },
+    [
+      disconnect,
+      handleDisconnected,
+      onLocalSpeech,
+      queueDeafenState,
+      applyParticipantVolumes,
+      setRemoteMuted,
+      setRemoteDeafened,
+      createKrispProcessor,
+      applyInitialProcessor,
+      closeVoiceAudioContext,
+      syncParticipants,
+      removeParticipant,
+      syncActiveSpeakerIdentities,
+      syncLocalMicTrack,
+      onTrackSubscribed,
+      onTrackUnsubscribed,
+      onLocalTrackUnpublished,
+      onShareTrackPublished,
+      onShareTrackUnpublished,
+      onParticipantDisconnected,
+      refreshLiveShares,
+      applyInitialShares,
+      hasWatchIntent,
+      resetRoomState,
+    ],
+  );
+
+  const returnToRoom = useCallback(async () => {
+    const target = awayInfoRef.current ?? exitNoticeRef.current;
+    if (target === null) return;
+
+    const wasAway = awayInfoRef.current !== null;
+    const connected = await connect(target.roomId, {
+      micEnabled: target.micEnabled,
+      deafen: target.deafen,
+    });
+    if (connected) {
+      onReturnedRef.current?.();
+      return;
+    }
+    if (wasAway) setStatus("away");
+  }, [connect]);
 
   const applyDeafen = useCallback(
     (enabled: boolean) => {
@@ -1052,6 +1222,13 @@ export function useVoice() {
     ensureKrispLoaded,
     connect,
     disconnect,
+    awayInfo,
+    exitNotice,
+    goAway,
+    leaveForInactivity,
+    endAway,
+    returnToRoom,
+    getLastLocalSpeechAt,
     setMicEnabled,
     setMicDevice,
     setNoiseFilter,
