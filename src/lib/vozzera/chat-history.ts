@@ -1,5 +1,5 @@
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
-import type { ChatMessage } from "@/lib/vozzera/types";
+import type { ChatMessage, HistoryMessage } from "@/lib/vozzera/types";
 
 export type HistoryStatus = "loading" | "loaded" | "stale" | "failed";
 export type HistoryStatuses = Record<string, HistoryStatus>;
@@ -86,6 +86,90 @@ export function mergeHistory(
   );
 
   return mergeBySecond(fetched, liveOnly);
+}
+
+export function mergeOlderPage(
+  current: ChatMessage[],
+  page: ChatMessage[],
+  options: { deletedIds?: ReadonlySet<string> } = {},
+): ChatMessage[] {
+  const deleted = options.deletedIds ?? new Set<string>();
+  const currentIds = new Set(current.map((message) => message.id));
+  const older = page.filter((message) => !deleted.has(message.id) && !currentIds.has(message.id));
+  if (older.length === 0) return current;
+
+  return mergeBySecond(older, current);
+}
+
+export type OlderHistory = { nextBefore: string | null; loading: boolean; failed: boolean };
+export type OlderHistories = Record<string, OlderHistory>;
+
+export function seedOlderHistory(
+  histories: OlderHistories,
+  roomId: string,
+  nextBefore: string | null,
+): OlderHistories {
+  if (histories[roomId]) return histories;
+  return { ...histories, [roomId]: { nextBefore, loading: false, failed: false } };
+}
+
+export function patchOlderHistory(
+  histories: OlderHistories,
+  roomId: string,
+  patch: Partial<OlderHistory>,
+): OlderHistories {
+  const current = histories[roomId] ?? { nextBefore: null, loading: false, failed: false };
+  return { ...histories, [roomId]: { ...current, ...patch } };
+}
+
+export function canLoadOlder(histories: OlderHistories, roomId: string): boolean {
+  const history = histories[roomId];
+  return history !== undefined && history.nextBefore !== null && !history.loading;
+}
+
+export function shouldApplyOlderPage(
+  histories: OlderHistories,
+  roomId: string,
+  sentCursor: string,
+): boolean {
+  return histories[roomId]?.nextBefore === sentCursor;
+}
+
+type LoadOlderPageDeps = {
+  roomId: string;
+  getHistories: () => OlderHistories;
+  fetchPage: (cursor: string) => Promise<{ messages: HistoryMessage[]; nextBefore: string | null }>;
+  commit: (roomId: string, patch: Partial<OlderHistory>) => void;
+  applyPage: (page: { messages: HistoryMessage[]; nextBefore: string | null }) => void;
+  onUnauthorized: () => void;
+  onFailure: () => void;
+  isUnauthorizedError: (error: unknown) => boolean;
+};
+
+export async function loadOlderPage(deps: LoadOlderPageDeps): Promise<void> {
+  const { roomId } = deps;
+  if (!canLoadOlder(deps.getHistories(), roomId)) return;
+
+  const cursor = deps.getHistories()[roomId]?.nextBefore;
+  if (!cursor) return;
+  deps.commit(roomId, { loading: true, failed: false });
+
+  try {
+    const page = await deps.fetchPage(cursor);
+    if (!shouldApplyOlderPage(deps.getHistories(), roomId, cursor)) return;
+
+    deps.applyPage(page);
+    deps.commit(roomId, { nextBefore: page.nextBefore, loading: false });
+  } catch (error) {
+    if (!shouldApplyOlderPage(deps.getHistories(), roomId, cursor)) return;
+
+    deps.commit(roomId, { loading: false, failed: true });
+    if (deps.isUnauthorizedError(error)) {
+      deps.onUnauthorized();
+      return;
+    }
+    deps.onFailure();
+  }
 }
 
 export function createLiveEditTracker() {

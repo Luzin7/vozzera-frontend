@@ -12,6 +12,8 @@ import {
   firstTextRoom,
   firstUnreadMessageId,
   isNearBottom,
+  anchoredScrollTop,
+  isPrepend,
   isSessionRevokedClose,
   nextRoomIndex,
   parseFrame,
@@ -908,5 +910,32 @@ describe("isNearBottom", () => {
   it("treats the last 80px as the bottom of the conversation", () => {
     expect(isNearBottom({ scrollHeight: 1000, scrollTop: 500, clientHeight: 421 })).toBe(true);
     expect(isNearBottom({ scrollHeight: 1000, scrollTop: 500, clientHeight: 420 })).toBe(false);
+  });
+});
+
+describe("anchoredScrollTop", () => {
+  it("shifts scrollTop by the height added above", () => {
+    expect(anchoredScrollTop({ scrollTop: 0, previousHeight: 1000, height: 1800 })).toBe(800);
+  });
+
+  it("keeps scrollTop when nothing was added", () => {
+    expect(anchoredScrollTop({ scrollTop: 120, previousHeight: 1000, height: 1000 })).toBe(120);
+  });
+});
+
+describe("isPrepend", () => {
+  it("is true when only the first id changed", () => {
+    expect(isPrepend({ firstId: "b", lastId: "z" }, { firstId: "a", lastId: "z" })).toBe(true);
+  });
+
+  it("is false when a new message arrived at the end", () => {
+    expect(isPrepend({ firstId: "a", lastId: "y" }, { firstId: "a", lastId: "z" })).toBe(false);
+  });
+
+  it("is false on first render or an empty list", () => {
+    expect(isPrepend(null, { firstId: "a", lastId: "z" })).toBe(false);
+    expect(
+      isPrepend({ firstId: "a", lastId: "z" }, { firstId: undefined, lastId: undefined }),
+    ).toBe(false);
   });
 });

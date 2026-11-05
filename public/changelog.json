@@ -1,79 +1,102 @@
 {
-  "version": "v1.22.0",
+  "version": "v1.23.0",
   "releasedAt": "2026-11-05",
   "items": [
     {
-      "title": "feat(voz): ausente na sala",
-      "kind": "feat",
-      "pr": 182,
-      "summary": "Foi pegar um café? Quem tá ausente aparece com zzz na sala, e você recebe um aviso pra continuar antes de sair da call por inatividade."
-    },
-    {
-      "title": "feat(changelog): aba Novidades e gerador corrigido",
-      "kind": "feat",
-      "pr": 181,
-      "summary": "Perdeu alguma novidade? A nova aba Novidades, nas Configurações, mostra tudo que mudou em cada versão, com data."
-    },
-    {
-      "title": "perf(voz): menos re-renders na call e ajustes da live",
-      "kind": "perf",
-      "pr": 178,
-      "summary": "Call mais leve! A tela da chamada ficou mais fluida, e a live avisa quando tá carregando ou quando não deu pra abrir."
-    },
-    {
-      "title": "feat(voz): sincronia, edição e não lidas do chat",
-      "kind": "feat",
-      "pr": 177,
-      "summary": "Chat no capricho! Seta pra cima edita a última mensagem, o rascunho fica salvo em cada sala e as não lidas aparecem em todas."
-    },
-    {
-      "title": "feat(voz): live opcional, com botão Assistir",
-      "kind": "feat",
-      "pr": 175,
-      "summary": "Live só pra quem quer! A transmissão só abre quando você clica em Assistir. Sem tela piscando nem som do nada pra quem não tá vendo."
-    },
-    {
-      "title": "feat(voz): tempo de chamada e qualidade de conexão",
-      "kind": "feat",
-      "pr": 174,
-      "summary": "Cronômetro na call! Veja há quanto tempo o papo tá rolando e a qualidade da conexão de cada um, a sua inclusa."
-    },
-    {
-      "title": "fix(voz): sons de entrada e saída mais suaves",
+      "title": "fix(ui): cores de avatar menos saturadas",
       "kind": "fix",
-      "pr": 173,
-      "summary": "Som que não fura o ouvido! Entrar, sair, mutar e compartilhar tela agora têm sons mais graves e suaves."
+      "pr": 197,
+      "summary": "Perfil mais gostoso de olhar! As cores dos avatares ficaram mais suaves, sem perder a leitura das iniciais."
     },
     {
-      "title": "fix(voz): microfone livre nas outras abas",
-      "kind": "fix",
-      "pr": 172,
-      "summary": "Call aberta, mic livre! Grave áudio no WhatsApp Web em outra aba sem sair silêncio. E o mic escolhido fora da call agora fica salvo."
+      "title": "feat(changelog): listar novidades não vistas",
+      "kind": "feat",
+      "pr": 195,
+      "summary": "Ficou uns dias fora? O Tem coisa nova agora mostra tudo que você perdeu, versão por versão, e não só a última."
+    },
+    {
+      "title": "feat(chat): carregar mensagens antigas ao rolar",
+      "kind": "feat",
+      "pr": 192,
+      "summary": "Chat sem fim! Role pra cima e as mensagens antigas vão chegando, sem a tela pular. Dá pra reler a conversa desde o começo."
+    },
+    {
+      "title": "feat(voz): participantes visíveis durante a live",
+      "kind": "feat",
+      "pr": 191,
+      "summary": "Live sem perder a galera de vista! Quem tá na call fica ao lado da transmissão, com anel de fala e volume na mão. Precisa de espaço? É só ocultar."
+    },
+    {
+      "title": "feat(voz): anel de fala, push-to-talk e atalhos",
+      "kind": "feat",
+      "pr": 189,
+      "summary": "Quem fala baixinho também acende o anel! Sensibilidade ajustável, push-to-talk sem aparecer mutado e atalhos Ctrl+Shift+M e D."
+    },
+    {
+      "title": "feat(voz): live mais sincronizada com a voz",
+      "kind": "feat",
+      "pr": 188,
+      "summary": "Live mais sincronizada com a voz! Tiramos o atraso da transmissão e agora ela roda suave por padrão, em 60 fps."
+    },
+    {
+      "title": "feat(ui): polimento visual e volume mais fácil de achar",
+      "kind": "feat",
+      "pr": 187,
+      "summary": "Visual repaginado! Tudo ficou mais bonito e agora é fácil achar onde clicar pra ajustar o volume de cada pessoa."
     }
   ],
   "next": {
-    "items": [
-      {
-        "title": "feat(voz): anel de fala, push-to-talk e atalhos",
-        "kind": "feat",
-        "pr": 189,
-        "summary": ""
-      },
-      {
-        "title": "feat(voz): live mais sincronizada com a voz",
-        "kind": "feat",
-        "pr": 188,
-        "summary": ""
-      },
-      {
-        "title": "feat(ui): polimento visual e volume mais fácil de achar",
-        "kind": "feat",
-        "pr": 187,
-        "summary": ""
-      }
-    ]
+    "items": []
   },
   "releases": [
+    {
+      "version": "v1.23.0",
+      "releasedAt": "2026-11-05",
+      "items": [
+        {
+          "title": "fix(ui): cores de avatar menos saturadas",
+          "kind": "fix",
+          "pr": 197,
+          "summary": "Perfil mais gostoso de olhar! As cores dos avatares ficaram mais suaves, sem perder a leitura das iniciais."
+        },
+        {
+          "title": "feat(changelog): listar novidades não vistas",
+          "kind": "feat",
+          "pr": 195,
+          "summary": "Ficou uns dias fora? O Tem coisa nova agora mostra tudo que você perdeu, versão por versão, e não só a última."
+        },
+        {
+          "title": "feat(chat): carregar mensagens antigas ao rolar",
+          "kind": "feat",
+          "pr": 192,
+          "summary": "Chat sem fim! Role pra cima e as mensagens antigas vão chegando, sem a tela pular. Dá pra reler a conversa desde o começo."
+        },
+        {
+          "title": "feat(voz): participantes visíveis durante a live",
+          "kind": "feat",
+          "pr": 191,
+          "summary": "Live sem perder a galera de vista! Quem tá na call fica ao lado da transmissão, com anel de fala e volume na mão. Precisa de espaço? É só ocultar."
+        },
+        {
+          "title": "feat(voz): anel de fala, push-to-talk e atalhos",
+          "kind": "feat",
+          "pr": 189,
+          "summary": "Quem fala baixinho também acende o anel! Sensibilidade ajustável, push-to-talk sem aparecer mutado e atalhos Ctrl+Shift+M e D."
+        },
+        {
+          "title": "feat(voz): live mais sincronizada com a voz",
+          "kind": "feat",
+          "pr": 188,
+          "summary": "Live mais sincronizada com a voz! Tiramos o atraso da transmissão e agora ela roda suave por padrão, em 60 fps."
+        },
+        {
+          "title": "feat(ui): polimento visual e volume mais fácil de achar",
+          "kind": "feat",
+          "pr": 187,
+          "summary": "Visual repaginado! Tudo ficou mais bonito e agora é fácil achar onde clicar pra ajustar o volume de cada pessoa."
+        }
+      ]
+    },
     {
       "version": "v1.22.0",
       "releasedAt": "2026-11-05",

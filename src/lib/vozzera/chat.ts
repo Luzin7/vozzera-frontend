@@ -57,6 +57,25 @@ export function isNearBottom({ scrollHeight, scrollTop, clientHeight }: ScrollMe
   return scrollHeight - scrollTop - clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
 }
 
+export function anchoredScrollTop({
+  scrollTop,
+  previousHeight,
+  height,
+}: {
+  scrollTop: number;
+  previousHeight: number;
+  height: number;
+}): number {
+  return scrollTop + (height - previousHeight);
+}
+
+type ListEnds = { firstId: string | undefined; lastId: string | undefined };
+
+export function isPrepend(previous: ListEnds | null, next: ListEnds): boolean {
+  if (!previous || !previous.firstId || !next.firstId) return false;
+  return previous.firstId !== next.firstId && previous.lastId === next.lastId;
+}
+
 export function totalUnread(unread: Record<string, number>): number {
   return Object.values(unread).reduce((sum, count) => sum + count, 0);
 }

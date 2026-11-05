@@ -89,6 +89,8 @@ function Index() {
     loadingHistory,
     historyStatus,
     retryHistory,
+    olderHistory,
+    loadOlder,
     drafts,
     unread,
     unreadMarker,
@@ -121,8 +123,8 @@ function Index() {
     dismissUnreadMarker,
   } = useChat({ onAwayEnded: handleAwayEndedEvent });
   const {
-    changelog,
     shouldShow: shouldShowChangelog,
+    releases: unseenChangelogReleases,
     dismiss: dismissChangelog,
   } = useChangelog(authed === true);
   const [roomDialogOpen, setRoomDialogOpen] = useState(false);
@@ -592,6 +594,8 @@ function Index() {
               onClose={() => setVoiceChatOpen(false)}
               historyFailed={historyStatus[visibleVoiceRoom.id] === "failed"}
               onRetryHistory={retryHistory}
+              olderHistory={olderHistory[visibleVoiceRoom.id]}
+              onLoadOlder={loadOlder}
               editLastRequest={editLastRequest}
               onEditLast={requestEditLast}
             />
@@ -666,6 +670,8 @@ function Index() {
               onUnreadMarkerRead={dismissUnreadMarker}
               historyFailed={historyStatus[activeRoom.id] === "failed"}
               onRetryHistory={retryHistory}
+              olderHistory={olderHistory[activeRoom.id]}
+              onLoadOlder={loadOlder}
               editLastRequest={editLastRequest}
             />
             <MessageComposer
@@ -710,6 +716,8 @@ function Index() {
           onClose={() => setVoiceChatOpen(false)}
           historyFailed={historyStatus[visibleVoiceRoom.id] === "failed"}
           onRetryHistory={retryHistory}
+          olderHistory={olderHistory[visibleVoiceRoom.id]}
+          onLoadOlder={loadOlder}
           editLastRequest={editLastRequest}
           onEditLast={requestEditLast}
         />
@@ -783,9 +791,7 @@ function Index() {
 
       <WhatsNewDialog
         open={shouldShowChangelog}
-        items={changelog?.items ?? []}
-        version={changelog?.version ?? ""}
-        releasedAt={changelog?.releasedAt}
+        releases={unseenChangelogReleases}
         onDismiss={dismissChangelog}
       />
     </AppViewport>

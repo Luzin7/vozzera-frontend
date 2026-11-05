@@ -61,13 +61,17 @@ import {
   markHistoryStatus,
   markStaleRooms,
   mergeHistory,
+  mergeOlderPage,
+  loadOlderPage,
   needsHistory,
+  patchOlderHistory,
+  seedOlderHistory,
   refetchHistoryStaggered,
   rememberRecentRoom,
   roomsToRefetch,
   shouldRefetchAfterStatus,
 } from "@/lib/vozzera/chat-history";
-import type { HistoryStatuses } from "@/lib/vozzera/chat-history";
+import type { HistoryStatuses, OlderHistories } from "@/lib/vozzera/chat-history";
 import { createDraftStore } from "@/lib/vozzera/message-display";
 import { canManageRooms, canModerateMessages, canSeeRoom } from "@/lib/vozzera/permissions";
 import { isSessionRejected } from "@/lib/vozzera/session";
@@ -105,6 +109,7 @@ export function useChat(options?: ChatOptions) {
   const [banner, setBanner] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<HistoryStatuses>({});
+  const [olderHistory, setOlderHistory] = useState<OlderHistories>({});
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [unreadMarker, setUnreadMarker] = useState<{
     roomId: string;
@@ -134,6 +139,7 @@ export function useChat(options?: ChatOptions) {
   const resubscribeRoomRef = useRef<((roomId: string) => void) | null>(null);
   const messagesRef = useRef(messages);
   const historyStatusRef = useRef(historyStatus);
+  const olderHistoryRef = useRef(olderHistory);
   const subscribedRoomsRef = useRef(new Set<string>());
   const hasOpenedBeforeRef = useRef(false);
   const deletedMessageIdsRef = useRef(new Set<string>());
@@ -171,6 +177,8 @@ export function useChat(options?: ChatOptions) {
     setMessages({});
     setHistoryStatus({});
     historyStatusRef.current = {};
+    olderHistoryRef.current = {};
+    setOlderHistory({});
     hasOpenedBeforeRef.current = false;
     deletedMessageIdsRef.current = new Set();
     liveEditsRef.current.clear();
@@ -273,6 +281,8 @@ export function useChat(options?: ChatOptions) {
       setRooms((prev) => prev.filter((room) => room.id !== roomId));
       setMessages((prev) => removeRoom(prev, roomId));
       setHistoryStatus((prev) => removeRoom(prev, roomId));
+      olderHistoryRef.current = removeRoom(olderHistoryRef.current, roomId);
+      setOlderHistory((prev) => removeRoom(prev, roomId));
       setUnread((prev) => removeRoom(prev, roomId));
       setTypingUsers((prev) => removeRoom(prev, roomId));
       commitVoicePresence(removeRoom(voicePresenceRef.current, roomId));
@@ -536,8 +546,10 @@ export function useChat(options?: ChatOptions) {
   const loadHistory = useCallback(async (roomId: string) => {
     const knownBeforeFetch = new Set((messagesRef.current[roomId] ?? []).map((m) => m.id));
     const editCheckpoint = liveEditsRef.current.checkpoint();
-    const history = await listMessages(roomId, HISTORY_PAGE_SIZE);
-    const fetched = history.map((message) => fromHistory(message, roomId));
+    const page = await listMessages(roomId, HISTORY_PAGE_SIZE);
+    olderHistoryRef.current = seedOlderHistory(olderHistoryRef.current, roomId, page.nextBefore);
+    setOlderHistory((prev) => seedOlderHistory(prev, roomId, page.nextBefore));
+    const fetched = page.messages.map((message) => fromHistory(message, roomId));
     const options = {
       deletedIds: deletedMessageIdsRef.current,
       editedDuringFetchIds: liveEditsRef.current.editedSince(editCheckpoint),
@@ -552,6 +564,40 @@ export function useChat(options?: ChatOptions) {
 
     return mergeHistory(messagesRef.current[roomId] ?? [], fetched, options);
   }, []);
+
+  const commitOlderHistory = useCallback(
+    (roomId: string, patch: Parameters<typeof patchOlderHistory>[2]) => {
+      olderHistoryRef.current = patchOlderHistory(olderHistoryRef.current, roomId, patch);
+      setOlderHistory(olderHistoryRef.current);
+    },
+    [],
+  );
+
+  const loadOlder = useCallback(
+    (roomId: string) =>
+      loadOlderPage({
+        roomId,
+        getHistories: () => olderHistoryRef.current,
+        fetchPage: (cursor) => listMessages(roomId, HISTORY_PAGE_SIZE, cursor),
+        commit: commitOlderHistory,
+        applyPage: (page) => {
+          const older = page.messages.map((message) => fromHistory(message, roomId));
+          setMessages((prev) => ({
+            ...prev,
+            [roomId]: mergeOlderPage(prev[roomId] ?? [], older, {
+              deletedIds: deletedMessageIdsRef.current,
+            }),
+          }));
+        },
+        onUnauthorized: () => setAuthed(false),
+        onFailure: () =>
+          toast.error("Não consegui carregar as mensagens antigas.", {
+            id: "older-history-failed",
+          }),
+        isUnauthorizedError: isUnauthorized,
+      }),
+    [commitOlderHistory],
+  );
 
   const loadRoomHistory = useCallback(
     async (roomId: string, unreadCount: number) => {
@@ -854,6 +900,8 @@ export function useChat(options?: ChatOptions) {
     banner,
     loadingHistory,
     historyStatus,
+    olderHistory,
+    loadOlder,
     retryHistory,
     drafts,
     unread,
