@@ -8,24 +8,28 @@ export type VoiceActionNote = {
   gain: number;
 };
 
+export const VOICE_SOUND_ATTACK_SECONDS = 0.02;
+export const VOICE_SOUND_RELEASE_SECONDS = 0.1;
+export const SILENT_GAIN = 0.0001;
+
 const SOUND_PROFILES: Record<VoiceActionSound, VoiceActionNote[]> = {
   join: [
-    { frequency: 440, startsAt: 0, duration: 0.14, gain: 0.24 },
-    { frequency: 660, startsAt: 0.11, duration: 0.2, gain: 0.26 },
+    { frequency: 220, startsAt: 0, duration: 0.14, gain: 0.12 },
+    { frequency: 330, startsAt: 0.11, duration: 0.2, gain: 0.13 },
   ],
   leave: [
-    { frequency: 620, startsAt: 0, duration: 0.14, gain: 0.22 },
-    { frequency: 390, startsAt: 0.11, duration: 0.2, gain: 0.24 },
+    { frequency: 310, startsAt: 0, duration: 0.14, gain: 0.11 },
+    { frequency: 195, startsAt: 0.11, duration: 0.2, gain: 0.12 },
   ],
-  mute: [{ frequency: 310, startsAt: 0, duration: 0.18, gain: 0.25 }],
-  unmute: [{ frequency: 520, startsAt: 0, duration: 0.18, gain: 0.25 }],
+  mute: [{ frequency: 155, startsAt: 0, duration: 0.18, gain: 0.125 }],
+  unmute: [{ frequency: 260, startsAt: 0, duration: 0.18, gain: 0.125 }],
   "screen-share-start": [
-    { frequency: 480, startsAt: 0, duration: 0.12, gain: 0.22 },
-    { frequency: 720, startsAt: 0.09, duration: 0.22, gain: 0.26 },
+    { frequency: 240, startsAt: 0, duration: 0.14, gain: 0.11 },
+    { frequency: 360, startsAt: 0.09, duration: 0.22, gain: 0.13 },
   ],
   "screen-share-stop": [
-    { frequency: 680, startsAt: 0, duration: 0.12, gain: 0.22 },
-    { frequency: 420, startsAt: 0.09, duration: 0.22, gain: 0.24 },
+    { frequency: 340, startsAt: 0, duration: 0.14, gain: 0.11 },
+    { frequency: 210, startsAt: 0.09, duration: 0.22, gain: 0.12 },
   ],
 };
 
@@ -54,8 +58,10 @@ export function playVoiceActionSound(action: VoiceActionSound): void {
       gain.connect(audioContext.destination);
       oscillator.type = "sine";
       oscillator.frequency.setValueAtTime(note.frequency, startTime);
-      gain.gain.setValueAtTime(note.gain, startTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, endTime);
+      gain.gain.setValueAtTime(SILENT_GAIN, startTime);
+      gain.gain.linearRampToValueAtTime(note.gain, startTime + VOICE_SOUND_ATTACK_SECONDS);
+      gain.gain.setValueAtTime(note.gain, endTime - VOICE_SOUND_RELEASE_SECONDS);
+      gain.gain.exponentialRampToValueAtTime(SILENT_GAIN, endTime);
       oscillator.start(startTime);
       oscillator.stop(endTime);
     }
