@@ -23,6 +23,29 @@ export function callParticipantFrom(
   };
 }
 
+export function reuseCallParticipants(
+  prev: CallParticipant[],
+  next: CallParticipant[],
+): CallParticipant[] {
+  const prevByIdentity = new Map(prev.map((participant) => [participant.identity, participant]));
+  const reused = next.map((participant) => {
+    const previous = prevByIdentity.get(participant.identity);
+    const unchanged =
+      previous !== undefined &&
+      previous.name === participant.name &&
+      previous.isLocal === participant.isLocal;
+    return unchanged ? previous : participant;
+  });
+  const sameList =
+    reused.length === prev.length &&
+    reused.every((participant, index) => participant === prev[index]);
+  return sameList ? prev : reused;
+}
+
+export function sameStringList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 export function findShareByIdentity(shares: LiveShare[], identity: string): LiveShare | undefined {
   return shares.find((share) => share.identity === identity);
 }
@@ -32,6 +55,7 @@ export function setIdentityValue<T>(
   identity: string,
   value: T,
 ): Record<string, T> {
+  if (map[identity] === value) return map;
   return { ...map, [identity]: value };
 }
 
@@ -79,4 +103,19 @@ export function migrateScreenShareVolumeKey(
   participant: ParticipantKeys,
 ): boolean {
   return migrateKey(storage, SCREEN_SHARE_VOLUMES_KEY, participant);
+}
+
+export function migrateLegacyVolumeKeysOnce(
+  migratedIdentities: Set<string>,
+  storage: Storage | null,
+  participant: ParticipantKeys,
+): { volumes: boolean; screenShareVolumes: boolean } {
+  if (migratedIdentities.has(participant.identity)) {
+    return { volumes: false, screenShareVolumes: false };
+  }
+  migratedIdentities.add(participant.identity);
+  return {
+    volumes: migrateVolumeKey(storage, participant),
+    screenShareVolumes: migrateScreenShareVolumeKey(storage, participant),
+  };
 }

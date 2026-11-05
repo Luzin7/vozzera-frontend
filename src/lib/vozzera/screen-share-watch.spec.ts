@@ -6,6 +6,8 @@ import {
   deriveAvailableShares,
   applyWatchIntent,
   removeWatchIntent,
+  reuseLiveShares,
+  watchIntentsAfterRoomEvent,
   shouldAcceptSubscribedShare,
   shouldSubscribe,
 } from "./screen-share-watch";
@@ -135,5 +137,50 @@ describe("deriveAvailableShares", () => {
     const audioOnly = makeParticipant([makePublication("screen_share_audio")]);
 
     expect(deriveAvailableShares([audioOnly])).toEqual([]);
+  });
+});
+
+describe("watchIntentsAfterRoomEvent", () => {
+  const intents = new Set(["ana-id", "bia-id"]);
+
+  it("keeps the intent when the same sharer stops sharing", () => {
+    expect(
+      watchIntentsAfterRoomEvent(intents, { type: "share-unpublished", identity: "ana-id" }),
+    ).toBe(intents);
+  });
+
+  it("clears the intent of the participant who left the call", () => {
+    const next = watchIntentsAfterRoomEvent(intents, {
+      type: "participant-disconnected",
+      identity: "ana-id",
+    });
+
+    expect([...next]).toEqual(["bia-id"]);
+  });
+
+  it("keeps the same set when the leaver had no intent", () => {
+    expect(
+      watchIntentsAfterRoomEvent(intents, { type: "participant-disconnected", identity: "cy-id" }),
+    ).toBe(intents);
+  });
+});
+
+describe("reuseLiveShares", () => {
+  const prev = [{ identity: "ana-id", name: "Ana" }];
+
+  it("returns the previous list when identities and names match", () => {
+    expect(reuseLiveShares(prev, [{ identity: "ana-id", name: "Ana" }])).toBe(prev);
+  });
+
+  it("returns the next list when a name changes", () => {
+    const next = [{ identity: "ana-id", name: "Ana B." }];
+
+    expect(reuseLiveShares(prev, next)).toBe(next);
+  });
+
+  it("returns the next list when a share appears", () => {
+    const next = [...prev, { identity: "bia-id", name: "Bia" }];
+
+    expect(reuseLiveShares(prev, next)).toBe(next);
   });
 });

@@ -21,6 +21,13 @@ export class MicrophoneUnavailableError extends Error {
     this.name = "MicrophoneUnavailableError";
   }
 }
+export class MicDeviceSwitchFailedError extends Error {
+  constructor() {
+    super("Não consegui trocar o microfone.");
+    this.name = "MicDeviceSwitchFailedError";
+  }
+}
+
 const CHANNEL_CLOSED_MESSAGE = "O canal de voz foi encerrado.";
 const CONNECTION_LOST_MESSAGE = "A conexão de voz caiu. Entre no canal de novo.";
 

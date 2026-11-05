@@ -117,7 +117,6 @@ describe("playVoiceActionSound", () => {
   });
 
   it("schedules a soft attack and release on the gain", () => {
-    vi.useFakeTimers();
     const gainCalls: unknown[][] = [];
     const gainParam = {
       setValueAtTime: (...args: unknown[]) => gainCalls.push(["set", ...args]),
@@ -128,6 +127,7 @@ describe("playVoiceActionSound", () => {
     class FakeAudioContext {
       currentTime = currentTime;
       destination = {};
+      state = "running";
       createOscillator = () => ({
         connect: () => undefined,
         frequency: { setValueAtTime: () => undefined },
@@ -138,7 +138,7 @@ describe("playVoiceActionSound", () => {
       createGain = () => ({ connect: () => undefined, gain: gainParam });
       close = () => Promise.resolve();
     }
-    vi.stubGlobal("window", { AudioContext: FakeAudioContext, setTimeout });
+    vi.stubGlobal("window", { AudioContext: FakeAudioContext });
 
     playVoiceActionSound("mute");
 
@@ -152,5 +152,63 @@ describe("playVoiceActionSound", () => {
       ["set", note.gain, end - VOICE_SOUND_RELEASE_SECONDS],
       ["exp", SILENT_GAIN, end],
     ]);
+  });
+
+  it("reuses one audio context across plays and never closes it", async () => {
+    vi.resetModules();
+    const { playVoiceActionSound: play } = await import("./voice-sounds");
+    const created: FakeSharedAudioContext[] = [];
+    class FakeSharedAudioContext {
+      currentTime = 0;
+      destination = {};
+      state = "running";
+      resume = vi.fn(() => Promise.resolve());
+      close = vi.fn(() => Promise.resolve());
+      createOscillator = () => ({
+        connect: () => undefined,
+        frequency: { setValueAtTime: () => undefined },
+        start: () => undefined,
+        stop: () => undefined,
+        type: "",
+      });
+      createGain = () => ({
+        connect: () => undefined,
+        gain: {
+          setValueAtTime: () => undefined,
+          linearRampToValueAtTime: () => undefined,
+          exponentialRampToValueAtTime: () => undefined,
+        },
+      });
+      constructor() {
+        created.push(this);
+      }
+    }
+    vi.stubGlobal("window", { AudioContext: FakeSharedAudioContext });
+
+    play("join");
+    play("leave");
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.close).not.toHaveBeenCalled();
+  });
+
+  it("drops the sound and swallows the rejection when the context stays suspended", async () => {
+    vi.resetModules();
+    const { playVoiceActionSound: play } = await import("./voice-sounds");
+    const createOscillator = vi.fn();
+    class SuspendedAudioContext {
+      currentTime = 0;
+      destination = {};
+      state = "suspended";
+      resume = vi.fn(() => Promise.reject(new Error("blocked")));
+      createOscillator = createOscillator;
+      createGain = vi.fn();
+    }
+    vi.stubGlobal("window", { AudioContext: SuspendedAudioContext });
+
+    play("join");
+    await Promise.resolve();
+
+    expect(createOscillator).not.toHaveBeenCalled();
   });
 });

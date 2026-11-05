@@ -37,18 +37,28 @@ export function voiceActionNotesFor(action: VoiceActionSound): VoiceActionNote[]
   return SOUND_PROFILES[action].map((note) => ({ ...note }));
 }
 
+let sharedAudioContext: AudioContext | null = null;
+
+function sharedContext(): AudioContext {
+  if (sharedAudioContext) return sharedAudioContext;
+  const AudioContextConstructor =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  sharedAudioContext = new AudioContextConstructor();
+  return sharedAudioContext;
+}
+
 export function playVoiceActionSound(action: VoiceActionSound): void {
   if (typeof window === "undefined") return;
 
   try {
-    const AudioContextConstructor =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const audioContext = new AudioContextConstructor();
-    const notes = voiceActionNotesFor(action);
-    const finalNote = notes[notes.length - 1];
+    const audioContext = sharedContext();
+    if (audioContext.state !== "running") {
+      if (audioContext.state === "suspended") audioContext.resume().catch(() => undefined);
+      return;
+    }
 
-    for (const note of notes) {
+    for (const note of voiceActionNotesFor(action)) {
       const oscillator = audioContext.createOscillator();
       const gain = audioContext.createGain();
       const startTime = audioContext.currentTime + note.startsAt;
@@ -65,12 +75,6 @@ export function playVoiceActionSound(action: VoiceActionSound): void {
       oscillator.start(startTime);
       oscillator.stop(endTime);
     }
-
-    if (!finalNote) return;
-    window.setTimeout(
-      () => void audioContext.close(),
-      (finalNote.startsAt + finalNote.duration) * 1000 + 50,
-    );
   } catch {
     // WebAudio pode falhar em ambientes sem suporte
   }

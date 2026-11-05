@@ -531,7 +531,7 @@ function Index() {
                 onWatchShare={voice.watchShare}
                 onStopWatchingShare={voice.stopWatchingShare}
                 localPreview={voice.localPreview}
-                remoteQualities={voice.remoteQualities}
+                qualities={voice.qualities}
                 connectedAt={voice.connectedAt}
                 miniWindowSupported={miniWindow.supported}
                 miniWindowOpen={miniWindow.isOpen}

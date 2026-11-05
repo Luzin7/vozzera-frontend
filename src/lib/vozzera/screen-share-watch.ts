@@ -1,5 +1,8 @@
 import { Track } from "livekit-client";
 
+export const LIVE_SHARE_LOAD_TIMEOUT_MS = 15_000;
+export const LIVE_SHARE_FAILURE_NOTICE_MS = 4_000;
+
 export type WatchIntents = ReadonlySet<string>;
 
 export type LiveShare = {
@@ -77,4 +80,28 @@ export function deriveAvailableShares(
     shares.push({ identity: participant.identity, name: participant.name || participant.identity });
   }
   return shares;
+}
+
+export type WatchRoomEvent = {
+  type: "share-unpublished" | "participant-disconnected";
+  identity: string;
+};
+
+export function watchIntentsAfterRoomEvent(
+  intents: WatchIntents,
+  event: WatchRoomEvent,
+): WatchIntents {
+  if (event.type === "share-unpublished") return intents;
+  if (!intents.has(event.identity)) return intents;
+  return removeWatchIntent(intents, event.identity);
+}
+
+export function reuseLiveShares(prev: LiveShare[], next: LiveShare[]): LiveShare[] {
+  const unchanged =
+    prev.length === next.length &&
+    prev.every(
+      (share, index) =>
+        share.identity === next[index]?.identity && share.name === next[index]?.name,
+    );
+  return unchanged ? prev : next;
 }

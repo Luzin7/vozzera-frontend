@@ -1,26 +1,16 @@
-import {
-  HeadphoneOff,
-  Mic,
-  MicOff,
-  MonitorUp,
-  MonitorX,
-  PhoneOff,
-  PictureInPicture2,
-  VolumeX,
-} from "lucide-react";
+import { useState } from "react";
+import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, PictureInPicture2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { LiveShareTileControls } from "@/components/vozzera/LiveShareControls";
 import { CallDuration } from "@/components/vozzera/CallDuration";
-import { ConnectionQualityBadge } from "@/components/vozzera/ConnectionQualityBadge";
+import { ParticipantTile } from "@/components/vozzera/ParticipantTile";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
-import { initials } from "@/lib/vozzera/avatar";
 import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
 import type { CallParticipant } from "@/lib/vozzera/call-participants";
-import { findShareByIdentity } from "@/lib/vozzera/call-participants";
 import type { ScreenShareHealth } from "@/lib/vozzera/voice";
 import {
+  featuredShareId,
   isParticipantLocallyInaudible,
   isParticipantMuted,
   screenShareHealthMessageFor,
@@ -45,7 +35,7 @@ type Props = {
   liveShares: LiveShare[];
   watchingIdentities: WatchIntents;
   localPreview: ScreenShare | null;
-  remoteQualities: Record<string, string>;
+  qualities: Record<string, string>;
   connectedAt: number | null;
   miniWindowSupported: boolean;
   miniWindowOpen: boolean;
@@ -57,6 +47,14 @@ type Props = {
   onToggleMiniWindow: () => void;
   onLeave: () => void;
 };
+
+function tileLayoutFor(isSolo: boolean, centersLastParticipant: boolean): string {
+  const width = isSolo ? "max-w-4xl" : "";
+  const centering = centersLastParticipant
+    ? "sm:col-span-2 sm:mx-auto sm:w-1/2 md:col-span-1 md:w-full"
+    : "";
+  return `${width} ${centering}`;
+}
 
 function gridLayoutFor(participantCount: number): string {
   if (participantCount > 4) return "max-w-7xl sm:grid-cols-2 xl:grid-cols-3";
@@ -82,7 +80,7 @@ export function VoiceCallView({
   liveShares,
   watchingIdentities,
   localPreview,
-  remoteQualities,
+  qualities,
   connectedAt,
   miniWindowSupported,
   miniWindowOpen,
@@ -98,132 +96,109 @@ export function VoiceCallView({
   const isSolo = participants.length === 1;
   const gridLayout = gridLayoutFor(participants.length);
   const canShare = useCanShareScreen();
+  const [selectedShareId, setSelectedShareId] = useState<string | null>(null);
+  const hasScreenShares = screenShares.length > 0;
+  if (!hasScreenShares && selectedShareId !== null) setSelectedShareId(null);
+  const featuredId = hasScreenShares ? featuredShareId(selectedShareId, screenShares) : null;
+  const featuredShare = screenShares.find((share) => share.id === featuredId);
+  const featuredQuality = featuredShare ? qualities[featuredShare.identity] : undefined;
+  const speakingSet = new Set(speakingIdentities);
+  const liveShareNames = new Map(liveShares.map((share) => [share.identity, share.name]));
   const healthMessage = screenShareHealthMessageFor(screenShareHealth);
   const showHealth =
     screenShareEnabled && healthMessage !== null && onReduceLocalQuality !== undefined;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {screenShares.length > 0 ? (
-          <ScreenShareStage
-            shares={screenShares}
-            remoteQualities={remoteQualities}
-            liveShares={liveShares}
-            watchingIdentities={watchingIdentities}
-            onWatchShare={onWatchShare}
-            onStopWatchingShare={onStopWatchingShare}
-          />
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {status === "connecting" ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Conectando ao canal {roomName}...
-              </div>
-            ) : (
-              <div
-                className={`mx-auto grid min-h-full w-full content-center grid-cols-1 gap-3 ${gridLayout}`}
-              >
-                {participants.map(({ identity, name, isLocal }, index) => {
-                  const isSpeaking = speakingIdentities.includes(identity);
-                  const isMuted = isParticipantMuted({
-                    identity,
-                    isLocal,
-                    micEnabled,
-                    mutedParticipants,
-                  });
-                  const isLocallyInaudible = isParticipantLocallyInaudible(
-                    isLocal,
-                    volumes[identity],
-                  );
-                  const liveShare = findShareByIdentity(liveShares, identity);
-                  const centersLastParticipant = participants.length === 3 && index === 2;
-
-                  return (
-                    <article
+    <TooltipProvider>
+      <div className="flex min-h-0 flex-1 flex-col bg-background">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {screenShares.length > 0 ? (
+            <ScreenShareStage
+              shares={screenShares}
+              featuredId={featuredId}
+              featuredQuality={featuredQuality}
+              onSelectShare={setSelectedShareId}
+              liveShares={liveShares}
+              watchingIdentities={watchingIdentities}
+              onWatchShare={onWatchShare}
+              onStopWatchingShare={onStopWatchingShare}
+            />
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {status === "connecting" ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Conectando ao canal {roomName}...
+                </div>
+              ) : (
+                <div
+                  className={`mx-auto grid min-h-full w-full content-center grid-cols-1 gap-3 ${gridLayout}`}
+                >
+                  {participants.map(({ identity, name, isLocal }, index) => (
+                    <ParticipantTile
                       key={identity}
-                      className={`relative flex aspect-video w-full items-center justify-center rounded-xl border bg-card p-6 transition-colors ${
-                        isSolo ? "max-w-4xl" : ""
-                      } ${
-                        centersLastParticipant
-                          ? "sm:col-span-2 sm:mx-auto sm:w-1/2 md:col-span-1 md:w-full"
-                          : ""
-                      } ${isSpeaking ? "border-primary" : "border-border"}`}
-                    >
-                      {liveShare && (
-                        <LiveShareTileControls
-                          share={liveShare}
-                          watchingIdentities={watchingIdentities}
-                          onWatch={onWatchShare}
-                        />
+                      identity={identity}
+                      name={name}
+                      isLocal={isLocal}
+                      layoutClassName={tileLayoutFor(
+                        isSolo,
+                        participants.length === 3 && index === 2,
                       )}
-                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground">
-                        {initials(name)}
-                      </div>
+                      isSpeaking={speakingSet.has(identity)}
+                      isMuted={isParticipantMuted({
+                        identity,
+                        isLocal,
+                        micEnabled,
+                        mutedParticipants,
+                      })}
+                      isDeafened={(isLocal && deafen) || deafenedParticipants[identity] === true}
+                      isLocallyInaudible={isParticipantLocallyInaudible(isLocal, volumes[identity])}
+                      quality={qualities[identity]}
+                      liveShareName={liveShareNames.get(identity)}
+                      isWatchPending={watchingIdentities.has(identity)}
+                      onWatchShare={onWatchShare}
+                      onStopWatchingShare={onStopWatchingShare}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-                      <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
-                        <span className="truncate">{name}</span>
-                        <ConnectionQualityBadge quality={remoteQualities[identity]} />
-                        {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
-                        {((isLocal && deafen) || deafenedParticipants[identity]) && (
-                          <HeadphoneOff
-                            aria-label={
-                              isLocal ? "Você está no mudo total" : `${name} está no mudo total`
-                            }
-                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                          />
-                        )}
-                        {isLocallyInaudible && (
-                          <VolumeX
-                            aria-label="Silenciado para você"
-                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                          />
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+          {localPreview && <LocalScreenPreview share={localPreview} />}
 
-        {localPreview && <LocalScreenPreview share={localPreview} />}
-
-        {connectionState === "reconnecting" && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 text-sm text-muted-foreground"
-          >
-            Reconectando…
-          </div>
-        )}
-      </div>
-
-      {showHealth && (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-          <span>{healthMessage}</span>
-          <Button size="sm" variant="secondary" onClick={() => onReduceLocalQuality?.()}>
-            Mudar para Economia
-          </Button>
+          {connectionState === "reconnecting" && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 text-sm text-muted-foreground"
+            >
+              Reconectando…
+            </div>
+          )}
         </div>
-      )}
 
-      <div className="relative flex shrink-0 items-center justify-center gap-2 border-t border-border px-4 py-3">
-        <CallDuration connectedAt={connectedAt} />
-        <Button
-          size="icon"
-          variant={micEnabled ? "secondary" : "destructive"}
-          className="h-11 w-11"
-          onClick={onToggleMic}
-          disabled={!isConnected}
-        >
-          {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
-        </Button>
+        {showHealth && (
+          <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+            <span>{healthMessage}</span>
+            <Button size="sm" variant="secondary" onClick={() => onReduceLocalQuality?.()}>
+              Mudar para Economia
+            </Button>
+          </div>
+        )}
 
-        <TooltipProvider>
+        <div className="relative flex shrink-0 items-center justify-center gap-2 border-t border-border px-4 py-3">
+          <CallDuration connectedAt={connectedAt} />
+          <Button
+            size="icon"
+            variant={micEnabled ? "secondary" : "destructive"}
+            className="h-11 w-11"
+            onClick={onToggleMic}
+            disabled={!isConnected}
+          >
+            {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
+          </Button>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="hidden md:inline-flex">
@@ -253,10 +228,8 @@ export function VoiceCallView({
                 : "Compartilhar tela não é suportado neste dispositivo"}
             </TooltipContent>
           </Tooltip>
-        </TooltipProvider>
 
-        {miniWindowSupported && (
-          <TooltipProvider>
+          {miniWindowSupported && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="hidden md:inline-flex">
@@ -278,14 +251,14 @@ export function VoiceCallView({
                 {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
               </TooltipContent>
             </Tooltip>
-          </TooltipProvider>
-        )}
+          )}
 
-        <Button size="icon" variant="destructive" className="h-11 w-11" onClick={onLeave}>
-          <PhoneOff className="h-4 w-4" />
-          <span className="sr-only">Sair do canal de voz</span>
-        </Button>
+          <Button size="icon" variant="destructive" className="h-11 w-11" onClick={onLeave}>
+            <PhoneOff className="h-4 w-4" />
+            <span className="sr-only">Sair do canal de voz</span>
+          </Button>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

@@ -1,3 +1,5 @@
+import { MicDeviceSwitchFailedError } from "./voice-errors";
+
 export type MicDevice = {
   deviceId: string;
   label: string;
@@ -12,7 +14,7 @@ export type MicCaptureOptions = {
 };
 
 export type MicDeviceSwitcher = {
-  switchActiveDevice(kind: "audioinput", deviceId: string): Promise<unknown>;
+  switchActiveDevice(kind: "audioinput", deviceId: string): Promise<boolean>;
 };
 
 export type DegradationPreference = "maintain-framerate" | "maintain-resolution";
@@ -309,7 +311,8 @@ export async function applyMicDeviceChoice(params: {
     writeMicDeviceId(storage, deviceId);
     return;
   }
-  await room.switchActiveDevice("audioinput", deviceId);
+  const switched = await room.switchActiveDevice("audioinput", deviceId);
+  if (!switched) throw new MicDeviceSwitchFailedError();
   onSelected(deviceId);
   writeMicDeviceId(storage, deviceId);
 }
