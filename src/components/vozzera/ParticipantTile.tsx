@@ -2,9 +2,10 @@ import { memo } from "react";
 import { HeadphoneOff, MicOff, VolumeX } from "lucide-react";
 
 import { ConnectionQualityBadge } from "@/components/vozzera/ConnectionQualityBadge";
+import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { LiveShareTileControls } from "@/components/vozzera/LiveShareControls";
 import { AWAY_TOOLTIP_TEXT } from "@/lib/vozzera/away";
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 
 type ParticipantTileProps = {
   identity: string;
@@ -19,9 +20,19 @@ type ParticipantTileProps = {
   quality: string | undefined;
   liveShareName: string | undefined;
   isWatchPending: boolean;
+  volume: number;
+  screenShareVolume: number;
+  isStreaming: boolean;
+  onSetVolume: (identity: string, volume: number) => void;
+  onSetScreenShareVolume: (identity: string, volume: number) => void;
+  onToggleLocalMute: (identity: string) => void;
+  onToggleLocalScreenShareMute: (identity: string) => void;
   onWatchShare: (identity: string) => void;
   onStopWatchingShare: (identity: string) => void;
 };
+
+const TILE_MENU_TRIGGER_CLASS =
+  "group/volume absolute inset-0 cursor-pointer rounded-xl transition-colors hover:bg-foreground/5 focus-visible:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none";
 
 export const ParticipantTile = memo(function ParticipantTile({
   identity,
@@ -36,6 +47,13 @@ export const ParticipantTile = memo(function ParticipantTile({
   quality,
   liveShareName,
   isWatchPending,
+  volume,
+  screenShareVolume,
+  isStreaming,
+  onSetVolume,
+  onSetScreenShareVolume,
+  onToggleLocalMute,
+  onToggleLocalScreenShareMute,
   onWatchShare,
   onStopWatchingShare,
 }: Readonly<ParticipantTileProps>) {
@@ -46,7 +64,9 @@ export const ParticipantTile = memo(function ParticipantTile({
         aria-label={`${name}: ausente, não está ouvindo`}
         className={`relative flex aspect-video w-full items-center justify-center rounded-xl border border-border bg-card p-6 opacity-50 transition-opacity motion-reduce:transition-none ${layoutClassName}`}
       >
-        <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground">
+        <div
+          className={`relative flex h-20 w-20 items-center justify-center rounded-full font-mono text-xl font-semibold ${avatarColorClass(name)}`}
+        >
           {initials(name)}
           <span
             aria-hidden="true"
@@ -65,10 +85,28 @@ export const ParticipantTile = memo(function ParticipantTile({
 
   return (
     <article
-      className={`relative flex aspect-video w-full items-center justify-center rounded-xl border bg-card p-6 transition-colors motion-reduce:transition-none ${layoutClassName} ${
-        isSpeaking ? "border-primary" : "border-border"
-      }`}
+      className={`relative flex aspect-video w-full items-center justify-center rounded-xl border bg-card p-6 border-border ${layoutClassName}`}
     >
+      {!isLocal && (
+        <ParticipantMenu
+          name={name}
+          volume={volume}
+          screenShareVolume={screenShareVolume}
+          locallyMuted={volume === 0}
+          screenShareLocallyMuted={screenShareVolume === 0}
+          isMuted={isMuted}
+          isStreaming={isStreaming}
+          isSpeaking={isSpeaking}
+          onSetVolume={(next) => onSetVolume(identity, next)}
+          onSetScreenShareVolume={(next) => onSetScreenShareVolume(identity, next)}
+          onToggleLocalMute={() => onToggleLocalMute(identity)}
+          onToggleLocalScreenShareMute={() => onToggleLocalScreenShareMute(identity)}
+          triggerClassName={TILE_MENU_TRIGGER_CLASS}
+          iconClassName="absolute bottom-3 right-3 h-4 w-4"
+        >
+          {null}
+        </ParticipantMenu>
+      )}
       {liveShareName !== undefined && (
         <LiveShareTileControls
           identity={identity}
@@ -78,7 +116,11 @@ export const ParticipantTile = memo(function ParticipantTile({
           onStopWatching={onStopWatchingShare}
         />
       )}
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground">
+      <div
+        className={`flex h-20 w-20 items-center justify-center rounded-full font-mono text-xl font-semibold ring-offset-card transition-[box-shadow,border-color] duration-150 motion-reduce:transition-none ${avatarColorClass(name)} ${
+          isSpeaking ? "ring-2 ring-primary ring-offset-2" : "ring-0 ring-offset-0"
+        }`}
+      >
         {initials(name)}
       </div>
 

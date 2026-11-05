@@ -1,5 +1,5 @@
 import { AWAY_TOOLTIP_TEXT, sidebarEntriesFor } from "@/lib/vozzera/away";
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 import type { AwayEntry, VoiceParticipant } from "@/lib/vozzera/types";
 
 type Props = {
@@ -22,7 +22,9 @@ export function VoicePresenceList({ participants, away }: Readonly<Props>) {
           }`}
         >
           <span className="relative shrink-0">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
+            <span
+              className={`flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] font-semibold ${avatarColorClass(entry.username)}`}
+            >
               {initials(entry.username)}
             </span>
             {entry.isAway ? (

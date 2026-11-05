@@ -1,9 +1,10 @@
 import { memo, useEffect, useLayoutEffect, useRef } from "react";
 
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 import {
   editorKeyAction,
   formatEditedAt,
+  formatMessageDateTime,
   formatMessageTime,
   wasEdited,
 } from "@/lib/vozzera/message-display";
@@ -32,14 +33,12 @@ function EditedLabel({ message }: Readonly<{ message: ChatMessage }>) {
 function MessageEditor({
   messageId,
   value,
-  error,
   onChange,
   onSave,
   onCancel,
 }: Readonly<{
   messageId: string;
   value: string;
-  error: string | null;
   onChange: (content: string) => void;
   onSave: (messageId: string) => void;
   onCancel: () => void;
@@ -69,7 +68,6 @@ function MessageEditor({
           value={value}
           rows={1}
           autoComplete="off"
-          aria-invalid={error !== null}
           className="max-h-60 min-h-9 resize-none overflow-y-auto py-1.5 leading-5"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -108,11 +106,6 @@ function MessageEditor({
           </Button>
         </div>
       </div>
-      {error && (
-        <p role="alert" className="mt-1 text-xs text-destructive">
-          {error}
-        </p>
-      )}
     </div>
   );
 }
@@ -199,7 +192,6 @@ type MessageItemProps = Readonly<{
   canDeleteMessage: boolean;
   isEditing: boolean;
   editContent: string;
-  editError: string | null;
   onStartEdit: (message: ChatMessage) => void;
   onRequestDelete: (message: ChatMessage) => void;
   onEditContentChange: (content: string) => void;
@@ -216,7 +208,6 @@ export const MessageItem = memo(function MessageItem({
   canDeleteMessage,
   isEditing,
   editContent,
-  editError,
   onStartEdit,
   onRequestDelete,
   onEditContentChange,
@@ -232,8 +223,18 @@ export const MessageItem = memo(function MessageItem({
     >
       <div className="group relative flex gap-2 rounded-md px-1 py-0.5 hover:z-10 hover:bg-muted/40 sm:gap-3 sm:px-2">
         <div className="w-9 shrink-0">
-          {!grouped && (
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold text-foreground">
+          {grouped ? (
+            <time
+              dateTime={message.createdAt}
+              title={formatMessageDateTime(message.createdAt)}
+              className="block pt-1 text-right text-[10px] leading-5 text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-60"
+            >
+              {formatMessageTime(message.createdAt)}
+            </time>
+          ) : (
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-md font-mono text-xs font-semibold ${avatarColorClass(message.username)}`}
+            >
               {initials(message.username)}
             </div>
           )}
@@ -244,9 +245,13 @@ export const MessageItem = memo(function MessageItem({
             <div className="flex items-baseline gap-2">
               <span className="text-sm font-semibold text-foreground">{message.username}</span>
 
-              <span className="text-[11px] text-muted-foreground">
+              <time
+                dateTime={message.createdAt}
+                title={formatMessageDateTime(message.createdAt)}
+                className="text-[11px] text-muted-foreground"
+              >
                 {formatMessageTime(message.createdAt)}
-              </span>
+              </time>
               <EditedLabel message={message} />
             </div>
           )}
@@ -263,7 +268,6 @@ export const MessageItem = memo(function MessageItem({
             <MessageEditor
               messageId={message.id}
               value={editContent}
-              error={editError}
               onChange={onEditContentChange}
               onSave={onSaveEdit}
               onCancel={onCancelEdit}

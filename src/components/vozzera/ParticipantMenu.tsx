@@ -1,10 +1,15 @@
 import { MicOff, MonitorUp, Volume2, VolumeX } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { cn } from "@/lib/utils";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 import { participantStatusLabelFor } from "@/lib/vozzera/voice";
+
+const ROW_TRIGGER_CLASS =
+  "group/volume flex min-h-11 w-full cursor-pointer items-center gap-1.5 rounded-md py-0.5 pr-1.5 text-left transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground focus-visible:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none md:min-h-0";
 
 type Props = {
   name: string;
@@ -19,6 +24,8 @@ type Props = {
   onSetScreenShareVolume: (volume: number) => void;
   onToggleLocalMute: () => void;
   onToggleLocalScreenShareMute: () => void;
+  triggerClassName?: string;
+  iconClassName?: string;
   children: ReactNode;
 };
 
@@ -86,6 +93,8 @@ export function ParticipantMenu({
   onSetScreenShareVolume,
   onToggleLocalMute,
   onToggleLocalScreenShareMute,
+  triggerClassName = ROW_TRIGGER_CLASS,
+  iconClassName = "ml-auto",
   children,
 }: Readonly<Props>) {
   return (
@@ -93,15 +102,25 @@ export function ParticipantMenu({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`Opções de ${name}`}
-          className="flex min-h-11 w-full items-center rounded-md py-0.5 text-left hover:bg-sidebar-accent/60 md:min-h-0"
+          aria-label={`Ajustar volume de ${name}`}
+          title={`Ajustar volume de ${name}`}
+          className={triggerClassName}
         >
           {children}
+          <Volume2
+            aria-hidden="true"
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/volume:opacity-100 group-focus-visible/volume:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-60",
+              iconClassName,
+            )}
+          />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" side="right" className="w-72 p-0">
+      <PopoverContent align="start" side="right" collisionPadding={8} className="w-72 p-0">
         <div className="flex items-center gap-3 p-3.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-sm font-semibold text-foreground">
+          <span
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-mono text-sm font-semibold ${avatarColorClass(name)}`}
+          >
             {initials(name)}
           </span>
           <div className="min-w-0">

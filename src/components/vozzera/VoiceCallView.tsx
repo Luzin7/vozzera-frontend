@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff, PictureInPicture2 } from "lucide-react";
+import {
+  HeadphoneOff,
+  Headphones,
+  Mic,
+  MicOff,
+  MonitorUp,
+  MonitorX,
+  PhoneOff,
+  PictureInPicture2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -30,6 +39,7 @@ type Props = {
   micEnabled: boolean;
   deafen: boolean;
   volumes: Record<string, number>;
+  screenShareVolumes: Record<string, number>;
   mutedParticipants: Record<string, boolean>;
   deafenedParticipants: Record<string, boolean>;
   speakingIdentities: string[];
@@ -44,6 +54,11 @@ type Props = {
   miniWindowSupported: boolean;
   miniWindowOpen: boolean;
   onToggleMic: () => void;
+  onSetVolume: (identity: string, volume: number) => void;
+  onSetScreenShareVolume: (identity: string, volume: number) => void;
+  onToggleLocalMute: (identity: string) => void;
+  onToggleLocalScreenShareMute: (identity: string) => void;
+  onToggleDeafen: () => void;
   onToggleScreenShare: () => void;
   onWatchShare: (identity: string) => void;
   onStopWatchingShare: (identity: string) => void;
@@ -78,6 +93,7 @@ export function VoiceCallView({
   micEnabled,
   deafen,
   volumes,
+  screenShareVolumes,
   mutedParticipants,
   deafenedParticipants,
   speakingIdentities,
@@ -92,6 +108,11 @@ export function VoiceCallView({
   miniWindowSupported,
   miniWindowOpen,
   onToggleMic,
+  onSetVolume,
+  onSetScreenShareVolume,
+  onToggleLocalMute,
+  onToggleLocalScreenShareMute,
+  onToggleDeafen,
   onToggleScreenShare,
   onWatchShare,
   onStopWatchingShare,
@@ -173,6 +194,13 @@ export function VoiceCallView({
                       quality={qualities[identity]}
                       liveShareName={liveShareNames.get(identity)}
                       isWatchPending={watchingIdentities.has(identity)}
+                      volume={volumes[identity] ?? 1}
+                      screenShareVolume={screenShareVolumes[identity] ?? 1}
+                      isStreaming={screenShares.some((share) => share.identity === identity)}
+                      onSetVolume={onSetVolume}
+                      onSetScreenShareVolume={onSetScreenShareVolume}
+                      onToggleLocalMute={onToggleLocalMute}
+                      onToggleLocalScreenShareMute={onToggleLocalScreenShareMute}
                       onWatchShare={onWatchShare}
                       onStopWatchingShare={onStopWatchingShare}
                     />
@@ -229,7 +257,18 @@ export function VoiceCallView({
               disabled={!isConnected}
             >
               {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-              <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
+              <span className="sr-only">{micEnabled ? "Mutar" : "Desmutar"}</span>
+            </Button>
+
+            <Button
+              size="icon"
+              variant={deafen ? "destructive" : "secondary"}
+              className="h-11 w-11"
+              onClick={onToggleDeafen}
+              disabled={!isConnected}
+            >
+              {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
+              <span className="sr-only">{deafen ? "Parar de ensurdecer" : "Ensurdecer"}</span>
             </Button>
 
             <Tooltip>

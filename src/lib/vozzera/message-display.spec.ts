@@ -4,6 +4,7 @@ import {
   createDraftStore,
   editorKeyAction,
   formatEditedAt,
+  formatMessageDateTime,
   formatMessageTime,
   lastOwnMessage,
   MESSAGE_GROUP_MAX_GAP_MS,
@@ -157,7 +158,14 @@ describe("timezone formatting", () => {
     expect(formatEditedAt(iso, "America/Sao_Paulo")).toContain("23:30");
   });
 
+  it("formats the full date tooltip in the given timezone", () => {
+    expect(formatMessageDateTime(iso, "UTC")).toContain("02:30");
+    expect(formatMessageDateTime(iso, "America/Sao_Paulo")).toContain("23:30");
+    expect(formatMessageDateTime(iso, "UTC")).not.toContain("Editada");
+  });
+
   it("returns empty for an invalid date", () => {
+    expect(formatMessageDateTime("x", "UTC")).toBe("");
     expect(formatMessageTime("x", "UTC")).toBe("");
     expect(formatEditedAt("x", "UTC")).toBe("");
   });
