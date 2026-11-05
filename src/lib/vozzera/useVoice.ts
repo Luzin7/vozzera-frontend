@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ConnectionQuality } from "livekit-client";
 import { api } from "./api";
-import { callParticipantFrom, omitIdentity, setIdentityValue } from "./call-participants";
-import type { CallParticipant } from "./call-participants";
 import {
-  setRemoteParticipantScreenShareVolume,
-  useParticipantVolume,
-} from "./use-participant-volume";
+  callParticipantFrom,
+  omitIdentity,
+  reuseCallParticipants,
+  sameStringList,
+  setIdentityValue,
+} from "./call-participants";
+import type { CallParticipant } from "./call-participants";
+import { useParticipantVolume } from "./use-participant-volume";
 import type { ScreenShareAudioSource } from "./use-participant-volume";
 import { useLiveShareWatch } from "./use-live-share-watch";
 import type { LiveShareWatchResult } from "./use-live-share-watch";
@@ -108,7 +111,6 @@ type RoomEventHandlerCtx = {
   notificationsEnabledRef: { readonly current: boolean };
   roomRef: { current: LiveKitRoom | null };
   screenShareRef: { current: boolean };
-  screenShareAudioSourceRef: { readonly current: ScreenShareAudioSource | null };
   voiceAudioContextRef: { readonly current: AudioContext | null };
   deafenRef: { readonly current: boolean };
   setRemoteMuted: (identity: string, muted: boolean) => void;
@@ -123,15 +125,19 @@ type RoomEventHandlerCtx = {
   onLocalTrackUnpublished: (publication: import("livekit-client").LocalTrackPublication) => void;
   liveShare: Pick<
     LiveShareWatchResult,
-    "onShareTrackPublished" | "refreshLiveShares" | "applyInitialShares" | "hasWatchIntent"
+    | "onShareTrackPublished"
+    | "onShareTrackUnpublished"
+    | "onParticipantDisconnected"
+    | "refreshLiveShares"
+    | "applyInitialShares"
+    | "hasWatchIntent"
   >;
   syncLocalMicTrack: (room: LiveKitRoom) => void;
   syncActiveSpeakerIdentities: (identities: string[]) => void;
   setConnectionState: (state: ConnectionState) => void;
-  setRemoteQualities: React.Dispatch<React.SetStateAction<Record<string, ConnectionQuality>>>;
+  setQualities: React.Dispatch<React.SetStateAction<Record<string, ConnectionQuality>>>;
   syncParticipants: (room: LiveKitRoom) => void;
   removeParticipant: (identity: string) => void;
-  getScreenShareVolumeRef: () => Record<string, number>;
   closeVoiceAudioContext: (ctx?: AudioContext | null) => Promise<void>;
   resetRoomState: () => void;
   setStatus: (s: VoiceStatus) => void;
@@ -149,7 +155,6 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     notificationsEnabledRef,
     roomRef,
     screenShareRef,
-    screenShareAudioSourceRef,
     voiceAudioContextRef,
     deafenRef,
     setRemoteMuted,
@@ -162,10 +167,9 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     syncLocalMicTrack,
     syncActiveSpeakerIdentities,
     setConnectionState,
-    setRemoteQualities,
+    setQualities,
     syncParticipants,
     removeParticipant,
-    getScreenShareVolumeRef,
     closeVoiceAudioContext,
     resetRoomState,
     setStatus,
@@ -177,7 +181,9 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     liveShare.onShareTrackPublished(room, publication, participant);
   });
 
-  room.on(RoomEvent.TrackUnpublished, () => liveShare.refreshLiveShares(room));
+  room.on(RoomEvent.TrackUnpublished, (_publication, participant) =>
+    liveShare.onShareTrackUnpublished(room, participant),
+  );
 
   room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
     const isShare =
@@ -262,7 +268,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   });
 
   room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
-    setRemoteQualities((prev) => setIdentityValue(prev, participant.identity, quality));
+    setQualities((prev) => setIdentityValue(prev, participant.identity, quality));
   });
 
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
@@ -308,17 +314,6 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     if (participant.identity === room.localParticipant.identity) return;
     publishDeafenState(room, deafenRef.current);
 
-    const ssVolume = getScreenShareVolumeRef()[participant.identity];
-    if (ssVolume !== undefined) {
-      const remoteParticipant = room.remoteParticipants.get(participant.sid);
-      if (remoteParticipant)
-        setRemoteParticipantScreenShareVolume(
-          remoteParticipant,
-          ssVolume,
-          screenShareAudioSourceRef.current,
-        );
-    }
-
     if (
       typeof document !== "undefined" &&
       canNotify(notificationsEnabledRef.current, document.hidden)
@@ -333,7 +328,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const name = participant.name || participant.identity;
     removeParticipant(participant.identity);
     syncParticipants(room);
-    liveShare.refreshLiveShares(room);
+    liveShare.onParticipantDisconnected(room, participant.identity);
     playVoiceActionSound("leave");
 
     if (
@@ -379,7 +374,7 @@ export function useVoice() {
   const [localMicTrack, setLocalMicTrack] = useState<LocalAudioTrack | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("connected");
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
-  const [remoteQualities, setRemoteQualities] = useState<Record<string, ConnectionQuality>>({});
+  const [qualities, setQualities] = useState<Record<string, ConnectionQuality>>({});
   const [deafenedParticipants, setDeafenedParticipants] = useState<Record<string, boolean>>({});
   const [serverSpeakingIdentities, setServerSpeakingIdentities] = useState<string[]>([]);
 
@@ -422,7 +417,6 @@ export function useVoice() {
     setLocalScreenShareMute,
     toggleLocalScreenShareMute,
     setRemoteMuted,
-    getScreenShareVolumeRef,
     resetState: resetParticipantVolumeState,
   } = useParticipantVolume(roomRef, screenShareAudioSourceRef);
 
@@ -447,6 +441,8 @@ export function useVoice() {
     refreshLiveShares,
     hasWatchIntent,
     onShareTrackPublished,
+    onShareTrackUnpublished,
+    onParticipantDisconnected,
     resetState: resetLiveShareState,
   } = useLiveShareWatch();
 
@@ -476,14 +472,19 @@ export function useVoice() {
 
   screenShareRef.current = screenShareEnabled;
 
+  const publishServerSpeakers = useCallback((next: string[]) => {
+    serverSpeakingIdentitiesRef.current = next;
+    setServerSpeakingIdentities((prev) => (sameStringList(prev, next) ? prev : next));
+  }, []);
+
   const syncParticipants = useCallback(
     (room: LiveKitRoom) => {
       const remoteParticipants = Array.from(room.remoteParticipants.values());
       const localIdentity = room.localParticipant.identity;
-      const remotes = remoteParticipants.map((participant) =>
+      const next = [room.localParticipant, ...remoteParticipants].map((participant) =>
         callParticipantFrom(participant, localIdentity),
       );
-      setParticipants([callParticipantFrom(room.localParticipant, localIdentity), ...remotes]);
+      setParticipants((prev) => reuseCallParticipants(prev, next));
       for (const participant of remoteParticipants) applyParticipantVolumes(participant);
     },
     [applyParticipantVolumes],
@@ -500,14 +501,13 @@ export function useVoice() {
       const releaseTimer = speakerReleaseTimersRef.current.get(identity);
       if (releaseTimer) clearTimeout(releaseTimer);
       speakerReleaseTimersRef.current.delete(identity);
-      serverSpeakingIdentitiesRef.current = serverSpeakingIdentitiesRef.current.filter(
-        (speaker) => speaker !== identity,
+      publishServerSpeakers(
+        serverSpeakingIdentitiesRef.current.filter((speaker) => speaker !== identity),
       );
-      setServerSpeakingIdentities(serverSpeakingIdentitiesRef.current);
-      setRemoteQualities((prev) => omitIdentity(prev, identity));
+      setQualities((prev) => omitIdentity(prev, identity));
       setDeafenedParticipants((prev) => omitIdentity(prev, identity));
     },
-    [removeParticipantVolume],
+    [publishServerSpeakers, removeParticipantVolume],
   );
 
   const resetRoomState = useCallback(() => {
@@ -515,7 +515,7 @@ export function useVoice() {
     setServerSpeakingIdentities([]);
     setDeafen(false);
     setLocalMicTrack(null);
-    setRemoteQualities({});
+    setQualities({});
     setConnectedAt(null);
     setDeafenedParticipants({});
     for (const timer of speakerReleaseTimersRef.current.values()) clearTimeout(timer);
@@ -564,35 +564,35 @@ export function useVoice() {
     if (wasConnected) playVoiceActionSound("leave");
   }, [closeVoiceAudioContext, resetRoomState]);
 
-  const syncActiveSpeakerIdentities = useCallback((activeIdentities: string[]) => {
-    const activeIdentitySet = new Set(activeIdentities);
+  const syncActiveSpeakerIdentities = useCallback(
+    (activeIdentities: string[]) => {
+      const activeIdentitySet = new Set(activeIdentities);
 
-    for (const identity of activeIdentities) {
-      const releaseTimer = speakerReleaseTimersRef.current.get(identity);
-      if (releaseTimer) clearTimeout(releaseTimer);
-      speakerReleaseTimersRef.current.delete(identity);
-    }
-
-    for (const identity of serverSpeakingIdentitiesRef.current) {
-      if (activeIdentitySet.has(identity)) continue;
-      if (speakerReleaseTimersRef.current.has(identity)) continue;
-
-      const releaseTimer = setTimeout(() => {
+      for (const identity of activeIdentities) {
+        const releaseTimer = speakerReleaseTimersRef.current.get(identity);
+        if (releaseTimer) clearTimeout(releaseTimer);
         speakerReleaseTimersRef.current.delete(identity);
-        serverSpeakingIdentitiesRef.current = serverSpeakingIdentitiesRef.current.filter(
-          (speaker) => speaker !== identity,
-        );
-        setServerSpeakingIdentities(serverSpeakingIdentitiesRef.current);
-      }, VOICE_RELEASE_DELAY_MS);
-      speakerReleaseTimersRef.current.set(identity, releaseTimer);
-    }
+      }
 
-    serverSpeakingIdentitiesRef.current = mergeActiveSpeakerIdentities(
-      serverSpeakingIdentitiesRef.current,
-      activeIdentities,
-    );
-    setServerSpeakingIdentities(serverSpeakingIdentitiesRef.current);
-  }, []);
+      for (const identity of serverSpeakingIdentitiesRef.current) {
+        if (activeIdentitySet.has(identity)) continue;
+        if (speakerReleaseTimersRef.current.has(identity)) continue;
+
+        const releaseTimer = setTimeout(() => {
+          speakerReleaseTimersRef.current.delete(identity);
+          publishServerSpeakers(
+            serverSpeakingIdentitiesRef.current.filter((speaker) => speaker !== identity),
+          );
+        }, VOICE_RELEASE_DELAY_MS);
+        speakerReleaseTimersRef.current.set(identity, releaseTimer);
+      }
+
+      publishServerSpeakers(
+        mergeActiveSpeakerIdentities(serverSpeakingIdentitiesRef.current, activeIdentities),
+      );
+    },
+    [publishServerSpeakers],
+  );
 
   const connect = useCallback(
     async (roomId: string) => {
@@ -653,7 +653,6 @@ export function useVoice() {
           notificationsEnabledRef,
           roomRef,
           screenShareRef,
-          screenShareAudioSourceRef,
           voiceAudioContextRef,
           deafenRef,
           setRemoteMuted,
@@ -664,6 +663,8 @@ export function useVoice() {
           onLocalTrackUnpublished,
           liveShare: {
             onShareTrackPublished,
+            onShareTrackUnpublished,
+            onParticipantDisconnected,
             refreshLiveShares,
             applyInitialShares,
             hasWatchIntent,
@@ -671,10 +672,9 @@ export function useVoice() {
           syncLocalMicTrack,
           syncActiveSpeakerIdentities,
           setConnectionState,
-          setRemoteQualities,
+          setQualities,
           syncParticipants,
           removeParticipant,
-          getScreenShareVolumeRef,
           closeVoiceAudioContext,
           resetRoomState,
           setStatus,
@@ -745,7 +745,6 @@ export function useVoice() {
       applyParticipantVolumes,
       setRemoteMuted,
       setRemoteDeafened,
-      getScreenShareVolumeRef,
       createKrispProcessor,
       applyInitialProcessor,
       closeVoiceAudioContext,
@@ -757,6 +756,8 @@ export function useVoice() {
       onTrackUnsubscribed,
       onLocalTrackUnpublished,
       onShareTrackPublished,
+      onShareTrackUnpublished,
+      onParticipantDisconnected,
       refreshLiveShares,
       applyInitialShares,
       hasWatchIntent,
@@ -983,10 +984,10 @@ export function useVoice() {
   }, [closeVoiceAudioContext]);
 
   const localIdentity = participants.find((participant) => participant.isLocal)?.identity;
-  const speakingIdentities =
-    localSpeaking && localIdentity
-      ? Array.from(new Set([...serverSpeakingIdentities, localIdentity]))
-      : serverSpeakingIdentities;
+  const speakingIdentities = useMemo(() => {
+    if (!localSpeaking || !localIdentity) return serverSpeakingIdentities;
+    return Array.from(new Set([...serverSpeakingIdentities, localIdentity]));
+  }, [localSpeaking, localIdentity, serverSpeakingIdentities]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -1045,7 +1046,7 @@ export function useVoice() {
     error,
     connectionState,
     screenShareHealth,
-    remoteQualities,
+    qualities,
     connectedAt,
     clearError,
     ensureKrispLoaded,

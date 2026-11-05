@@ -9,7 +9,7 @@ import {
   writeParticipantVolumes,
   writeScreenShareVolumes,
 } from "./voice";
-import { migrateScreenShareVolumeKey, migrateVolumeKey } from "./call-participants";
+import { migrateLegacyVolumeKeysOnce } from "./call-participants";
 
 export type ScreenShareAudioSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
 
@@ -67,6 +67,7 @@ export function useParticipantVolume(
 
   const volumesRef = useRef(volumes);
   const screenShareVolumesRef = useRef(screenShareVolumes);
+  const migratedIdentitiesRef = useRef<Set<string>>(new Set());
   const mutedVolumesRef = useRef<Record<string, number>>({});
   const screenShareMutedVolumesRef = useRef<Record<string, number>>({});
 
@@ -76,12 +77,13 @@ export function useParticipantVolume(
   const migrateLegacyVolumes = useCallback((p: RemoteParticipant) => {
     if (typeof localStorage === "undefined") return;
     const keys = { identity: p.identity, name: p.name || p.identity };
+    const migrated = migrateLegacyVolumeKeysOnce(migratedIdentitiesRef.current, localStorage, keys);
 
-    if (migrateVolumeKey(localStorage, keys)) {
+    if (migrated.volumes) {
       volumesRef.current = readParticipantVolumes(localStorage);
       setVolumes(volumesRef.current);
     }
-    if (migrateScreenShareVolumeKey(localStorage, keys)) {
+    if (migrated.screenShareVolumes) {
       screenShareVolumesRef.current = readScreenShareVolumes(localStorage);
       setScreenShareVolumes(screenShareVolumesRef.current);
     }
@@ -207,6 +209,7 @@ export function useParticipantVolume(
     setScreenShareMutedParticipants({});
     mutedVolumesRef.current = {};
     screenShareMutedVolumesRef.current = {};
+    migratedIdentitiesRef.current = new Set();
   }, []);
 
   return {

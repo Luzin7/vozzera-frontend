@@ -44,6 +44,7 @@ import {
   writePushToTalkBinding,
   writePushToTalkEnabled,
 } from "./voice";
+import { MicDeviceSwitchFailedError } from "./voice-errors";
 
 describe("push to talk", () => {
   it("handles V outside editable fields", () => {
@@ -342,6 +343,24 @@ describe("applyMicDeviceChoice", () => {
         onSelected,
       }),
     ).rejects.toThrow("switch failed");
+
+    expect(onSelected).not.toHaveBeenCalled();
+    expect(readMicDeviceId(storage)).toBeNull();
+  });
+
+  it("fails and keeps selection and storage untouched when the switch resolves false", async () => {
+    const storage = createStorage();
+    const onSelected = vi.fn();
+    const switchActiveDevice = vi.fn().mockResolvedValue(false);
+
+    await expect(
+      applyMicDeviceChoice({
+        deviceId: "mic-5",
+        room: { switchActiveDevice },
+        storage,
+        onSelected,
+      }),
+    ).rejects.toBeInstanceOf(MicDeviceSwitchFailedError);
 
     expect(onSelected).not.toHaveBeenCalled();
     expect(readMicDeviceId(storage)).toBeNull();

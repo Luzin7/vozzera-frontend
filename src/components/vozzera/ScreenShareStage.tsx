@@ -1,8 +1,8 @@
 import { Eye, EyeOff, Maximize2, Minimize2, MonitorUp } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { featuredShareId, participantConnectionWarningFor } from "@/lib/vozzera/voice";
+import { participantConnectionWarningFor } from "@/lib/vozzera/voice";
 import { LiveShareStageControls } from "@/components/vozzera/LiveShareControls";
 import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
 import type { ScreenShare } from "@/lib/vozzera/use-screen-share";
@@ -132,27 +132,30 @@ export const LocalScreenPreview = memo(function LocalScreenPreview({
 
 export const ScreenShareStage = memo(function ScreenShareStage({
   shares,
-  remoteQualities,
+  featuredId,
+  featuredQuality,
   liveShares,
   watchingIdentities,
+  onSelectShare,
   onWatchShare,
   onStopWatchingShare,
 }: Readonly<{
   shares: ScreenShare[];
-  remoteQualities: Record<string, string>;
+  featuredId: string | null;
+  featuredQuality: string | undefined;
   liveShares: LiveShare[];
   watchingIdentities: WatchIntents;
+  onSelectShare: (shareId: string) => void;
   onWatchShare: (identity: string) => void;
   onStopWatchingShare: (identity: string) => void;
 }>) {
-  const [selectedShareId, setSelectedShareId] = useState<string | null>(null);
+  const arrivedIdentities = useMemo(() => new Set(shares.map((share) => share.identity)), [shares]);
 
   if (shares.length === 0) return null;
 
-  const featuredId = featuredShareId(selectedShareId, shares);
   const featured = shares.find((share) => share.id === featuredId);
   const networkWarning = featured
-    ? participantConnectionWarningFor(remoteQualities[featured.identity], featured.name)
+    ? participantConnectionWarningFor(featuredQuality, featured.name)
     : null;
 
   return (
@@ -160,16 +163,16 @@ export const ScreenShareStage = memo(function ScreenShareStage({
       {featured && (
         <MemoizedFeaturedVideo key={featured.id} share={featured} networkWarning={networkWarning} />
       )}
-      {shares.length > 1 && (
-        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-border bg-muted/30 px-3 py-2">
-          {shares.map((share) => {
+      <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-border bg-muted/30 px-3 py-2">
+        {shares.length > 1 &&
+          shares.map((share) => {
             const isActive = share.id === featuredId;
             return (
               <Button
                 key={share.id}
                 size="sm"
                 variant={isActive ? "default" : "secondary"}
-                onClick={() => setSelectedShareId(share.id)}
+                onClick={() => onSelectShare(share.id)}
                 aria-pressed={isActive}
                 className="shrink-0"
               >
@@ -178,15 +181,15 @@ export const ScreenShareStage = memo(function ScreenShareStage({
               </Button>
             );
           })}
-        </div>
-      )}
-      <LiveShareStageControls
-        featured={featured}
-        liveShares={liveShares}
-        watchingIdentities={watchingIdentities}
-        onWatch={onWatchShare}
-        onStopWatching={onStopWatchingShare}
-      />
+        <LiveShareStageControls
+          featured={featured}
+          liveShares={liveShares}
+          watchingIdentities={watchingIdentities}
+          arrivedIdentities={arrivedIdentities}
+          onWatch={onWatchShare}
+          onStopWatching={onStopWatchingShare}
+        />
+      </div>
     </div>
   );
 });

@@ -8,8 +8,10 @@ import {
   applyWatchIntentToParticipant,
   deriveAvailableShares,
   removeWatchIntent,
+  reuseLiveShares,
+  watchIntentsAfterRoomEvent,
 } from "./screen-share-watch";
-import type { LiveShare, WatchIntents } from "./screen-share-watch";
+import type { LiveShare, WatchIntents, WatchRoomEvent } from "./screen-share-watch";
 
 export type LiveShareWatchResult = {
   liveShares: LiveShare[];
@@ -24,6 +26,8 @@ export type LiveShareWatchResult = {
     publication: RemoteTrackPublication,
     participant: RemoteParticipant,
   ) => void;
+  onShareTrackUnpublished: (room: Room, participant: RemoteParticipant) => void;
+  onParticipantDisconnected: (room: Room, identity: string) => void;
   resetState: () => void;
 };
 
@@ -33,7 +37,8 @@ export function useLiveShareWatch(): LiveShareWatchResult {
   const [liveShares, setLiveShares] = useState<LiveShare[]>([]);
 
   const refreshLiveShares = useCallback((room: Room) => {
-    setLiveShares(deriveAvailableShares(room.remoteParticipants.values()));
+    const next = deriveAvailableShares(room.remoteParticipants.values());
+    setLiveShares((prev) => reuseLiveShares(prev, next));
   }, []);
 
   const applyInitialShares = useCallback(
@@ -52,6 +57,30 @@ export function useLiveShareWatch(): LiveShareWatchResult {
       refreshLiveShares(room);
     },
     [refreshLiveShares],
+  );
+
+  const applyRoomEventToIntents = useCallback(
+    (room: Room, event: WatchRoomEvent) => {
+      const next = watchIntentsAfterRoomEvent(intentsRef.current, event);
+      if (next !== intentsRef.current) {
+        intentsRef.current = next;
+        setWatchingIdentities(next);
+      }
+      refreshLiveShares(room);
+    },
+    [refreshLiveShares],
+  );
+
+  const onShareTrackUnpublished = useCallback(
+    (room: Room, participant: RemoteParticipant) =>
+      applyRoomEventToIntents(room, { type: "share-unpublished", identity: participant.identity }),
+    [applyRoomEventToIntents],
+  );
+
+  const onParticipantDisconnected = useCallback(
+    (room: Room, identity: string) =>
+      applyRoomEventToIntents(room, { type: "participant-disconnected", identity }),
+    [applyRoomEventToIntents],
   );
 
   const hasWatchIntent = useCallback(
@@ -93,6 +122,8 @@ export function useLiveShareWatch(): LiveShareWatchResult {
     applyInitialShares,
     refreshLiveShares,
     onShareTrackPublished,
+    onShareTrackUnpublished,
+    onParticipantDisconnected,
     resetState,
   };
 }

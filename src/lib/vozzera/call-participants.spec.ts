@@ -3,9 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   callParticipantFrom,
   findShareByIdentity,
+  migrateLegacyVolumeKeysOnce,
   migrateScreenShareVolumeKey,
   migrateVolumeKey,
   omitIdentity,
+  reuseCallParticipants,
+  sameStringList,
   setIdentityValue,
 } from "./call-participants";
 
@@ -131,5 +134,66 @@ describe("migrateScreenShareVolumeKey", () => {
     expect(migrateScreenShareVolumeKey(storage, luan)).toBe(true);
     expect(JSON.parse(storage.getItem(SHARE_VOLUMES_KEY) ?? "")).toEqual({ "id-1": 0.2 });
     expect(JSON.parse(storage.getItem(VOLUMES_KEY) ?? "")).toEqual({ Luan: 0.9 });
+  });
+});
+
+describe("setIdentityValue", () => {
+  it("returns the same map when the value is unchanged", () => {
+    const map = { "id-1": 2 };
+
+    expect(setIdentityValue(map, "id-1", 2)).toBe(map);
+  });
+
+  it("returns a new map when the value changes", () => {
+    const map = { "id-1": 2 };
+
+    expect(setIdentityValue(map, "id-1", 3)).toEqual({ "id-1": 3 });
+  });
+});
+
+describe("reuseCallParticipants", () => {
+  const ana = { identity: "a", name: "Ana", isLocal: true };
+  const bia = { identity: "b", name: "Bia", isLocal: false };
+
+  it("returns the previous array when nothing changed", () => {
+    const prev = [ana, bia];
+
+    expect(reuseCallParticipants(prev, [{ ...ana }, { ...bia }])).toBe(prev);
+  });
+
+  it("reuses unchanged objects and replaces the renamed one", () => {
+    const prev = [ana, bia];
+    const result = reuseCallParticipants(prev, [{ ...ana }, { ...bia, name: "Bea" }]);
+
+    expect(result[0]).toBe(ana);
+    expect(result[1]).toEqual({ identity: "b", name: "Bea", isLocal: false });
+  });
+
+  it("returns a new array when a participant leaves", () => {
+    expect(reuseCallParticipants([ana, bia], [{ ...ana }])).toEqual([ana]);
+  });
+});
+
+describe("sameStringList", () => {
+  it("compares by order and content", () => {
+    expect(sameStringList(["a", "b"], ["a", "b"])).toBe(true);
+    expect(sameStringList(["a", "b"], ["b", "a"])).toBe(false);
+    expect(sameStringList(["a"], ["a", "b"])).toBe(false);
+  });
+});
+
+describe("migrateLegacyVolumeKeysOnce", () => {
+  it("reads storage once per identity", () => {
+    const storage = fakeStorage({ [VOLUMES_KEY]: JSON.stringify({ Luan: 0.5 }) });
+    const getItem = vi.spyOn(storage, "getItem");
+    const migrated = new Set<string>();
+
+    const first = migrateLegacyVolumeKeysOnce(migrated, storage, luan);
+    const readsAfterFirst = getItem.mock.calls.length;
+    const second = migrateLegacyVolumeKeysOnce(migrated, storage, luan);
+
+    expect(first).toEqual({ volumes: true, screenShareVolumes: false });
+    expect(second).toEqual({ volumes: false, screenShareVolumes: false });
+    expect(getItem.mock.calls.length).toBe(readsAfterFirst);
   });
 });
