@@ -11,8 +11,10 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { LiveShareTileControls } from "@/components/vozzera/LiveShareControls";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import { initials } from "@/lib/vozzera/avatar";
+import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
 import type { ScreenShareHealth } from "@/lib/vozzera/voice";
 import {
   isParticipantLocallyInaudible,
@@ -37,12 +39,16 @@ type Props = {
   screenShareEnabled: boolean;
   screenShareHealth: ScreenShareHealth;
   screenShares: ScreenShare[];
+  liveShares: LiveShare[];
+  watchingIdentities: WatchIntents;
   localPreview: ScreenShare | null;
   remoteQualities: Record<string, string>;
   miniWindowSupported: boolean;
   miniWindowOpen: boolean;
   onToggleMic: () => void;
   onToggleScreenShare: () => void;
+  onWatchShare: (identity: string) => void;
+  onStopWatchingShare: (identity: string) => void;
   onReduceLocalQuality: (() => void) | undefined;
   onToggleMiniWindow: () => void;
   onLeave: () => void;
@@ -70,12 +76,16 @@ export function VoiceCallView({
   screenShareEnabled,
   screenShareHealth,
   screenShares,
+  liveShares,
+  watchingIdentities,
   localPreview,
   remoteQualities,
   miniWindowSupported,
   miniWindowOpen,
   onToggleMic,
   onToggleScreenShare,
+  onWatchShare,
+  onStopWatchingShare,
   onReduceLocalQuality,
   onToggleMiniWindow,
   onLeave,
@@ -92,7 +102,14 @@ export function VoiceCallView({
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <div className="relative flex min-h-0 flex-1 flex-col">
         {screenShares.length > 0 ? (
-          <ScreenShareStage shares={screenShares} remoteQualities={remoteQualities} />
+          <ScreenShareStage
+            shares={screenShares}
+            remoteQualities={remoteQualities}
+            liveShares={liveShares}
+            watchingIdentities={watchingIdentities}
+            onWatchShare={onWatchShare}
+            onStopWatchingShare={onStopWatchingShare}
+          />
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {status === "connecting" ? (
@@ -115,6 +132,7 @@ export function VoiceCallView({
                     name === username,
                     volumes[name],
                   );
+                  const liveShare = liveShares.find((share) => share.name === name);
                   const centersLastParticipant = participants.length === 3 && index === 2;
 
                   return (
@@ -128,6 +146,13 @@ export function VoiceCallView({
                           : ""
                       } ${isSpeaking ? "border-primary" : "border-border"}`}
                     >
+                      {liveShare && (
+                        <LiveShareTileControls
+                          share={liveShare}
+                          watchingIdentities={watchingIdentities}
+                          onWatch={onWatchShare}
+                        />
+                      )}
                       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground">
                         {initials(name)}
                       </div>

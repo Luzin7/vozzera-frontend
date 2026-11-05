@@ -7,6 +7,8 @@ import {
   useParticipantVolume,
 } from "./use-participant-volume";
 import type { ScreenShareAudioSource } from "./use-participant-volume";
+import { useLiveShareWatch } from "./use-live-share-watch";
+import type { LiveShareWatchResult } from "./use-live-share-watch";
 import { useScreenShare } from "./use-screen-share";
 import type { ScreenShare as ScreenShareType } from "./use-screen-share";
 import { useScreenShareHealth } from "./use-screen-share-health";
@@ -114,8 +116,12 @@ type RoomEventHandlerCtx = {
     publication: import("livekit-client").TrackPublication,
     participant: import("livekit-client").Participant,
   ) => void;
-  onTrackUnsubscribed: (track: import("livekit-client").Track) => void;
+  onTrackUnsubscribed: (track: import("livekit-client").Track) => boolean;
   onLocalTrackUnpublished: (publication: import("livekit-client").LocalTrackPublication) => void;
+  liveShare: Pick<
+    LiveShareWatchResult,
+    "onShareTrackPublished" | "refreshLiveShares" | "applyInitialShares" | "hasWatchIntent"
+  >;
   syncLocalMicTrack: (room: LiveKitRoom) => void;
   syncActiveSpeakerNames: (names: string[]) => void;
   setConnectionState: (state: ConnectionState) => void;
@@ -149,6 +155,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     onTrackSubscribed,
     onTrackUnsubscribed,
     onLocalTrackUnpublished,
+    liveShare,
     syncLocalMicTrack,
     syncActiveSpeakerNames,
     setConnectionState,
@@ -163,7 +170,21 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     setError,
   } = ctx;
 
+  room.on(RoomEvent.TrackPublished, (publication, participant) => {
+    liveShare.onShareTrackPublished(room, publication, participant);
+  });
+
+  room.on(RoomEvent.TrackUnpublished, () => liveShare.refreshLiveShares(room));
+
   room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+    const isShare =
+      publication.source === Track.Source.ScreenShare ||
+      publication.source === Track.Source.ScreenShareAudio;
+    if (isShare && !liveShare.hasWatchIntent(participant.identity)) {
+      publication.setSubscribed(false);
+      return;
+    }
+
     if (track.kind !== Track.Kind.Audio) {
       onTrackSubscribed(track, publication, participant);
       if (track.source === Track.Source.ScreenShare) playVoiceActionSound("screen-share-start");
@@ -202,8 +223,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       track.detach().forEach((el) => el.remove());
       return;
     }
-    onTrackUnsubscribed(track);
-    playVoiceActionSound("screen-share-stop");
+    if (onTrackUnsubscribed(track)) playVoiceActionSound("screen-share-stop");
   });
 
   room.on(RoomEvent.TrackMuted, (publication, participant) => {
@@ -278,10 +298,14 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
 
   room.on(RoomEvent.Reconnecting, () => setConnectionState("reconnecting"));
   room.on(RoomEvent.SignalReconnecting, () => setConnectionState("reconnecting"));
-  room.on(RoomEvent.Reconnected, () => setConnectionState("connected"));
+  room.on(RoomEvent.Reconnected, () => {
+    setConnectionState("connected");
+    liveShare.applyInitialShares(room);
+  });
 
   room.on(RoomEvent.ParticipantConnected, (participant) => {
     syncParticipants(room);
+    liveShare.applyInitialShares(room);
 
     const name = participant.name || participant.identity;
     const me = room.localParticipant.name || room.localParticipant.identity;
@@ -313,6 +337,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const name = participant.name || participant.identity;
     removeParticipant(name);
     syncParticipants(room);
+    liveShare.refreshLiveShares(room);
     playVoiceActionSound("leave");
 
     if (
@@ -416,6 +441,18 @@ export function useVoice() {
     resetState: resetScreenShareState,
   } = useScreenShare();
 
+  const {
+    liveShares,
+    watchingIdentities,
+    watchShare: watchShareInRoom,
+    stopWatchingShare: stopWatchingShareInRoom,
+    applyInitialShares,
+    refreshLiveShares,
+    hasWatchIntent,
+    onShareTrackPublished,
+    resetState: resetLiveShareState,
+  } = useLiveShareWatch();
+
   const screenShareHealth = useScreenShareHealth(
     roomRef,
     status === "connected" && screenShareEnabled,
@@ -498,8 +535,14 @@ export function useVoice() {
     serverSpeakingNamesRef.current = [];
     resetParticipantVolumeState();
     resetScreenShareState();
+    resetLiveShareState();
     resetKrispFilterState();
-  }, [resetParticipantVolumeState, resetScreenShareState, resetKrispFilterState]);
+  }, [
+    resetParticipantVolumeState,
+    resetScreenShareState,
+    resetLiveShareState,
+    resetKrispFilterState,
+  ]);
 
   const refreshMicDevices = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
@@ -630,6 +673,12 @@ export function useVoice() {
           onTrackSubscribed,
           onTrackUnsubscribed,
           onLocalTrackUnpublished,
+          liveShare: {
+            onShareTrackPublished,
+            refreshLiveShares,
+            applyInitialShares,
+            hasWatchIntent,
+          },
           syncLocalMicTrack,
           syncActiveSpeakerNames,
           setConnectionState,
@@ -686,6 +735,7 @@ export function useVoice() {
         setConnectionState("connected");
         setActiveRoomId(roomId);
         syncParticipants(room);
+        applyInitialShares(room);
         playVoiceActionSound("join");
       } catch (err) {
         if (connectingRoom && roomRef.current === connectingRoom) roomRef.current = null;
@@ -716,8 +766,28 @@ export function useVoice() {
       onTrackSubscribed,
       onTrackUnsubscribed,
       onLocalTrackUnpublished,
+      onShareTrackPublished,
+      refreshLiveShares,
+      applyInitialShares,
+      hasWatchIntent,
       resetRoomState,
     ],
+  );
+
+  const watchShare = useCallback(
+    (identity: string) => {
+      const room = roomRef.current;
+      if (room) watchShareInRoom(room, identity);
+    },
+    [watchShareInRoom],
+  );
+
+  const stopWatchingShare = useCallback(
+    (identity: string) => {
+      const room = roomRef.current;
+      if (room) stopWatchingShareInRoom(room, identity);
+    },
+    [stopWatchingShareInRoom],
   );
 
   const setMicEnabled = useCallback(
@@ -965,6 +1035,10 @@ export function useVoice() {
     screenShareVolumes,
     screenShareEnabled,
     screenShares,
+    liveShares,
+    watchingIdentities,
+    watchShare,
+    stopWatchingShare,
     micDevices,
     selectedDeviceId: selectedMic,
     noiseFilter,

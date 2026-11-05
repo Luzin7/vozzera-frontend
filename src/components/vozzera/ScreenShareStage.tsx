@@ -3,6 +3,8 @@ import { memo, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { featuredShareId, participantConnectionWarningFor } from "@/lib/vozzera/voice";
+import { LiveShareStageControls } from "@/components/vozzera/LiveShareControls";
+import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
 import type { ScreenShare } from "@/lib/vozzera/use-screen-share";
 
 function FeaturedVideo({
@@ -131,9 +133,17 @@ export const LocalScreenPreview = memo(function LocalScreenPreview({
 export const ScreenShareStage = memo(function ScreenShareStage({
   shares,
   remoteQualities,
+  liveShares,
+  watchingIdentities,
+  onWatchShare,
+  onStopWatchingShare,
 }: Readonly<{
   shares: ScreenShare[];
   remoteQualities: Record<string, string>;
+  liveShares: LiveShare[];
+  watchingIdentities: WatchIntents;
+  onWatchShare: (identity: string) => void;
+  onStopWatchingShare: (identity: string) => void;
 }>) {
   const [selectedShareId, setSelectedShareId] = useState<string | null>(null);
 
@@ -170,6 +180,13 @@ export const ScreenShareStage = memo(function ScreenShareStage({
           })}
         </div>
       )}
+      <LiveShareStageControls
+        featured={featured}
+        liveShares={liveShares}
+        watchingIdentities={watchingIdentities}
+        onWatch={onWatchShare}
+        onStopWatching={onStopWatchingShare}
+      />
     </div>
   );
 });

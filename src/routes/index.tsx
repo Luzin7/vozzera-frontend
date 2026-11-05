@@ -517,6 +517,10 @@ function Index() {
                 screenShareEnabled={voice.screenShareEnabled}
                 screenShareHealth={voice.screenShareHealth}
                 screenShares={voice.screenShares}
+                liveShares={voice.liveShares}
+                watchingIdentities={voice.watchingIdentities}
+                onWatchShare={voice.watchShare}
+                onStopWatchingShare={voice.stopWatchingShare}
                 localPreview={voice.localPreview}
                 remoteQualities={voice.remoteQualities}
                 miniWindowSupported={miniWindow.supported}
