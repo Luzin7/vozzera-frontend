@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { reducePushToTalkCapture } from "@/lib/vozzera/push-to-talk-capture";
 import { pushToTalkLabelFor, type MicDevice } from "@/lib/vozzera/voice";
 
 type Props = {
@@ -44,12 +45,23 @@ export function MicSettings({
   const hasSelectedDevice = micDevices.some((device) => device.deviceId === selectedDeviceId);
   const [capturingPushToTalkKey, setCapturingPushToTalkKey] = useState(false);
 
+  useEffect(() => {
+    if (!capturingPushToTalkKey) return;
+    const cancelCapture = () => setCapturingPushToTalkKey(false);
+    window.addEventListener("blur", cancelCapture);
+    return () => window.removeEventListener("blur", cancelCapture);
+  }, [capturingPushToTalkKey]);
+
   const capturePushToTalkKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (!capturingPushToTalkKey || event.repeat) return;
     event.preventDefault();
     event.stopPropagation();
-    onPushToTalkKeyChange(event.code, pushToTalkLabelFor(event.key, event.code));
-    setCapturingPushToTalkKey(false);
+    const { capturing, boundCode } = reducePushToTalkCapture(true, {
+      type: "key",
+      code: event.code,
+    });
+    setCapturingPushToTalkKey(capturing);
+    if (boundCode) onPushToTalkKeyChange(boundCode, pushToTalkLabelFor(event.key, event.code));
   };
 
   return (
@@ -131,7 +143,12 @@ export function MicSettings({
           type="button"
           variant="outline"
           className="min-w-24"
-          onClick={() => setCapturingPushToTalkKey(true)}
+          onClick={() =>
+            setCapturingPushToTalkKey(reducePushToTalkCapture(false, { type: "start" }).capturing)
+          }
+          onBlur={() =>
+            setCapturingPushToTalkKey(reducePushToTalkCapture(true, { type: "blur" }).capturing)
+          }
           onKeyDown={capturePushToTalkKey}
         >
           {capturingPushToTalkKey ? "Aguardando…" : pushToTalkKeyLabel}
