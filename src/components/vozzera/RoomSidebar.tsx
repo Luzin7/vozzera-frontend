@@ -429,7 +429,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                         !isLocal && screenShareVolumes[identity] === 0;
 
                       const row = (
-                        <span className="flex items-center gap-1.5 truncate">
+                        <span className="flex min-w-0 items-center gap-1.5">
                           <SpeakingRing
                             identity={identity}
                             baseClassName={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-semibold ring-offset-sidebar transition-[box-shadow] duration-150 motion-reduce:transition-none ${avatarColorClass(name)}`}
