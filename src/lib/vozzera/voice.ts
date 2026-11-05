@@ -72,9 +72,20 @@ const PUSH_TO_TALK_CODE_KEY = "vozzera.pushToTalkCode";
 const PUSH_TO_TALK_LABEL_KEY = "vozzera.pushToTalkLabel";
 const PARTICIPANT_VOLUMES_KEY = "vozzera.participantVolumes";
 const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
-const VOICE_START_LEVEL = 0.16;
-const VOICE_CONTINUE_LEVEL = 0.07;
-export const VOICE_RELEASE_DELAY_MS = 40;
+const SPEECH_SENSITIVITY_AUTO_KEY = "vozzera.speechSensitivityAuto";
+const SPEECH_SENSITIVITY_DB_KEY = "vozzera.speechSensitivityDb";
+const PUSH_TO_TALK_RELEASE_DELAY_KEY = "vozzera.pushToTalkReleaseDelayMs";
+export const SPEECH_ON_DB = -50;
+export const SPEECH_STAY_DB = -55;
+export const SPEECH_HOLD_MS = 250;
+export const SPEECH_POLL_INTERVAL_MS = 40;
+export const SPEECH_BAND_LOW_HZ = 100;
+export const SPEECH_BAND_HIGH_HZ = 4000;
+export const MIN_SENSITIVITY_DB = -80;
+export const MAX_SENSITIVITY_DB = -20;
+const MANUAL_STAY_MARGIN_DB = 5;
+export const DEFAULT_PUSH_TO_TALK_RELEASE_DELAY_MS = 200;
+export const MAX_PUSH_TO_TALK_RELEASE_DELAY_MS = 2000;
 export const DEFAULT_PUSH_TO_TALK_BINDING = { code: "KeyV", label: "V" } as const;
 
 export type PushToTalkBinding = { code: string; label: string };
@@ -124,26 +135,90 @@ export function writePushToTalkEnabled(storage: Storage | null, enabled: boolean
   storage.removeItem(PUSH_TO_TALK_KEY);
 }
 
-export function isLocalVoiceActive(volume: number, wasActive: boolean): boolean {
-  if (wasActive) return volume >= VOICE_CONTINUE_LEVEL;
-  return volume >= VOICE_START_LEVEL;
+export type SpeechThresholds = { onDb: number; stayDb: number };
+
+export type SpeechState = { active: boolean; lastLoudAt: number | null };
+
+export type SpeechSensitivity = { auto: boolean; thresholdDb: number };
+
+export const SILENT_SPEECH_STATE: SpeechState = { active: false, lastLoudAt: null };
+
+export const AUTOMATIC_SPEECH_THRESHOLDS: SpeechThresholds = {
+  onDb: SPEECH_ON_DB,
+  stayDb: SPEECH_STAY_DB,
+};
+
+export function rmsDbFs(samples: Float32Array): number {
+  if (samples.length === 0) return -Infinity;
+  let sumOfSquares = 0;
+  for (const sample of samples) sumOfSquares += sample * sample;
+  const rms = Math.sqrt(sumOfSquares / samples.length);
+  return rms === 0 ? -Infinity : 20 * Math.log10(rms);
 }
 
-export function shouldShowLocalVoiceActivity(
-  hasVoiceLevel: boolean,
-  wasVisible: boolean,
-  silenceDurationMs: number,
-): boolean {
-  if (hasVoiceLevel) return true;
-  if (!wasVisible) return false;
-  return silenceDurationMs < VOICE_RELEASE_DELAY_MS;
+export function nextSpeechState(
+  state: SpeechState,
+  levelDb: number,
+  now: number,
+  thresholds: SpeechThresholds,
+): SpeechState {
+  const floorDb = state.active ? thresholds.stayDb : thresholds.onDb;
+  if (levelDb >= floorDb) return { active: true, lastLoudAt: now };
+  if (!state.active) return state;
+  const quietSince = state.lastLoudAt ?? now;
+  if (now - quietSince < SPEECH_HOLD_MS) return state;
+  return SILENT_SPEECH_STATE;
 }
 
-export function mergeActiveSpeakerIdentities(
-  currentNames: string[],
-  activeNames: string[],
-): string[] {
-  return Array.from(new Set([...currentNames, ...activeNames]));
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function speechThresholdsFor(sensitivity: SpeechSensitivity): SpeechThresholds {
+  if (sensitivity.auto) return AUTOMATIC_SPEECH_THRESHOLDS;
+  const onDb = clamp(sensitivity.thresholdDb, MIN_SENSITIVITY_DB, MAX_SENSITIVITY_DB);
+  return { onDb, stayDb: onDb - MANUAL_STAY_MARGIN_DB };
+}
+
+export function levelToMeterPercent(levelDb: number): number {
+  const fraction = (levelDb - MIN_SENSITIVITY_DB) / (MAX_SENSITIVITY_DB - MIN_SENSITIVITY_DB);
+  return Math.round(clamp(fraction, 0, 1) * 100);
+}
+
+export function readSpeechSensitivity(storage: Storage | null): SpeechSensitivity {
+  const fallback = { auto: true, thresholdDb: SPEECH_ON_DB };
+  if (!storage) return fallback;
+  const stored = Number(storage.getItem(SPEECH_SENSITIVITY_DB_KEY));
+  const hasStoredLevel =
+    storage.getItem(SPEECH_SENSITIVITY_DB_KEY) !== null && Number.isFinite(stored);
+  return {
+    auto: storage.getItem(SPEECH_SENSITIVITY_AUTO_KEY) !== "off",
+    thresholdDb: hasStoredLevel
+      ? clamp(stored, MIN_SENSITIVITY_DB, MAX_SENSITIVITY_DB)
+      : fallback.thresholdDb,
+  };
+}
+
+export function writeSpeechSensitivity(
+  storage: Storage | null,
+  sensitivity: SpeechSensitivity,
+): void {
+  if (!storage) return;
+  storage.setItem(SPEECH_SENSITIVITY_AUTO_KEY, sensitivity.auto ? "on" : "off");
+  storage.setItem(SPEECH_SENSITIVITY_DB_KEY, String(sensitivity.thresholdDb));
+}
+
+export function readPushToTalkReleaseDelayMs(storage: Storage | null): number {
+  const raw = storage?.getItem(PUSH_TO_TALK_RELEASE_DELAY_KEY) ?? null;
+  const stored = Number(raw);
+  if (raw === null || !Number.isFinite(stored)) return DEFAULT_PUSH_TO_TALK_RELEASE_DELAY_MS;
+  return clamp(stored, 0, MAX_PUSH_TO_TALK_RELEASE_DELAY_MS);
+}
+
+export function writePushToTalkReleaseDelayMs(storage: Storage | null, delayMs: number): void {
+  if (!storage) return;
+  const clamped = clamp(delayMs, 0, MAX_PUSH_TO_TALK_RELEASE_DELAY_MS);
+  storage.setItem(PUSH_TO_TALK_RELEASE_DELAY_KEY, String(clamped));
 }
 
 export function roomAudioCaptureDefaults(): MicCaptureOptions {
@@ -421,16 +496,35 @@ export function microphoneEnabledAfterDeafenEnd(
 }
 
 export const DEAFEN_DATA_TOPIC = "vozzera.deafen";
+export const PUSH_TO_TALK_DATA_TOPIC = "vozzera.ptt";
 
-export function deafenStatePayload(enabled: boolean): Uint8Array<ArrayBuffer> {
+export function flagStatePayload(enabled: boolean): Uint8Array<ArrayBuffer> {
   return new Uint8Array([enabled ? 1 : 0]);
 }
 
-export function deafenStateFromPayload(payload: Uint8Array): boolean | null {
+export function flagStateFromPayload(payload: Uint8Array): boolean | null {
   if (payload.length !== 1) return null;
   if (payload[0] === 1) return true;
   if (payload[0] === 0) return false;
   return null;
+}
+
+export const deafenStatePayload = flagStatePayload;
+export const deafenStateFromPayload = flagStateFromPayload;
+export const pushToTalkStatePayload = flagStatePayload;
+export const pushToTalkStateFromPayload = flagStateFromPayload;
+
+export function visibleMutedParticipants(
+  mutedParticipants: Record<string, boolean>,
+  pushToTalkParticipants: Record<string, boolean>,
+): Record<string, boolean> {
+  const idleIdentities = Object.keys(mutedParticipants).filter(
+    (identity) => mutedParticipants[identity] && pushToTalkParticipants[identity] === true,
+  );
+  if (idleIdentities.length === 0) return mutedParticipants;
+  const visible = { ...mutedParticipants };
+  for (const identity of idleIdentities) visible[identity] = false;
+  return visible;
 }
 
 export function participantStatusLabelFor(locallyMuted: boolean, isSpeaking: boolean): string {
@@ -466,11 +560,9 @@ export function localSpoke(speakerIdentities: string[], localIdentity: string): 
   return speakerIdentities.includes(localIdentity);
 }
 
-export function visibleSpeakerIdentities(
+export function remoteSpeakerIdentities(
   speakerIdentities: string[],
   localIdentity: string,
-  sharingScreen: boolean,
 ): string[] {
-  if (!sharingScreen) return speakerIdentities;
   return speakerIdentities.filter((identity) => identity !== localIdentity);
 }

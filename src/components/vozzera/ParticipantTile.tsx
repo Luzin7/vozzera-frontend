@@ -96,7 +96,7 @@ export const ParticipantTile = memo(function ParticipantTile({
           screenShareLocallyMuted={screenShareVolume === 0}
           isMuted={isMuted}
           isStreaming={isStreaming}
-          isSpeaking={isSpeaking}
+          identity={identity}
           onSetVolume={(next) => onSetVolume(identity, next)}
           onSetScreenShareVolume={(next) => onSetScreenShareVolume(identity, next)}
           onToggleLocalMute={() => onToggleLocalMute(identity)}

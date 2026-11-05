@@ -35,6 +35,7 @@ import { useChangelog } from "@/lib/vozzera/useChangelog";
 import { useChat } from "@/lib/vozzera/useChat";
 import type { AwayEndedEvent } from "@/lib/vozzera/useChat";
 import { useVoice } from "@/lib/vozzera/useVoice";
+import { useVoiceShortcuts } from "@/lib/vozzera/use-voice-shortcuts";
 
 const VoiceCallView = lazy(() =>
   import("@/components/vozzera/VoiceCallView").then((m) => ({ default: m.VoiceCallView })),
@@ -254,6 +255,12 @@ function Index() {
     active: voice.status === "connected",
     onError: notifyError,
   });
+  useVoiceShortcuts({
+    enabled: voice.status === "connected",
+    miniWindowContainer: miniWindow.container,
+    onToggleMic: handleToggleMic,
+    onToggleDeafen: handleToggleDeafen,
+  });
   const inactivity = useInactivity({
     enabled: authed === true,
     voice,
@@ -413,7 +420,6 @@ function Index() {
     screenShares: voice.screenShares,
     mutedParticipants: voice.mutedParticipants,
     deafenedParticipants: voice.deafenedParticipants,
-    speakingIdentities: voice.speakingIdentities,
     deafen: voice.deafen,
     onToggleDeafen: handleToggleDeafen,
   };
@@ -621,7 +627,6 @@ function Index() {
                 onToggleLocalScreenShareMute={voice.toggleLocalScreenShareMute}
                 mutedParticipants={voice.mutedParticipants}
                 deafenedParticipants={voice.deafenedParticipants}
-                speakingIdentities={voice.speakingIdentities}
                 screenShareEnabled={voice.screenShareEnabled}
                 screenShareHealth={voice.screenShareHealth}
                 screenShares={voice.screenShares}
@@ -769,7 +774,6 @@ function Index() {
             micEnabled={voice.micEnabled}
             deafen={voice.deafen}
             mutedParticipants={voice.mutedParticipants}
-            speakingIdentities={voice.speakingIdentities}
             onToggleMic={handleToggleMic}
             onToggleDeafen={handleToggleDeafen}
             onLeave={handleLeaveVoice}

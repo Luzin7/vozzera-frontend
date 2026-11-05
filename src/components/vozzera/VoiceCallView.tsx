@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CallDuration } from "@/components/vozzera/CallDuration";
-import { ParticipantTile } from "@/components/vozzera/ParticipantTile";
+import { SpeakingParticipantTile } from "@/components/vozzera/SpeakingParticipantTile";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
 import { exitNoticeTextFor, OWN_AWAY_TEXT } from "@/lib/vozzera/away";
@@ -27,6 +27,7 @@ import {
   screenShareHealthMessageFor,
 } from "@/lib/vozzera/voice";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
+import { labelWithShortcut } from "@/lib/vozzera/voice-shortcuts";
 import type { ConnectionState, ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
 
 type Props = {
@@ -42,7 +43,6 @@ type Props = {
   screenShareVolumes: Record<string, number>;
   mutedParticipants: Record<string, boolean>;
   deafenedParticipants: Record<string, boolean>;
-  speakingIdentities: string[];
   screenShareEnabled: boolean;
   screenShareHealth: ScreenShareHealth;
   screenShares: ScreenShare[];
@@ -96,7 +96,6 @@ export function VoiceCallView({
   screenShareVolumes,
   mutedParticipants,
   deafenedParticipants,
-  speakingIdentities,
   screenShareEnabled,
   screenShareHealth,
   screenShares,
@@ -127,13 +126,17 @@ export function VoiceCallView({
   const isSolo = tiles.length === 1;
   const gridLayout = gridLayoutFor(tiles.length);
   const canShare = useCanShareScreen();
+  const deafenLabel = labelWithShortcut(
+    deafen ? "Parar de ensurdecer" : "Ensurdecer",
+    "toggle-deafen",
+  );
+  const micLabel = labelWithShortcut(micEnabled ? "Mutar" : "Desmutar", "toggle-mic");
   const [selectedShareId, setSelectedShareId] = useState<string | null>(null);
   const hasScreenShares = screenShares.length > 0;
   if (!hasScreenShares && selectedShareId !== null) setSelectedShareId(null);
   const featuredId = hasScreenShares ? featuredShareId(selectedShareId, screenShares) : null;
   const featuredShare = screenShares.find((share) => share.id === featuredId);
   const featuredQuality = featuredShare ? qualities[featuredShare.identity] : undefined;
-  const speakingSet = new Set(speakingIdentities);
   const liveShareNames = new Map(liveShares.map((share) => [share.identity, share.name]));
   const healthMessage = screenShareHealthMessageFor(screenShareHealth);
   const showHealth =
@@ -175,14 +178,13 @@ export function VoiceCallView({
                   className={`mx-auto grid min-h-full w-full content-center grid-cols-1 gap-3 ${gridLayout}`}
                 >
                   {tiles.map(({ identity, name, isLocal, isAway: isTileAway }, index) => (
-                    <ParticipantTile
+                    <SpeakingParticipantTile
                       key={identity}
                       identity={identity}
                       name={name}
                       isLocal={isLocal}
                       isAway={isTileAway}
                       layoutClassName={tileLayoutFor(isSolo, tiles.length === 3 && index === 2)}
-                      isSpeaking={speakingSet.has(identity)}
                       isMuted={isParticipantMuted({
                         identity,
                         isLocal,
@@ -255,9 +257,10 @@ export function VoiceCallView({
               className="h-11 w-11"
               onClick={onToggleMic}
               disabled={!isConnected}
+              title={micLabel}
             >
               {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-              <span className="sr-only">{micEnabled ? "Mutar" : "Desmutar"}</span>
+              <span className="sr-only">{micLabel}</span>
             </Button>
 
             <Button
@@ -266,9 +269,10 @@ export function VoiceCallView({
               className="h-11 w-11"
               onClick={onToggleDeafen}
               disabled={!isConnected}
+              title={deafenLabel}
             >
               {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
-              <span className="sr-only">{deafen ? "Parar de ensurdecer" : "Ensurdecer"}</span>
+              <span className="sr-only">{deafenLabel}</span>
             </Button>
 
             <Tooltip>
