@@ -16,7 +16,44 @@
     }
   ],
   "next": {
-    "items": []
+    "items": [
+      {
+        "title": "feat(voz): ausente na sala",
+        "kind": "feat",
+        "pr": 182,
+        "summary": ""
+      },
+      {
+        "title": "perf(voz): menos re-renders na call e ajustes da live",
+        "kind": "perf",
+        "pr": 178,
+        "summary": ""
+      },
+      {
+        "title": "feat(voz): sincronia, edição e não lidas do chat",
+        "kind": "feat",
+        "pr": 177,
+        "summary": ""
+      },
+      {
+        "title": "feat(voz): live opcional, com botão Assistir",
+        "kind": "feat",
+        "pr": 175,
+        "summary": ""
+      },
+      {
+        "title": "feat(voz): tempo de chamada e qualidade de conexão",
+        "kind": "feat",
+        "pr": 174,
+        "summary": ""
+      },
+      {
+        "title": "fix(voz): microfone livre nas outras abas",
+        "kind": "fix",
+        "pr": 172,
+        "summary": ""
+      }
+    ]
   },
   "releases": [
     {
