@@ -7,6 +7,12 @@ import {
   markHistoryStatus,
   markStaleRooms,
   mergeHistory,
+  mergeOlderPage,
+  canLoadOlder,
+  loadOlderPage,
+  shouldApplyOlderPage,
+  patchOlderHistory,
+  seedOlderHistory,
   needsHistory,
   refetchHistoryStaggered,
   MAX_RECENT_REFETCH_ROOMS,
@@ -14,7 +20,7 @@ import {
   roomsToRefetch,
   shouldRefetchAfterStatus,
 } from "@/lib/vozzera/chat-history";
-import type { HistoryStatuses } from "@/lib/vozzera/chat-history";
+import type { HistoryStatuses, OlderHistories, OlderHistory } from "@/lib/vozzera/chat-history";
 import type { ChatMessage } from "@/lib/vozzera/types";
 
 function message(id: string, createdAt: string, content = "oi"): ChatMessage {
@@ -287,5 +293,234 @@ describe("historyFailureStatus", () => {
     expect(historyFailureStatus("a", "a")).toBe("failed");
     expect(historyFailureStatus("b", "a")).toBe("stale");
     expect(historyFailureStatus("b", null)).toBe("stale");
+  });
+});
+
+describe("mergeOlderPage", () => {
+  const T = (sec: number) => `2026-01-01T00:00:${String(sec).padStart(2, "0")}Z`;
+
+  it("prepends the older page keeping every newer local message", () => {
+    const current = [message("c", T(30)), message("d", T(40)), message("live", T(55))];
+    const page = [message("a", T(10)), message("b", T(20))];
+
+    const merged = mergeOlderPage(current, page);
+
+    expect(merged.map((m) => m.id)).toEqual(["a", "b", "c", "d", "live"]);
+  });
+
+  it("does not drop newer messages even when the page is full", () => {
+    const current = [message("c", T(30)), message("d", T(40))];
+    const page = Array.from({ length: 50 }, (_, i) => message(`o${i}`, T(i % 20)));
+
+    const merged = mergeOlderPage(current, page);
+
+    expect(merged.map((m) => m.id).slice(-2)).toEqual(["c", "d"]);
+    expect(merged).toHaveLength(52);
+  });
+
+  it("dedupes by id keeping the local copy", () => {
+    const current = [message("b", T(20), "editado"), message("c", T(30))];
+    const page = [message("a", T(10)), message("b", T(20), "antigo")];
+
+    const merged = mergeOlderPage(current, page);
+
+    expect(merged.map((m) => [m.id, m.content])).toEqual([
+      ["a", "oi"],
+      ["b", "editado"],
+      ["c", "oi"],
+    ]);
+  });
+
+  it("keeps same-second order: older page first, then current", () => {
+    const current = [message("c1", T(20)), message("c2", T(20))];
+    const page = [message("p1", T(20)), message("p2", T(20))];
+
+    const merged = mergeOlderPage(current, page);
+
+    expect(merged.map((m) => m.id)).toEqual(["p1", "p2", "c1", "c2"]);
+  });
+
+  it("skips messages deleted while the page was in flight", () => {
+    const merged = mergeOlderPage(
+      [message("c", T(30))],
+      [message("a", T(10)), message("b", T(20))],
+      {
+        deletedIds: new Set(["a"]),
+      },
+    );
+
+    expect(merged.map((m) => m.id)).toEqual(["b", "c"]);
+  });
+
+  it("returns the current list for an empty page", () => {
+    const current = [message("c", T(30))];
+
+    expect(mergeOlderPage(current, [])).toEqual(current);
+  });
+});
+
+describe("older history state", () => {
+  it("seeds only once so a refetch keeps the older cursor", () => {
+    const seeded = seedOlderHistory({}, "r1", "c1");
+
+    expect(seedOlderHistory(seeded, "r1", "c-latest")).toBe(seeded);
+  });
+
+  it("allows loading while a cursor exists and nothing is loading", () => {
+    expect(canLoadOlder(seedOlderHistory({}, "r1", "c1"), "r1")).toBe(true);
+  });
+
+  it("blocks a duplicate load while loading", () => {
+    const loading = patchOlderHistory(seedOlderHistory({}, "r1", "c1"), "r1", { loading: true });
+
+    expect(canLoadOlder(loading, "r1")).toBe(false);
+  });
+
+  it("marks end of history when there is no cursor", () => {
+    expect(canLoadOlder(seedOlderHistory({}, "r1", null), "r1")).toBe(false);
+  });
+
+  it("allows retry after a failure keeping the cursor", () => {
+    const failed = patchOlderHistory(seedOlderHistory({}, "r1", "c1"), "r1", {
+      loading: false,
+      failed: true,
+    });
+
+    expect(canLoadOlder(failed, "r1")).toBe(true);
+  });
+});
+
+describe("shouldApplyOlderPage", () => {
+  const seeded = seedOlderHistory({}, "r1", "c1");
+
+  it("applies when the cursor is unchanged", () => {
+    expect(shouldApplyOlderPage(seeded, "r1", "c1")).toBe(true);
+  });
+
+  it("ignores when the room state was cleared in flight", () => {
+    expect(shouldApplyOlderPage({}, "r1", "c1")).toBe(false);
+  });
+
+  it("ignores when the cursor changed in flight", () => {
+    expect(shouldApplyOlderPage(seedOlderHistory({}, "r1", "c2"), "r1", "c1")).toBe(false);
+  });
+});
+
+describe("loadOlderPage", () => {
+  const page = {
+    messages: [
+      {
+        id: "a",
+        content: "oi",
+        created_at: "2026-01-01T00:00:10Z",
+        user_id: "u1",
+        username: "luan",
+      },
+    ],
+    nextBefore: "c0" as string | null,
+  };
+
+  function setup(initial: OlderHistories) {
+    const state = { histories: initial };
+    const deps = {
+      roomId: "r1",
+      getHistories: () => state.histories,
+      fetchPage: vi.fn(async (_cursor: string) => page),
+      commit: vi.fn((roomId: string, patch: Partial<OlderHistory>) => {
+        state.histories = patchOlderHistory(state.histories, roomId, patch);
+      }),
+      applyPage: vi.fn(),
+      onUnauthorized: vi.fn(),
+      onFailure: vi.fn(),
+      isUnauthorizedError: (error: unknown): boolean => error === "401",
+    };
+    return { state, deps };
+  }
+
+  it("fetches with the cursor, applies the page and stores the next cursor", async () => {
+    const { state, deps } = setup(seedOlderHistory({}, "r1", "c1"));
+
+    await loadOlderPage(deps);
+
+    expect(deps.fetchPage).toHaveBeenCalledWith("c1");
+    expect(deps.applyPage).toHaveBeenCalledWith(page);
+    expect(state.histories["r1"]).toEqual({ nextBefore: "c0", loading: false, failed: false });
+  });
+
+  it("does not fetch while already loading", async () => {
+    const loading = patchOlderHistory(seedOlderHistory({}, "r1", "c1"), "r1", { loading: true });
+    const { deps } = setup(loading);
+
+    await loadOlderPage(deps);
+
+    expect(deps.fetchPage).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch at the end of history", async () => {
+    const { deps } = setup(seedOlderHistory({}, "r1", null));
+
+    await loadOlderPage(deps);
+
+    expect(deps.fetchPage).not.toHaveBeenCalled();
+  });
+
+  it("marks failure, notifies and allows retry with the same cursor", async () => {
+    const { state, deps } = setup(seedOlderHistory({}, "r1", "c1"));
+    deps.fetchPage.mockRejectedValueOnce(new Error("timeout"));
+
+    await loadOlderPage(deps);
+
+    expect(deps.onFailure).toHaveBeenCalledTimes(1);
+    expect(state.histories["r1"]).toEqual({ nextBefore: "c1", loading: false, failed: true });
+    expect(canLoadOlder(state.histories, "r1")).toBe(true);
+  });
+
+  it("signals unauthorized instead of a failure toast", async () => {
+    const { deps } = setup(seedOlderHistory({}, "r1", "c1"));
+    deps.fetchPage.mockRejectedValueOnce("401");
+
+    await loadOlderPage(deps);
+
+    expect(deps.onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(deps.onFailure).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late page after the room state was cleared", async () => {
+    const { state, deps } = setup(seedOlderHistory({}, "r1", "c1"));
+    deps.fetchPage.mockImplementationOnce(async () => {
+      state.histories = {};
+      return page;
+    });
+
+    await loadOlderPage(deps);
+
+    expect(deps.applyPage).not.toHaveBeenCalled();
+    expect(state.histories).toEqual({});
+  });
+
+  it("ignores a late failure after the room state was cleared", async () => {
+    const { state, deps } = setup(seedOlderHistory({}, "r1", "c1"));
+    deps.fetchPage.mockImplementationOnce(async () => {
+      state.histories = {};
+      throw new Error("late");
+    });
+
+    await loadOlderPage(deps);
+
+    expect(deps.onFailure).not.toHaveBeenCalled();
+    expect(state.histories).toEqual({});
+  });
+
+  it("ignores a late page when the cursor was replaced", async () => {
+    const { state, deps } = setup(seedOlderHistory({}, "r1", "c1"));
+    deps.fetchPage.mockImplementationOnce(async () => {
+      state.histories = seedOlderHistory({}, "r1", "new");
+      return page;
+    });
+
+    await loadOlderPage(deps);
+
+    expect(deps.applyPage).not.toHaveBeenCalled();
+    expect(state.histories["r1"]?.nextBefore).toBe("new");
   });
 });

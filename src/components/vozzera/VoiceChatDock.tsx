@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
+import type { OlderHistory } from "@/lib/vozzera/chat-history";
 import type { DraftStore } from "@/lib/vozzera/message-display";
 import type { ChatMessage } from "@/lib/vozzera/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,8 @@ type Props = {
   onClose: () => void;
   historyFailed: boolean;
   onRetryHistory: (roomId: string) => void;
+  olderHistory?: OlderHistory | undefined;
+  onLoadOlder?: ((roomId: string) => void) | undefined;
   editLastRequest: number;
   onEditLast: () => void;
 };
@@ -44,6 +47,8 @@ export const VoiceChatDock = memo(function VoiceChatDock({
   onClose,
   historyFailed,
   onRetryHistory,
+  olderHistory,
+  onLoadOlder,
   editLastRequest,
   onEditLast,
 }: Readonly<Props>) {
@@ -81,6 +86,8 @@ export const VoiceChatDock = memo(function VoiceChatDock({
         onRoomClick={undefined}
         historyFailed={historyFailed}
         onRetryHistory={onRetryHistory}
+        olderHistory={olderHistory}
+        onLoadOlder={onLoadOlder}
         editLastRequest={editLastRequest}
       />
       <MessageComposer
