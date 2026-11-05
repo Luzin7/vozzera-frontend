@@ -2,12 +2,13 @@ import { HeadphoneOff, Headphones, Mic, MicOff, PhoneOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/vozzera/avatar";
-import type { CallParticipant } from "@/lib/vozzera/call-participants";
+import { AWAY_TOOLTIP_TEXT } from "@/lib/vozzera/away";
+import type { CallTile } from "@/lib/vozzera/away";
 import { isParticipantMuted } from "@/lib/vozzera/voice";
 
 type Props = {
   roomName: string;
-  participants: CallParticipant[];
+  tiles: CallTile[];
   micEnabled: boolean;
   deafen: boolean;
   mutedParticipants: Record<string, boolean>;
@@ -19,7 +20,7 @@ type Props = {
 
 export function VoiceMiniWindow({
   roomName,
-  participants,
+  tiles,
   micEnabled,
   deafen,
   mutedParticipants,
@@ -35,7 +36,7 @@ export function VoiceMiniWindow({
       </header>
 
       <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-        {participants.map(({ identity, name, isLocal }) => {
+        {tiles.map(({ identity, name, isLocal, isAway }) => {
           const isMuted = isParticipantMuted({
             identity,
             isLocal,
@@ -44,7 +45,13 @@ export function VoiceMiniWindow({
           });
 
           return (
-            <li key={identity} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
+            <li
+              key={identity}
+              title={isAway ? AWAY_TOOLTIP_TEXT : undefined}
+              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+                isAway ? "opacity-50" : ""
+              }`}
+            >
               <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs ring-2 ${
                   speakingIdentities.includes(identity) ? "ring-primary" : "ring-transparent"
@@ -53,7 +60,17 @@ export function VoiceMiniWindow({
                 {initials(name)}
               </span>
               <span className="truncate">{name}</span>
-              {isMuted && <MicOff className="ml-auto h-3.5 w-3.5 shrink-0 text-destructive" />}
+              {isAway && (
+                <>
+                  <span aria-hidden="true" className="font-mono text-xs text-muted-foreground">
+                    zzz
+                  </span>
+                  <span className="sr-only">{AWAY_TOOLTIP_TEXT}</span>
+                </>
+              )}
+              {!isAway && isMuted && (
+                <MicOff className="ml-auto h-3.5 w-3.5 shrink-0 text-destructive" />
+              )}
             </li>
           );
         })}
