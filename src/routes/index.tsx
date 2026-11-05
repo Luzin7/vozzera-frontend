@@ -523,6 +523,7 @@ function Index() {
                 onStopWatchingShare={voice.stopWatchingShare}
                 localPreview={voice.localPreview}
                 remoteQualities={voice.remoteQualities}
+                connectedAt={voice.connectedAt}
                 miniWindowSupported={miniWindow.supported}
                 miniWindowOpen={miniWindow.isOpen}
                 onToggleMic={handleToggleMic}

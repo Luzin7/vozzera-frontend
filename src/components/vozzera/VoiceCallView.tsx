@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LiveShareTileControls } from "@/components/vozzera/LiveShareControls";
+import { CallDuration } from "@/components/vozzera/CallDuration";
+import { ConnectionQualityBadge } from "@/components/vozzera/ConnectionQualityBadge";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import { initials } from "@/lib/vozzera/avatar";
 import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
@@ -43,6 +45,7 @@ type Props = {
   watchingIdentities: WatchIntents;
   localPreview: ScreenShare | null;
   remoteQualities: Record<string, string>;
+  connectedAt: number | null;
   miniWindowSupported: boolean;
   miniWindowOpen: boolean;
   onToggleMic: () => void;
@@ -80,6 +83,7 @@ export function VoiceCallView({
   watchingIdentities,
   localPreview,
   remoteQualities,
+  connectedAt,
   miniWindowSupported,
   miniWindowOpen,
   onToggleMic,
@@ -159,6 +163,7 @@ export function VoiceCallView({
 
                       <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
                         <span className="truncate">{name}</span>
+                        <ConnectionQualityBadge quality={remoteQualities[name]} />
                         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
                         {((name === username && deafen) || deafenedParticipants[name]) && (
                           <HeadphoneOff
@@ -207,7 +212,8 @@ export function VoiceCallView({
         </div>
       )}
 
-      <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border px-4 py-3">
+      <div className="relative flex shrink-0 items-center justify-center gap-2 border-t border-border px-4 py-3">
+        <CallDuration connectedAt={connectedAt} />
         <Button
           size="icon"
           variant={micEnabled ? "secondary" : "destructive"}

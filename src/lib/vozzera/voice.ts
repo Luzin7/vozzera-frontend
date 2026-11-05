@@ -8,6 +8,11 @@ export type MicCaptureOptions = {
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
+  voiceIsolation?: boolean;
+};
+
+export type MicDeviceSwitcher = {
+  switchActiveDevice(kind: "audioinput", deviceId: string): Promise<unknown>;
 };
 
 export type DegradationPreference = "maintain-framerate" | "maintain-resolution";
@@ -137,12 +142,19 @@ export function mergeActiveSpeakerNames(currentNames: string[], activeNames: str
   return Array.from(new Set([...currentNames, ...activeNames]));
 }
 
-export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions {
+export function roomAudioCaptureDefaults(): MicCaptureOptions {
   return {
-    ...(deviceId ? { deviceId } : {}),
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: true,
+    voiceIsolation: false,
+  };
+}
+
+export function audioCaptureOptions(deviceId: string | null): MicCaptureOptions {
+  return {
+    ...(deviceId ? { deviceId } : {}),
+    ...roomAudioCaptureDefaults(),
   };
 }
 
@@ -280,6 +292,23 @@ export function readMicDeviceId(storage: Storage | null): string | null {
 export function writeMicDeviceId(storage: Storage | null, deviceId: string): void {
   if (!storage) return;
   storage.setItem(MIC_DEVICE_KEY, deviceId);
+}
+
+export async function applyMicDeviceChoice(params: {
+  deviceId: string;
+  room: MicDeviceSwitcher | null;
+  storage: Storage | null;
+  onSelected: (deviceId: string) => void;
+}): Promise<void> {
+  const { deviceId, room, storage, onSelected } = params;
+  if (!room) {
+    onSelected(deviceId);
+    writeMicDeviceId(storage, deviceId);
+    return;
+  }
+  await room.switchActiveDevice("audioinput", deviceId);
+  onSelected(deviceId);
+  writeMicDeviceId(storage, deviceId);
 }
 
 function isVolumeMap(value: unknown): value is Record<string, number> {

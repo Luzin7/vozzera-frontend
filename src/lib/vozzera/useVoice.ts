@@ -22,6 +22,7 @@ import { useKrispFilter } from "./use-krisp-filter";
 import { useLocalVoiceActivity } from "./use-local-voice-activity";
 import type { VoiceTokenResponse } from "./types";
 import {
+  applyMicDeviceChoice,
   applyVideoPlaybackDelay,
   applyVolumeWithElementMuted,
   audioCaptureOptions,
@@ -35,10 +36,10 @@ import {
   readMicDeviceId,
   readPushToTalkBinding,
   readPushToTalkEnabled,
+  roomAudioCaptureDefaults,
   screenShareAdaptiveStreamSettings,
   shouldHandlePushToTalk,
   VIDEO_PLAYBACK_DELAY_MS,
-  writeMicDeviceId,
   writePushToTalkBinding,
   writePushToTalkEnabled,
 } from "./voice";
@@ -262,8 +263,6 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   });
 
   room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
-    if (participant.isLocal) return;
-
     const name = participant.name || participant.identity;
     setRemoteQualities((prev) => ({ ...prev, [name]: quality }));
   });
@@ -382,6 +381,7 @@ export function useVoice() {
   const [deafen, setDeafen] = useState(false);
   const [localMicTrack, setLocalMicTrack] = useState<LocalAudioTrack | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("connected");
+  const [connectedAt, setConnectedAt] = useState<number | null>(null);
   const [remoteQualities, setRemoteQualities] = useState<Record<string, ConnectionQuality>>({});
   const [deafenedParticipants, setDeafenedParticipants] = useState<Record<string, boolean>>({});
   const [serverSpeakingNames, setServerSpeakingNames] = useState<string[]>([]);
@@ -529,6 +529,7 @@ export function useVoice() {
     setDeafen(false);
     setLocalMicTrack(null);
     setRemoteQualities({});
+    setConnectedAt(null);
     setDeafenedParticipants({});
     for (const timer of speakerReleaseTimersRef.current.values()) clearTimeout(timer);
     speakerReleaseTimersRef.current.clear();
@@ -647,6 +648,7 @@ export function useVoice() {
           adaptiveStream: screenShareAdaptiveStreamSettings(),
           dynacast: true,
           webAudioMix: { audioContext: voiceAudioContext },
+          audioCaptureDefaults: roomAudioCaptureDefaults(),
           publishDefaults: {
             videoCodec: "h264",
             simulcast: false,
@@ -732,6 +734,7 @@ export function useVoice() {
         syncLocalMicTrack(room);
         micPermissionRef.current = true;
         setStatus("connected");
+        setConnectedAt(Date.now());
         setConnectionState("connected");
         setActiveRoomId(roomId);
         syncParticipants(room);
@@ -810,13 +813,13 @@ export function useVoice() {
   );
 
   const setMicDevice = useCallback(async (deviceId: string) => {
-    const room = roomRef.current;
-    if (!room) return;
-
     try {
-      await room.switchActiveDevice("audioinput", deviceId);
-      setSelectedMic(deviceId);
-      writeMicDeviceId(typeof localStorage === "undefined" ? null : localStorage, deviceId);
+      await applyMicDeviceChoice({
+        deviceId,
+        room: roomRef.current,
+        storage: typeof localStorage === "undefined" ? null : localStorage,
+        onSelected: setSelectedMic,
+      });
     } catch {
       setError("Não consegui trocar o microfone.");
     }
@@ -1056,6 +1059,7 @@ export function useVoice() {
     connectionState,
     screenShareHealth,
     remoteQualities,
+    connectedAt,
     clearError,
     ensureKrispLoaded,
     connect,
