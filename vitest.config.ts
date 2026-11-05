@@ -7,6 +7,6 @@ export default defineConfig({
   test: {
     environment: "node",
     env: { VITE_API_URL: "http://localhost:8080" },
-    include: ["src/**/*.spec.ts"],
+    include: ["src/**/*.spec.ts", "scripts/**/*.spec.mjs"],
   },
 });

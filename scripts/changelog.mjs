@@ -1,155 +1,92 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const HIGHLIGHT_LABEL = "destaque";
-const MAX_ITEMS = 8;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+import {
+  ChangelogError,
+  draftBaseline,
+  mergeNext,
+  InvalidChangelogFileError,
+  normalizeChangelog,
+  parseChangelogText,
+  selectHighlights,
+  releaseNext,
+  serializeChangelog,
+} from "./changelog-lib.mjs";
 
-if (!GITHUB_TOKEN) {
-  throw new Error("GITHUB_TOKEN não encontrado.");
-}
+const PAGE_SIZE = 100;
+const MAX_PAGES = 3;
+const CHANGELOG_PATH = "public/changelog.json";
 
 const args = parseArgs(process.argv.slice(2));
-const repo = process.env.GITHUB_REPOSITORY || repoFromRemote();
+try {
+  const current = normalizeChangelog(readExistingChangelog());
 
-const headers = {
-  Accept: "application/vnd.github+json",
-  Authorization: `Bearer ${GITHUB_TOKEN}`,
-  "X-GitHub-Api-Version": "2022-11-28",
-};
+  if (args.release) {
+    const released = releaseNext(current, { version: args.version, now: new Date() });
 
-const existing = readExistingChangelog();
+    save(released);
+    console.log(`${CHANGELOG_PATH} atualizado: ${released.releases[0].version} lançada.`);
+  } else {
+    const pulls = await fetchHighlights(current);
+    const next = { items: mergeNext(current, pulls) };
 
-let baseline = null;
-let lastTag = null;
-
-const release = await ghApiOrNull(`repos/${repo}/releases/latest`);
-
-if (release) {
-  lastTag = release.tag_name;
-
-  if (release.published_at) {
-    baseline = new Date(release.published_at);
+    save({ releases: current.releases, next });
+    console.log(`${CHANGELOG_PATH} atualizado: ${next.items.length} destaque(s) em next.`);
   }
+} catch (error) {
+  if (!(error instanceof ChangelogError)) throw error;
+
+  console.error(`Erro: ${error.message}`);
+  process.exit(1);
 }
 
-if (!baseline && existing?.releasedAt) {
-  baseline = new Date(`${existing.releasedAt}T00:00:00Z`);
+function save(changelog) {
+  const payload = serializeChangelog(changelog);
+
+  writeFileSync(resolve(CHANGELOG_PATH), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
-const highlights = [];
+async function fetchHighlights(changelog) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
 
-for (let page = 1; page <= 3; page += 1) {
-  const pulls = await ghApi(`repos/${repo}/pulls?state=closed&per_page=100&page=${page}`);
+  if (!token) throw new Error("GITHUB_TOKEN não encontrado.");
 
-  if (!pulls.length) {
-    break;
+  const repo = process.env.GITHUB_REPOSITORY || repoFromRemote();
+  const baseline = draftBaseline(changelog);
+  const highlights = [];
+
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const pulls = await ghApi(
+      `repos/${repo}/pulls?state=closed&base=develop&per_page=${PAGE_SIZE}&page=${page}`,
+      token,
+    );
+
+    highlights.push(...selectHighlights(pulls, { baseline }));
+
+    if (pulls.length < PAGE_SIZE) return highlights;
   }
 
-  for (const pull of pulls) {
-    if (!pull.merged_at) {
-      continue;
-    }
+  warnPageLimit();
 
-    const isHighlight = pull.labels?.some((label) => label.name.toLowerCase() === HIGHLIGHT_LABEL);
-
-    if (!isHighlight) {
-      continue;
-    }
-
-    if (baseline && new Date(pull.merged_at) <= baseline) {
-      continue;
-    }
-
-    highlights.push(pull);
-  }
-
-  if (highlights.length >= MAX_ITEMS) {
-    break;
-  }
+  return highlights;
 }
 
-highlights.sort((a, b) => new Date(b.merged_at).getTime() - new Date(a.merged_at).getTime());
+function warnPageLimit() {
+  const message = `A busca de PRs atingiu o limite de ${MAX_PAGES * PAGE_SIZE} PRs fechados: destaques mais antigos podem ter ficado de fora do rascunho.`;
 
-const existingSummaries = Object.fromEntries(
-  (existing?.items ?? []).filter((item) => item.summary).map((item) => [item.pr, item.summary]),
-);
+  console.log(`::warning title=Limite de PRs::${message}`);
 
-const items = highlights.slice(0, MAX_ITEMS).map((pull) => ({
-  title: pull.title,
-  kind: kindFromTitle(pull.title),
-  pr: pull.number,
-  summary: existingSummaries[pull.number] ?? "",
-}));
-
-const baseVersion = args.version || existing?.version || lastTag || "v1.0.0";
-
-const version =
-  items.length === 0 ? existing?.version || baseVersion : calculateNextVersion(items, baseVersion);
-
-const payload = {
-  version,
-  releasedAt: new Date().toISOString().slice(0, 10),
-  items,
-};
-
-writeFileSync(resolve("public/changelog.json"), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-
-console.log(`public/changelog.json atualizado: ${version} com ${items.length} destaque(s).`);
-
-function calculateNextVersion(items, base) {
-  if (items.some((item) => item.kind === "breaking")) {
-    return bumpMajor(base);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Limite de PRs\n\n${message}\n`);
   }
-
-  if (items.some((item) => ["feat", "feature"].includes(item.kind))) {
-    return bumpMinor(base);
-  }
-
-  return bumpPatch(base);
-}
-
-function bumpMajor(version) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
-
-  if (!match) {
-    return "v1.0.0";
-  }
-
-  return `v${Number(match[1]) + 1}.0.0`;
-}
-
-function bumpMinor(version) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
-
-  if (!match) {
-    return "v1.0.0";
-  }
-
-  return `v${match[1]}.${Number(match[2]) + 1}.0`;
-}
-
-function bumpPatch(version) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version);
-
-  if (!match) {
-    return "v1.0.0";
-  }
-
-  return `v${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
-}
-
-function kindFromTitle(title) {
-  const match = /^([a-zA-Z]+)(\([^)]*\))?[:/]/.exec(title);
-
-  return match ? match[1].toLowerCase() : "fix";
 }
 
 function parseArgs(argv) {
-  const result = { version: null };
+  const result = { release: false, version: null };
 
   for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === "--release") result.release = true;
     if (argv[i] === "--version") {
       result.version = argv[i + 1] || null;
       i += 1;
@@ -160,30 +97,37 @@ function parseArgs(argv) {
 }
 
 function readExistingChangelog() {
+  let text;
+
   try {
-    return JSON.parse(readFileSync(resolve("public/changelog.json"), "utf8"));
-  } catch {
-    return null;
+    text = readFileSync(resolve(CHANGELOG_PATH), "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+
+    throw new InvalidChangelogFileError(error.message);
   }
+
+  return parseChangelogText(text);
 }
 
 function repoFromRemote() {
   const url = execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" }).trim();
-
   const match = /github\.com[:/](.+?)(?:\.git)?$/.exec(url);
 
-  if (!match) {
-    throw new Error(`Não consegui identificar o repositório: ${url}`);
-  }
+  if (!match) throw new Error(`Não consegui identificar o repositório: ${url}`);
 
   return match[1];
 }
 
-async function ghApi(path) {
+async function ghApi(path, token) {
   const url = `https://api.github.com/${path}`;
-
   const response = await fetch(url, {
-    headers,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    signal: AbortSignal.timeout(20_000),
   });
 
   if (!response.ok) {
@@ -191,16 +135,4 @@ async function ghApi(path) {
   }
 
   return response.json();
-}
-
-async function ghApiOrNull(path) {
-  try {
-    return await ghApi(path);
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("GitHub API 404")) {
-      return null;
-    }
-
-    throw error;
-  }
 }
