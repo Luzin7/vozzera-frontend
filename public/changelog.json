@@ -46,7 +46,14 @@
     }
   ],
   "next": {
-    "items": []
+    "items": [
+      {
+        "title": "feat(voz): contador global da call",
+        "kind": "feat",
+        "pr": 199,
+        "summary": "Contador da call agora é global! Todo mundo, dentro ou fora da call, vê há quanto tempo a resenha tá rolando, desde o primeiro que entrou."
+      }
+    ]
   },
   "releases": [
     {

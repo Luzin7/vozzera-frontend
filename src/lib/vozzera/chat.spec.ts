@@ -467,6 +467,7 @@ describe("parseFrame", () => {
       },
       "voice.away.ended": { topic: room, data: { user_id: wsUserId, reason: "returned" } },
       "voice.away.resync": { topic: "__presence__", data: {} },
+      "voice.session.snapshot": { topic: room, data: { started_at: wsTimestamp } },
       "system.error": { topic: "x", data: { error: "e" } },
       "user.online": { topic: "__presence__", data: user },
       "user.offline": { topic: "__presence__", data: user },

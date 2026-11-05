@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { InboundEventType } from "@/lib/vozzera/types";
-import { awayFrame, inboundFrame } from "@/lib/vozzera/ws-schema";
+import {
+  KNOWN_OUTBOUND_TYPES,
+  awayFrame,
+  inboundFrame,
+  outboundFrameSchema,
+} from "@/lib/vozzera/ws-schema";
 
 describe("inboundFrame", () => {
   const roomId = "00000000-0000-4000-8000-000000000001";
@@ -55,5 +60,43 @@ describe("awayFrame", () => {
       topic: "__presence__",
       data: {},
     });
+  });
+});
+
+describe("voice.session.snapshot frame", () => {
+  const roomId = "00000000-0000-4000-8000-000000000001";
+  const serverTs = "2026-11-05T12:00:00.000Z";
+  const frame = (topic: string, data: unknown) => ({
+    v: 1,
+    type: "voice.session.snapshot",
+    topic,
+    ts: serverTs,
+    data,
+  });
+
+  it("parses started_at as a string and maps the envelope ts to server_ts", () => {
+    const startedAt = "2026-11-05T10:00:00.000Z";
+    expect(outboundFrameSchema.parse(frame(`room:${roomId}`, { started_at: startedAt }))).toEqual({
+      type: "voice.session.snapshot",
+      room_id: roomId,
+      started_at: startedAt,
+      server_ts: serverTs,
+    });
+  });
+
+  it("parses a null started_at", () => {
+    expect(outboundFrameSchema.parse(frame(`room:${roomId}`, { started_at: null }))).toMatchObject({
+      started_at: null,
+    });
+  });
+
+  it("rejects a non-room topic", () => {
+    expect(outboundFrameSchema.safeParse(frame("__presence__", { started_at: null })).success).toBe(
+      false,
+    );
+  });
+
+  it("is a known outbound type", () => {
+    expect(KNOWN_OUTBOUND_TYPES.has("voice.session.snapshot")).toBe(true);
   });
 });

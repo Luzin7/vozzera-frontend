@@ -275,6 +275,7 @@ Digitação e presença de voz:
 ```jsonc
 { "v": 1, "type": "typing.start" | "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "user_id": "uuid", "username": "string" } }
 { "v": 1, "type": "voice.presence.joined" | "voice.presence.left" | "voice.presence.snapshot", "topic": "room:<uuid>", "ts": "string", "data": [{ "sid": "string", "user_id": "string", "username": "string" }] }
+{ "v": 1, "type": "voice.session.snapshot", "topic": "room:<uuid>", "ts": "string", "data": { "started_at": "string (ISO UTC, ms, Z)" | null } }
 { "v": 1, "type": "user.online" | "user.offline", "topic": "__presence__", "ts": "string", "data": { "user_id": "string", "username": "string" } }
 { "v": 1, "type": "presence.snapshot", "topic": "__presence__", "ts": "string", "data": { "online": 5, "offline": 3, "total": 8, "online_users": [{ "user_id": "string", "username": "string" }], "offline_users": [{ "user_id": "string", "username": "string" }] } }
 ```
@@ -287,6 +288,7 @@ Regras:
 - `room.created`, `room.updated` e `room.deleted` atualizam a lista local; exclusão também remove o histórico local sem encerrar o WebSocket.
 - **Digitando**: o front só manda `typing.start` depois de 1,5 s digitando (mensagem rápida não anuncia nada) e reenvia no máximo 1x/s. Quem recebe mantém o aviso por 3 s após cada `start`, por 2 s após um `typing.stop`, e tira na hora quando chega a mensagem da pessoa.
 - `voice.presence.*` substitui o snapshot da sala na UI de voz; participantes são deduplicados por `user_id` e exibidos na barra lateral.
+- **Contador global da call** (`voice.session.snapshot`): sempre estado completo; `started_at` é o início da sessão de voz da sala e `null` significa sem sessão ativa. O servidor envia a cada entrada/saída, ao encerrar a sala (`null`) e dentro do snapshot devolvido em `room.subscribe`. O front corrige o desvio de relógio (`ts` do envelope vs. recebimento local) e mostra o mesmo tempo para quem está dentro e fora da call; não há fallback para o tempo da conexão local.
 - **Presença global** (`__presence__`): o snapshot inicial de presença (`presence.snapshot`) é enviado automaticamente na conexão WebSocket, contendo estatísticas (`online`, `offline`, `total`) e a lista de usuários online (`online_users`). Os eventos `user.online` e `user.offline` mantêm a lista atualizada durante a sessão. A contagem `total` é atualizada periodicamente no servidor (a cada 15 min) e reflete o total de contas registradas.
 - Ao reconectar o WebSocket, o cliente descarta a presença anterior e aguarda novos snapshots das salas de voz assinadas.
 - **Códigos de fechamento do WS**: `4001` = sessão revogada (logout em outro lugar ou senha redefinida) → o front desloga. `1001` = servidor reiniciando (deploy), `1013` = cliente lento, `1006` = queda de rede, `1005` = backend antigo → o front confere a sessão em `GET /api/me` e reconecta com backoff.
@@ -294,6 +296,6 @@ Regras:
 ## Limitações conhecidas
 
 - **Upload e paginação não existem** no backend.
-- Presença de voz existe via eventos `voice.presence.*`; presença online global existe via eventos `user.online`, `user.offline` e `presence.snapshot` no tópico `__presence__`.
+- Início da sessão de voz existe via `voice.session.snapshot`; presença de voz existe via eventos `voice.presence.*`; presença online global existe via eventos `user.online`, `user.offline` e `presence.snapshot` no tópico `__presence__`.
 - Inscrição em sala é autorizada no backend, e `mod`/`admin` controlam criação, edição e exclusão de salas.
 - Cookie `auth_token` é `SameSite=None; Secure; Partitioned`: como front e API estão em sites diferentes, ele é cookie de terceiro. Sem `Partitioned`, Safari/iOS, Brave e aba anônima do Chrome descartam o cookie e o login "não vai". Safari anterior ao 26.2 continua sem suporte; a solução definitiva é front e API no mesmo domínio registrável.
