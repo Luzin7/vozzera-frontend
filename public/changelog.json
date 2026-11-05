@@ -24,6 +24,12 @@
         "summary": ""
       },
       {
+        "title": "feat(changelog): aba Novidades e gerador corrigido",
+        "kind": "feat",
+        "pr": 181,
+        "summary": ""
+      },
+      {
         "title": "perf(voz): menos re-renders na call e ajustes da live",
         "kind": "perf",
         "pr": 178,
@@ -45,6 +51,12 @@
         "title": "feat(voz): tempo de chamada e qualidade de conexão",
         "kind": "feat",
         "pr": 174,
+        "summary": ""
+      },
+      {
+        "title": "fix(voz): sons de entrada e saída mais suaves",
+        "kind": "fix",
+        "pr": 173,
         "summary": ""
       },
       {
