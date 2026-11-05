@@ -7,6 +7,7 @@ import {
   deleteRoom,
   getCurrentUser,
   isUnauthorized,
+  listMessages,
   listRooms,
   probeCurrentUser,
   register,
@@ -313,6 +314,22 @@ describe("probeCurrentUser", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/me"),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+});
+
+describe("listMessages", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("fetches with a timeout signal", async () => {
+    const fetchMock = vi.fn(async () => new Response("[]", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listMessages("r1", 50);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/rooms/r1/messages?limit=50"),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });

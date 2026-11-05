@@ -11,7 +11,10 @@ import {
 import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
 import { TitleBar } from "@/components/vozzera/TitleBar";
+import { API_BASE } from "@/lib/vozzera/api";
+import { wsUrlFrom } from "@/lib/vozzera/api-url";
 import { APP_THEME_COLOR } from "@/lib/vozzera/pwa";
 import { usePwaRuntime } from "@/lib/vozzera/use-pwa-runtime";
 import appCss from "../styles.css?url";
@@ -107,9 +110,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 const isDev = import.meta.env.DEV;
 
-const rawApiUrl = import.meta.env["VITE_API_URL"] || "http://localhost:8080";
-
-const wsApiUrl = rawApiUrl.replace(/^http/, "ws");
+const wsApiUrl = wsUrlFrom(API_BASE);
 
 const connectSrc = [
   "'self'",
@@ -117,7 +118,7 @@ const connectSrc = [
   "https://*.livekit.cloud",
   "wss://*.livekit.cloud",
   "https://integrations.livekit.io",
-  rawApiUrl,
+  API_BASE,
   wsApiUrl,
   ...(isDev ? ["http://localhost:*", "ws://localhost:*", "ws:"] : []),
 ]
@@ -159,6 +160,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <TitleBar />
       <Outlet />
+      <Toaster theme="dark" position="bottom-right" />
     </QueryClientProvider>
   );
 }

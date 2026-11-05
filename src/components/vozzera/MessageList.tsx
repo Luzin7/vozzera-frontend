@@ -1,5 +1,8 @@
+import { toast } from "sonner";
+
 import { updateMessage } from "@/lib/vozzera/api";
 import { dateGroupLabelFor, isNearBottom } from "@/lib/vozzera/chat";
+import { lastOwnMessage, shouldGroupMessages } from "@/lib/vozzera/message-display";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 
@@ -14,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { MessageItem } from "@/components/vozzera/MessageItem";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -28,6 +32,9 @@ export const MessageList = memo(function MessageList({
   onRoomClick,
   unreadMarkerMessageId,
   onUnreadMarkerRead,
+  historyFailed = false,
+  onRetryHistory,
+  editLastRequest = 0,
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
@@ -39,6 +46,9 @@ export const MessageList = memo(function MessageList({
   onRoomClick: ((roomName: string) => void) | undefined;
   unreadMarkerMessageId?: string | null;
   onUnreadMarkerRead?: (roomId: string) => void;
+  historyFailed?: boolean;
+  onRetryHistory?: (roomId: string) => void;
+  editLastRequest?: number;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -49,9 +59,16 @@ export const MessageList = memo(function MessageList({
   const unreadMarkerRef = useRef<HTMLLIElement>(null);
   const stuckToBottomRef = useRef(true);
   const editContentRef = useRef(editContent);
+  const savingEditRef = useRef(false);
+  const messagesRef = useRef(messages);
+  const handledEditRequestRef = useRef(editLastRequest);
+  const editingIdRef = useRef(editingMessageId);
+  const focusAfterEditRef = useRef<string | null>(null);
   const username = useAuth().username;
 
   editContentRef.current = editContent;
+  editingIdRef.current = editingMessageId;
+  messagesRef.current = messages;
 
   const scrollToBottom = useCallback(() => {
     if (!scrollContainer) return;
@@ -126,15 +143,38 @@ export const MessageList = memo(function MessageList({
     stuckToBottomRef.current = isNearBottom(scrollContainer);
   }, [loading, onUnreadMarkerRead, scrollContainer, unreadMarkerMessageId]);
 
+  useEffect(() => {
+    const messageId = focusAfterEditRef.current;
+    if (editingMessageId !== null || !messageId || !scrollContainer) return;
+
+    focusAfterEditRef.current = null;
+    scrollContainer.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`)?.focus();
+  }, [editingMessageId, scrollContainer]);
+
+  const closeEditing = useCallback((messageId: string) => {
+    if (editingIdRef.current !== messageId) return;
+    focusAfterEditRef.current = messageId;
+    setEditingMessageId(null);
+    setEditContent("");
+  }, []);
+
   const startEditing = useCallback((message: ChatMessage) => {
     setEditingMessageId(message.id);
     setEditContent(message.content);
   }, []);
 
+  useEffect(() => {
+    if (editLastRequest === handledEditRequestRef.current) return;
+    handledEditRequestRef.current = editLastRequest;
+
+    const target = lastOwnMessage(messagesRef.current, username);
+    if (target) startEditing(target);
+  }, [editLastRequest, startEditing, username]);
+
   const cancelEditing = useCallback(() => {
-    setEditingMessageId(null);
-    setEditContent("");
-  }, []);
+    const messageId = editingIdRef.current;
+    if (messageId) closeEditing(messageId);
+  }, [closeEditing]);
 
   const handleEditContentChange = useCallback((content: string) => {
     setEditContent(content);
@@ -144,18 +184,30 @@ export const MessageList = memo(function MessageList({
     async (messageId: string) => {
       const content = editContentRef.current.trim();
 
-      if (!content) return;
+      if (!content || savingEditRef.current) return;
+
+      const original = messagesRef.current.find((message) => message.id === messageId);
+      if (original?.content === content) {
+        closeEditing(messageId);
+        return;
+      }
+
+      savingEditRef.current = true;
 
       try {
         await updateMessage(roomId, messageId, content);
 
-        setEditingMessageId(null);
-        setEditContent("");
+        closeEditing(messageId);
       } catch (error) {
-        console.error("Erro ao editar mensagem:", error);
+        console.error(`Falha ao editar a mensagem ${messageId}:`, error);
+        toast.error("Não consegui salvar a edição. Tente de novo.", {
+          id: "message-edit-failed",
+        });
+      } finally {
+        savingEditRef.current = false;
       }
     },
-    [roomId],
+    [closeEditing, roomId],
   );
 
   const handleSaveEdit = useCallback(
@@ -181,6 +233,28 @@ export const MessageList = memo(function MessageList({
     );
   }
 
+  if (messages.length === 0 && historyFailed) {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 items-center justify-center px-6 text-center">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Não consegui carregar o histórico de #{roomName}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-3"
+              onClick={() => onRetryHistory?.(roomId)}
+            >
+              Tentar de novo
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (messages.length === 0) {
     return (
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -201,6 +275,19 @@ export const MessageList = memo(function MessageList({
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      {historyFailed && (
+        <div className="flex items-center justify-center gap-2 border-b border-border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+          <span>Não consegui atualizar o histórico.</span>
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto p-0 text-xs"
+            onClick={() => onRetryHistory?.(roomId)}
+          >
+            Tentar de novo
+          </Button>
+        </div>
+      )}
       <div
         ref={setScrollContainer}
         className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 py-4 sm:px-4"
@@ -213,7 +300,7 @@ export const MessageList = memo(function MessageList({
             const startsDateGroup = dateLabel !== previousDateLabel;
             const startsUnreadGroup = message.id === unreadMarkerMessageId;
             const grouped =
-              !startsDateGroup && !startsUnreadGroup && previous?.userId === message.userId;
+              !startsDateGroup && !startsUnreadGroup && shouldGroupMessages(previous, message);
             const isEditing = editingMessageId === message.id;
             const isOwnMessage = username === message.username;
             const canDeleteMessage = isOwnMessage || canModerateMessages;

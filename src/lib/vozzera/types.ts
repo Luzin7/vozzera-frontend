@@ -50,7 +50,13 @@ export type RegisterRequest = {
 };
 
 export type InboundEventType =
-  "room.subscribe" | "room.unsubscribe" | "message" | "typing.start" | "typing.stop";
+  | "room.subscribe"
+  | "room.unsubscribe"
+  | "message"
+  | "typing.start"
+  | "typing.stop"
+  | "voice.away.enter"
+  | "voice.away.leave";
 
 export type InboundEvent = {
   v: 1;
@@ -58,10 +64,15 @@ export type InboundEvent = {
   topic: string;
   ts: string;
   data: {
-    room_id: string;
+    room_id?: string;
     content?: string;
+    reason?: "idle" | "connection";
   };
 };
+
+export type AwayEntry = { userId: string; username: string; since: string };
+
+export type AwayEndedReason = "room_empty" | "returned" | "connection_closed";
 
 export type VoiceParticipant = {
   sid: string;
@@ -145,6 +156,20 @@ export type OutboundEvent =
       type: "voice.presence.joined" | "voice.presence.left" | "voice.presence.snapshot";
       room_id: string;
       participants: VoiceParticipant[];
+    }
+  | {
+      type: "voice.away.snapshot";
+      room_id: string;
+      away: AwayEntry[];
+    }
+  | {
+      type: "voice.away.ended";
+      room_id: string;
+      user_id: string;
+      reason: AwayEndedReason;
+    }
+  | {
+      type: "voice.away.resync";
     };
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";

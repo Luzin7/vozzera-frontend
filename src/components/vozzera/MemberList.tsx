@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 import type { OnlineUser, OnlineUsers } from "@/lib/vozzera/chat";
 
 type Props = {
@@ -36,7 +36,9 @@ export function MemberList({ className, onlineUsers }: Readonly<Props>) {
             <li key={user.userId}>
               <span className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-xs hover:bg-sidebar-accent/60">
                 <span className="relative shrink-0">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] font-semibold ${avatarColorClass(user.username)}`}
+                  >
                     {initials(user.username)}
                   </span>
                   <span
@@ -59,7 +61,9 @@ export function MemberList({ className, onlineUsers }: Readonly<Props>) {
             <li key={user.userId}>
               <span className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-xs opacity-60 hover:bg-sidebar-accent/60">
                 <span className="relative shrink-0">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full font-mono text-[10px] font-semibold ${avatarColorClass(user.username)}`}
+                  >
                     {initials(user.username)}
                   </span>
                   <span

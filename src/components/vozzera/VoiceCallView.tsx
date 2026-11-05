@@ -1,52 +1,80 @@
+import { useState } from "react";
 import {
   HeadphoneOff,
+  Headphones,
   Mic,
   MicOff,
   MonitorUp,
   MonitorX,
   PhoneOff,
   PictureInPicture2,
-  VolumeX,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CallDuration } from "@/components/vozzera/CallDuration";
+import { SpeakingParticipantTile } from "@/components/vozzera/SpeakingParticipantTile";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
-import { initials } from "@/lib/vozzera/avatar";
+import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
+import { exitNoticeTextFor, OWN_AWAY_TEXT } from "@/lib/vozzera/away";
+import type { CallTile, ExitNoticeReason } from "@/lib/vozzera/away";
+import type { AwayReason } from "@/lib/vozzera/away-intent";
 import type { ScreenShareHealth } from "@/lib/vozzera/voice";
 import {
+  featuredShareId,
   isParticipantLocallyInaudible,
   isParticipantMuted,
   screenShareHealthMessageFor,
 } from "@/lib/vozzera/voice";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
+import { labelWithShortcut } from "@/lib/vozzera/voice-shortcuts";
 import type { ConnectionState, ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
 
 type Props = {
   roomName: string;
   status: VoiceStatus;
   connectionState: ConnectionState;
-  participants: string[];
-  username: string | null;
+  tiles: CallTile[];
+  awayReason: AwayReason | null;
+  exitNoticeReason: ExitNoticeReason | null;
   micEnabled: boolean;
   deafen: boolean;
   volumes: Record<string, number>;
+  screenShareVolumes: Record<string, number>;
   mutedParticipants: Record<string, boolean>;
   deafenedParticipants: Record<string, boolean>;
-  speakingNames: string[];
   screenShareEnabled: boolean;
   screenShareHealth: ScreenShareHealth;
   screenShares: ScreenShare[];
+  liveShares: LiveShare[];
+  watchingIdentities: WatchIntents;
   localPreview: ScreenShare | null;
-  remoteQualities: Record<string, string>;
+  qualities: Record<string, string>;
+  connectedAt: number | null;
   miniWindowSupported: boolean;
   miniWindowOpen: boolean;
   onToggleMic: () => void;
+  onSetVolume: (identity: string, volume: number) => void;
+  onSetScreenShareVolume: (identity: string, volume: number) => void;
+  onToggleLocalMute: (identity: string) => void;
+  onToggleLocalScreenShareMute: (identity: string) => void;
+  onToggleDeafen: () => void;
   onToggleScreenShare: () => void;
+  onWatchShare: (identity: string) => void;
+  onStopWatchingShare: (identity: string) => void;
   onReduceLocalQuality: (() => void) | undefined;
   onToggleMiniWindow: () => void;
   onLeave: () => void;
+  onReturn: () => void;
 };
+
+function tileLayoutFor(isSolo: boolean, centersLastParticipant: boolean): string {
+  const width = isSolo ? "max-w-4xl" : "";
+  const centering = centersLastParticipant
+    ? "sm:col-span-2 sm:mx-auto sm:w-1/2 md:col-span-1 md:w-full"
+    : "";
+  return `${width} ${centering}`;
+}
 
 function gridLayoutFor(participantCount: number): string {
   if (participantCount > 4) return "max-w-7xl sm:grid-cols-2 xl:grid-cols-3";
@@ -59,204 +87,255 @@ export function VoiceCallView({
   roomName,
   status,
   connectionState,
-  participants,
-  username,
+  tiles,
+  awayReason,
+  exitNoticeReason,
   micEnabled,
   deafen,
   volumes,
+  screenShareVolumes,
   mutedParticipants,
   deafenedParticipants,
-  speakingNames,
   screenShareEnabled,
   screenShareHealth,
   screenShares,
+  liveShares,
+  watchingIdentities,
   localPreview,
-  remoteQualities,
+  qualities,
+  connectedAt,
   miniWindowSupported,
   miniWindowOpen,
   onToggleMic,
+  onSetVolume,
+  onSetScreenShareVolume,
+  onToggleLocalMute,
+  onToggleLocalScreenShareMute,
+  onToggleDeafen,
   onToggleScreenShare,
+  onWatchShare,
+  onStopWatchingShare,
   onReduceLocalQuality,
   onToggleMiniWindow,
   onLeave,
+  onReturn,
 }: Readonly<Props>) {
   const isConnected = status === "connected";
-  const isSolo = participants.length === 1;
-  const gridLayout = gridLayoutFor(participants.length);
+  const isAway = status === "away";
+  const showsExitNotice = status === "idle" && exitNoticeReason !== null;
+  const isSolo = tiles.length === 1;
+  const gridLayout = gridLayoutFor(tiles.length);
   const canShare = useCanShareScreen();
+  const deafenLabel = labelWithShortcut(
+    deafen ? "Parar de ensurdecer" : "Ensurdecer",
+    "toggle-deafen",
+  );
+  const micLabel = labelWithShortcut(micEnabled ? "Mutar" : "Desmutar", "toggle-mic");
+  const [selectedShareId, setSelectedShareId] = useState<string | null>(null);
+  const hasScreenShares = screenShares.length > 0;
+  if (!hasScreenShares && selectedShareId !== null) setSelectedShareId(null);
+  const featuredId = hasScreenShares ? featuredShareId(selectedShareId, screenShares) : null;
+  const featuredShare = screenShares.find((share) => share.id === featuredId);
+  const featuredQuality = featuredShare ? qualities[featuredShare.identity] : undefined;
+  const liveShareNames = new Map(liveShares.map((share) => [share.identity, share.name]));
   const healthMessage = screenShareHealthMessageFor(screenShareHealth);
   const showHealth =
     screenShareEnabled && healthMessage !== null && onReduceLocalQuality !== undefined;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {screenShares.length > 0 ? (
-          <ScreenShareStage shares={screenShares} remoteQualities={remoteQualities} />
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {status === "connecting" ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Conectando ao canal {roomName}...
-              </div>
-            ) : (
-              <div
-                className={`mx-auto grid min-h-full w-full content-center grid-cols-1 gap-3 ${gridLayout}`}
-              >
-                {participants.map((name, index) => {
-                  const isSpeaking = speakingNames.includes(name);
-                  const isMuted = isParticipantMuted({
-                    name,
-                    username,
-                    micEnabled,
-                    mutedParticipants,
-                  });
-                  const isLocallyInaudible = isParticipantLocallyInaudible(
-                    name === username,
-                    volumes[name],
-                  );
-                  const centersLastParticipant = participants.length === 3 && index === 2;
-
-                  return (
-                    <article
-                      key={name}
-                      className={`relative flex aspect-video w-full items-center justify-center rounded-xl border bg-card p-6 transition-colors ${
-                        isSolo ? "max-w-4xl" : ""
-                      } ${
-                        centersLastParticipant
-                          ? "sm:col-span-2 sm:mx-auto sm:w-1/2 md:col-span-1 md:w-full"
-                          : ""
-                      } ${isSpeaking ? "border-primary" : "border-border"}`}
-                    >
-                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted font-mono text-xl font-semibold text-foreground">
-                        {initials(name)}
-                      </div>
-
-                      <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
-                        <span className="truncate">{name}</span>
-                        {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
-                        {((name === username && deafen) || deafenedParticipants[name]) && (
-                          <HeadphoneOff
-                            aria-label={
-                              name === username
-                                ? "Você está no mudo total"
-                                : `${name} está no mudo total`
-                            }
-                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                          />
-                        )}
-                        {isLocallyInaudible && (
-                          <VolumeX
-                            aria-label="Silenciado para você"
-                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                          />
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {localPreview && <LocalScreenPreview share={localPreview} />}
-
-        {connectionState === "reconnecting" && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 text-sm text-muted-foreground"
-          >
-            Reconectando…
-          </div>
-        )}
-      </div>
-
-      {showHealth && (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-          <span>{healthMessage}</span>
-          <Button size="sm" variant="secondary" onClick={() => onReduceLocalQuality?.()}>
-            Mudar para Economia
-          </Button>
-        </div>
-      )}
-
-      <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border px-4 py-3">
-        <Button
-          size="icon"
-          variant={micEnabled ? "secondary" : "destructive"}
-          className="h-11 w-11"
-          onClick={onToggleMic}
-          disabled={!isConnected}
-        >
-          {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
-        </Button>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="hidden md:inline-flex">
-                <Button
-                  size="icon"
-                  variant={screenShareEnabled ? "default" : "secondary"}
-                  className="h-11 w-11"
-                  onClick={onToggleScreenShare}
-                  disabled={!isConnected || !canShare}
+    <TooltipProvider>
+      <div className="flex min-h-0 flex-1 flex-col bg-background">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {screenShares.length > 0 ? (
+            <ScreenShareStage
+              shares={screenShares}
+              featuredId={featuredId}
+              featuredQuality={featuredQuality}
+              onSelectShare={setSelectedShareId}
+              liveShares={liveShares}
+              watchingIdentities={watchingIdentities}
+              onWatchShare={onWatchShare}
+              onStopWatchingShare={onStopWatchingShare}
+            />
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {showsExitNotice ? (
+                <div
+                  role="status"
+                  className="flex h-full flex-col items-center justify-center gap-3 text-center"
                 >
-                  {screenShareEnabled ? (
-                    <MonitorX className="h-4 w-4" />
-                  ) : (
-                    <MonitorUp className="h-4 w-4" />
-                  )}
-                  <span className="sr-only">
-                    {screenShareEnabled ? "Parar de compartilhar tela" : "Compartilhar tela"}
-                  </span>
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              {canShare
-                ? screenShareEnabled
-                  ? "Parar de compartilhar tela"
-                  : "Compartilhar tela"
-                : "Compartilhar tela não é suportado neste dispositivo"}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+                  <p className="text-sm text-muted-foreground">
+                    {exitNoticeTextFor(exitNoticeReason)}
+                  </p>
+                  <Button onClick={onReturn}>Entrar de novo</Button>
+                </div>
+              ) : status === "connecting" ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Conectando ao canal {roomName}...
+                </div>
+              ) : (
+                <div
+                  className={`mx-auto grid min-h-full w-full content-center grid-cols-1 gap-3 ${gridLayout}`}
+                >
+                  {tiles.map(({ identity, name, isLocal, isAway: isTileAway }, index) => (
+                    <SpeakingParticipantTile
+                      key={identity}
+                      identity={identity}
+                      name={name}
+                      isLocal={isLocal}
+                      isAway={isTileAway}
+                      layoutClassName={tileLayoutFor(isSolo, tiles.length === 3 && index === 2)}
+                      isMuted={isParticipantMuted({
+                        identity,
+                        isLocal,
+                        micEnabled,
+                        mutedParticipants,
+                      })}
+                      isDeafened={(isLocal && deafen) || deafenedParticipants[identity] === true}
+                      isLocallyInaudible={isParticipantLocallyInaudible(isLocal, volumes[identity])}
+                      quality={qualities[identity]}
+                      liveShareName={liveShareNames.get(identity)}
+                      isWatchPending={watchingIdentities.has(identity)}
+                      volume={volumes[identity] ?? 1}
+                      screenShareVolume={screenShareVolumes[identity] ?? 1}
+                      isStreaming={screenShares.some((share) => share.identity === identity)}
+                      onSetVolume={onSetVolume}
+                      onSetScreenShareVolume={onSetScreenShareVolume}
+                      onToggleLocalMute={onToggleLocalMute}
+                      onToggleLocalScreenShareMute={onToggleLocalScreenShareMute}
+                      onWatchShare={onWatchShare}
+                      onStopWatchingShare={onStopWatchingShare}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-        {miniWindowSupported && (
-          <TooltipProvider>
+          {localPreview && <LocalScreenPreview share={localPreview} />}
+
+          {connectionState === "reconnecting" && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 text-sm text-muted-foreground"
+            >
+              Reconectando…
+            </div>
+          )}
+        </div>
+
+        {showHealth && (
+          <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+            <span>{healthMessage}</span>
+            <Button size="sm" variant="secondary" onClick={() => onReduceLocalQuality?.()}>
+              Mudar para Economia
+            </Button>
+          </div>
+        )}
+
+        {isAway ? (
+          <div className="relative flex shrink-0 items-center justify-center gap-3 border-t border-border px-4 py-3">
+            <div role="status" className="min-w-0 text-center">
+              <p className="text-sm font-medium text-foreground">{OWN_AWAY_TEXT}</p>
+              {awayReason === "connection" && (
+                <p className="text-xs text-muted-foreground">{exitNoticeTextFor("connection")}</p>
+              )}
+            </div>
+            <Button onClick={onReturn}>Voltar</Button>
+            <Button size="icon" variant="destructive" className="h-11 w-11" onClick={onLeave}>
+              <PhoneOff className="h-4 w-4" />
+              <span className="sr-only">Sair do canal de voz</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="relative flex shrink-0 items-center justify-center gap-2 border-t border-border px-4 py-3">
+            <CallDuration connectedAt={connectedAt} />
+            <Button
+              size="icon"
+              variant={micEnabled ? "secondary" : "destructive"}
+              className="h-11 w-11"
+              onClick={onToggleMic}
+              disabled={!isConnected}
+              title={micLabel}
+            >
+              {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+              <span className="sr-only">{micLabel}</span>
+            </Button>
+
+            <Button
+              size="icon"
+              variant={deafen ? "destructive" : "secondary"}
+              className="h-11 w-11"
+              onClick={onToggleDeafen}
+              disabled={!isConnected}
+              title={deafenLabel}
+            >
+              {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
+              <span className="sr-only">{deafenLabel}</span>
+            </Button>
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="hidden md:inline-flex">
                   <Button
                     size="icon"
-                    variant={miniWindowOpen ? "default" : "secondary"}
+                    variant={screenShareEnabled ? "default" : "secondary"}
                     className="h-11 w-11"
-                    onClick={onToggleMiniWindow}
-                    disabled={!isConnected}
+                    onClick={onToggleScreenShare}
+                    disabled={!isConnected || !canShare}
                   >
-                    <PictureInPicture2 className="h-4 w-4" />
+                    {screenShareEnabled ? (
+                      <MonitorX className="h-4 w-4" />
+                    ) : (
+                      <MonitorUp className="h-4 w-4" />
+                    )}
                     <span className="sr-only">
-                      {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
+                      {screenShareEnabled ? "Parar de compartilhar tela" : "Compartilhar tela"}
                     </span>
                   </Button>
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
+                {canShare
+                  ? screenShareEnabled
+                    ? "Parar de compartilhar tela"
+                    : "Compartilhar tela"
+                  : "Compartilhar tela não é suportado neste dispositivo"}
               </TooltipContent>
             </Tooltip>
-          </TooltipProvider>
-        )}
 
-        <Button size="icon" variant="destructive" className="h-11 w-11" onClick={onLeave}>
-          <PhoneOff className="h-4 w-4" />
-          <span className="sr-only">Sair do canal de voz</span>
-        </Button>
+            {miniWindowSupported && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="hidden md:inline-flex">
+                    <Button
+                      size="icon"
+                      variant={miniWindowOpen ? "default" : "secondary"}
+                      className="h-11 w-11"
+                      onClick={onToggleMiniWindow}
+                      disabled={!isConnected}
+                    >
+                      <PictureInPicture2 className="h-4 w-4" />
+                      <span className="sr-only">
+                        {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
+                      </span>
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            <Button size="icon" variant="destructive" className="h-11 w-11" onClick={onLeave}>
+              <PhoneOff className="h-4 w-4" />
+              <span className="sr-only">Sair do canal de voz</span>
+            </Button>
+          </div>
+        )}
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

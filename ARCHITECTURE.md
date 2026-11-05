@@ -82,7 +82,7 @@ Estas regras valem em todo arquivo deste repo:
 
 ## Produção
 
-- Front na Vercel (`vozzera.vercel.app`), API no Render; `VITE_API_URL` aponta pra API.
+- Front na Vercel (`vozzera.vercel.app`), API no Render; `VITE_API_URL` (build-time; trocar exige redeploy) aponta pra API: `https://vozzera.onrender.com`.
 - Cookie `SameSite=None; Secure; Partitioned` + `credentials: "include"`: front e API estão em sites diferentes; detalhes e limitações em [`docs/CONTRATO-FRONTEND.md`](./docs/CONTRATO-FRONTEND.md).
 - Rede de erro de formulário em pt-BR, identificadores em inglês.
 

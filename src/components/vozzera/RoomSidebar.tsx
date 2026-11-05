@@ -15,20 +15,24 @@ import {
   HeadphoneOff,
   Headphones,
 } from "lucide-react";
-import { memo, useRef, type KeyboardEvent } from "react";
+import { memo, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
+import { SpeakingRing } from "@/components/vozzera/SpeakingRing";
+import type { AwayPresence } from "@/lib/vozzera/away";
 import { VoicePresenceList } from "@/components/vozzera/VoicePresenceList";
 import { cn } from "@/lib/utils";
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
+import { labelWithShortcut } from "@/lib/vozzera/voice-shortcuts";
 import { nextRoomIndex, type VoicePresence } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
 import type { ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
+import type { CallParticipant } from "@/lib/vozzera/call-participants";
 import { isParticipantLocallyInaudible, isParticipantMuted } from "@/lib/vozzera/voice";
 
 type Props = {
@@ -50,8 +54,9 @@ type Props = {
   status: SocketStatus;
   voiceStatus: VoiceStatus;
   voiceRoomId: string | null;
-  voiceParticipants: string[];
+  voiceParticipants: CallParticipant[];
   voicePresence: VoicePresence;
+  awayPresence: AwayPresence;
   micEnabled: boolean;
   onToggleMic: () => void;
   onLeaveVoice: () => void;
@@ -67,7 +72,6 @@ type Props = {
   screenShares: ScreenShare[];
   mutedParticipants: Record<string, boolean>;
   deafenedParticipants: Record<string, boolean>;
-  speakingNames: string[];
   deafen: boolean;
   onToggleDeafen: () => void;
 };
@@ -135,6 +139,43 @@ function RoomRowActions({
   );
 }
 
+function VoiceControlButton({
+  label,
+  active,
+  disabled,
+  onClick,
+  children,
+}: Readonly<{
+  label: string;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn(
+              "h-11 w-11 md:h-7 md:w-7",
+              active && "text-destructive hover:text-destructive",
+            )}
+            onClick={onClick}
+            disabled={disabled}
+          >
+            {children}
+            <span className="sr-only">{label}</span>
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export const RoomSidebar = memo(function RoomSidebar({
   className,
   loading = false,
@@ -156,6 +197,7 @@ export const RoomSidebar = memo(function RoomSidebar({
   voiceRoomId,
   voiceParticipants,
   voicePresence,
+  awayPresence,
   micEnabled,
   onToggleMic,
   onLeaveVoice,
@@ -171,7 +213,6 @@ export const RoomSidebar = memo(function RoomSidebar({
   screenShares,
   mutedParticipants,
   deafenedParticipants,
-  speakingNames,
   deafen,
   onToggleDeafen,
 }: Readonly<Props>) {
@@ -274,7 +315,13 @@ export const RoomSidebar = memo(function RoomSidebar({
                 }`}
               >
                 <Hash className="h-4 w-4 shrink-0 opacity-70" />
-                <span className="truncate">{room.name}</span>
+                <span
+                  className={
+                    unread[room.id] ? "truncate font-semibold text-sidebar-foreground" : "truncate"
+                  }
+                >
+                  {room.name}
+                </span>
                 {room.staff_only && (
                   <span className="inline-flex shrink-0" title="Só para moderação">
                     <Lock aria-hidden="true" className="h-3 w-3 text-muted-foreground" />
@@ -312,6 +359,7 @@ export const RoomSidebar = memo(function RoomSidebar({
             const isConnected = room.id === voiceRoomId;
             const isSelected = room.id === visibleVoiceRoomId;
             const onlineParticipants = voicePresence[room.id] ?? [];
+            const awayEntries = awayPresence[room.id] ?? [];
             return (
               <div key={room.id} className="group flex flex-col rounded-md py-0.5">
                 <div className="relative">
@@ -362,45 +410,40 @@ export const RoomSidebar = memo(function RoomSidebar({
 
                 {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 && (
                   <ul className="mb-1 ml-8 mt-1.5 space-y-2">
-                    {voiceParticipants.map((name) => {
-                      const isSpeaking = speakingNames.includes(name);
+                    {voiceParticipants.map(({ identity, name, isLocal }) => {
                       const isMuted = isParticipantMuted({
-                        name,
-                        username,
+                        identity,
+                        isLocal,
                         micEnabled,
                         mutedParticipants,
                       });
-                      const isStreaming =
-                        name === username
-                          ? screenShareEnabled
-                          : screenShares.some((share) => share.name === name);
-                      const isLocalMuted = name !== username && volumes[name] === 0;
+                      const isStreaming = isLocal
+                        ? screenShareEnabled
+                        : screenShares.some((share) => share.identity === identity);
+                      const isLocalMuted = !isLocal && volumes[identity] === 0;
                       const isLocallyInaudible = isParticipantLocallyInaudible(
-                        name === username,
-                        volumes[name],
+                        isLocal,
+                        volumes[identity],
                       );
                       const isScreenShareLocallyMuted =
-                        name !== username && screenShareVolumes[name] === 0;
+                        !isLocal && screenShareVolumes[identity] === 0;
 
                       const row = (
                         <span className="flex items-center gap-1.5 truncate">
-                          <span
-                            className={`inline-flex shrink-0 rounded-full p-0.5 ${
-                              isSpeaking ? "bg-primary" : "bg-transparent"
-                            }`}
+                          <SpeakingRing
+                            identity={identity}
+                            baseClassName={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-semibold ring-offset-sidebar transition-[box-shadow] duration-150 motion-reduce:transition-none ${avatarColorClass(name)}`}
+                            speakingClassName="ring-2 ring-primary ring-offset-2"
+                            idleClassName="ring-0 ring-offset-0"
                           >
-                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
-                              {initials(name)}
-                            </span>
-                          </span>
+                            {initials(name)}
+                          </SpeakingRing>
                           <span className="truncate">{name}</span>
                           {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
-                          {((name === username && deafen) || deafenedParticipants[name]) && (
+                          {((isLocal && deafen) || deafenedParticipants[identity]) && (
                             <HeadphoneOff
                               aria-label={
-                                name === username
-                                  ? "Você está no mudo total"
-                                  : `${name} está no mudo total`
+                                isLocal ? "Você está no mudo total" : `${name} está no mudo total`
                               }
                               className="h-3 w-3 shrink-0 text-muted-foreground"
                             />
@@ -419,26 +462,26 @@ export const RoomSidebar = memo(function RoomSidebar({
                       );
 
                       return (
-                        <li key={name} className="text-xs text-muted-foreground">
-                          {name === username ? (
+                        <li key={identity} className="text-xs text-muted-foreground">
+                          {isLocal ? (
                             row
                           ) : (
                             <ParticipantMenu
                               name={name}
-                              volume={volumes[name] ?? 1}
-                              screenShareVolume={screenShareVolumes[name] ?? 1}
+                              volume={volumes[identity] ?? 1}
+                              screenShareVolume={screenShareVolumes[identity] ?? 1}
                               locallyMuted={isLocalMuted}
                               screenShareLocallyMuted={isScreenShareLocallyMuted}
                               isMuted={isMuted}
                               isStreaming={isStreaming}
-                              isSpeaking={isSpeaking}
-                              onSetVolume={(volume) => onSetVolume(name, volume)}
+                              identity={identity}
+                              onSetVolume={(volume) => onSetVolume(identity, volume)}
                               onSetScreenShareVolume={(volume) =>
-                                onSetScreenShareVolume(name, volume)
+                                onSetScreenShareVolume(identity, volume)
                               }
-                              onToggleLocalMute={() => onToggleLocalMute(name)}
+                              onToggleLocalMute={() => onToggleLocalMute(identity)}
                               onToggleLocalScreenShareMute={() =>
-                                onToggleLocalScreenShareMute(name)
+                                onToggleLocalScreenShareMute(identity)
                               }
                             >
                               {row}
@@ -450,10 +493,16 @@ export const RoomSidebar = memo(function RoomSidebar({
                   </ul>
                 )}
 
-                {(!isConnected ||
-                  voiceStatus !== "connected" ||
-                  voiceParticipants.length === 0) && (
-                  <VoicePresenceList participants={onlineParticipants} />
+                {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 ? (
+                  <VoicePresenceList
+                    participants={[]}
+                    away={awayEntries.filter(
+                      (entry) =>
+                        !voiceParticipants.some(({ identity }) => identity === entry.userId),
+                    )}
+                  />
+                ) : (
+                  <VoicePresenceList participants={onlineParticipants} away={awayEntries} />
                 )}
               </div>
             );
@@ -502,26 +551,25 @@ export const RoomSidebar = memo(function RoomSidebar({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-11 w-11 md:h-7 md:w-7"
-                onClick={onToggleDeafen}
+              <VoiceControlButton
+                label={labelWithShortcut(
+                  deafen ? "Parar de ensurdecer" : "Ensurdecer",
+                  "toggle-deafen",
+                )}
+                active={deafen}
                 disabled={voiceStatus !== "connected"}
+                onClick={onToggleDeafen}
               >
                 {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
-                <span className="sr-only">{deafen ? "Ativar som" : "Mudo total"}</span>
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-11 w-11 md:h-7 md:w-7"
-                onClick={onToggleMic}
+              </VoiceControlButton>
+              <VoiceControlButton
+                label={labelWithShortcut(micEnabled ? "Mutar" : "Desmutar", "toggle-mic")}
+                active={!micEnabled}
                 disabled={voiceStatus !== "connected"}
+                onClick={onToggleMic}
               >
                 {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-                <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
-              </Button>
+              </VoiceControlButton>
               <Button
                 size="icon"
                 variant="ghost"

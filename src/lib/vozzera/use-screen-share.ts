@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import type {
   LocalVideoTrack,
@@ -8,11 +8,9 @@ import type {
 } from "livekit-client";
 import { ScreenSharePresets, Track } from "livekit-client";
 import {
-  applyVideoPlaybackDelay,
   screenShareAudioCaptureOptions,
   screenShareProfileFor,
   screenSharePublishOptions,
-  VIDEO_PLAYBACK_DELAY_MS,
 } from "./voice";
 import type { ScreenShareIntent, ScreenShareProfile } from "./voice";
 
@@ -20,6 +18,7 @@ export type ScreenShareTrack = LocalVideoTrack | RemoteVideoTrack;
 
 export type ScreenShare = {
   id: string;
+  identity: string;
   name: string;
   track: ScreenShareTrack;
 };
@@ -42,12 +41,12 @@ export type ScreenShareResult = {
     publication: import("livekit-client").TrackPublication,
     participant: import("livekit-client").Participant,
   ) => void;
-  onTrackUnsubscribed: (track: import("livekit-client").Track) => void;
+  onTrackUnsubscribed: (track: import("livekit-client").Track) => boolean;
   onLocalTrackUnpublished: (publication: import("livekit-client").LocalTrackPublication) => void;
   resetState: () => void;
 };
 
-const DEFAULT_SCREEN_SHARE_INTENT: ScreenShareIntent = "text";
+const DEFAULT_SCREEN_SHARE_INTENT: ScreenShareIntent = "video";
 
 function screenShareConstraintsFor(profile: ScreenShareProfile): MediaTrackConstraints {
   return {
@@ -60,6 +59,7 @@ function screenShareConstraintsFor(profile: ScreenShareProfile): MediaTrackConst
 export function useScreenShare(): ScreenShareResult {
   const [sharingEnabled, setSharingEnabled] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShare[]>([]);
+  const shownTracksRef = useRef(new Set<import("livekit-client").Track>());
   const [localPreview, setLocalPreview] = useState<ScreenShare | null>(null);
 
   const setScreenShare = useCallback(
@@ -104,7 +104,9 @@ export function useScreenShare(): ScreenShareResult {
       }
 
       setSharingEnabled(true);
-      setLocalPreview(track ? { id: "local", name, track } : null);
+      setLocalPreview(
+        track ? { id: "local", identity: room.localParticipant.identity, name, track } : null,
+      );
     },
     [],
   );
@@ -141,12 +143,17 @@ export function useScreenShare(): ScreenShareResult {
 
       const remotePub = publication as import("livekit-client").RemoteTrackPublication;
       remotePub.setEnabled(true);
-      applyVideoPlaybackDelay(track as RemoteVideoTrack, VIDEO_PLAYBACK_DELAY_MS);
 
+      shownTracksRef.current.add(track);
       const name = participant.name || participant.identity;
       setScreenShares((prev) => [
         ...prev.filter((share) => share.track !== track),
-        { id: remotePub.trackSid, name, track: track as RemoteVideoTrack },
+        {
+          id: remotePub.trackSid,
+          identity: participant.identity,
+          name,
+          track: track as RemoteVideoTrack,
+        },
       ]);
     },
     [],
@@ -155,6 +162,7 @@ export function useScreenShare(): ScreenShareResult {
   const onTrackUnsubscribed = useCallback((track: import("livekit-client").Track) => {
     track.detach();
     setScreenShares((prev) => prev.filter((share) => share.track !== track));
+    return shownTracksRef.current.delete(track);
   }, []);
 
   const onLocalTrackUnpublished = useCallback(
@@ -169,6 +177,7 @@ export function useScreenShare(): ScreenShareResult {
 
   const resetState = useCallback(() => {
     setSharingEnabled(false);
+    shownTracksRef.current.clear();
     setScreenShares([]);
     setLocalPreview(null);
   }, []);

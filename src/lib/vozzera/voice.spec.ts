@@ -1,7 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
-  applyVideoPlaybackDelay,
+  applyMicDeviceChoice,
+  initialMicEnabled,
+  localSpoke,
+  remoteSpeakerIdentities,
+  nextSpeechState,
+  rmsDbFs,
+  speechThresholdsFor,
+  SILENT_SPEECH_STATE,
+  SPEECH_ON_DB,
+  SPEECH_STAY_DB,
+  SPEECH_HOLD_MS,
+  MIN_SENSITIVITY_DB,
+  MAX_SENSITIVITY_DB,
+  DEFAULT_PUSH_TO_TALK_RELEASE_DELAY_MS,
+  MAX_PUSH_TO_TALK_RELEASE_DELAY_MS,
+  readSpeechSensitivity,
+  writeSpeechSensitivity,
+  readPushToTalkReleaseDelayMs,
+  writePushToTalkReleaseDelayMs,
+  pushToTalkStatePayload,
+  pushToTalkStateFromPayload,
+  visibleMutedParticipants,
+  levelToMeterPercent,
+  micEnabledToRestore,
   applyVolumeWithElementMuted,
   audioCaptureOptions,
   audioInputDevices,
@@ -9,10 +32,8 @@ import {
   deafenStatePayload,
   effectiveParticipantVolume,
   featuredShareId,
-  isLocalVoiceActive,
   isParticipantLocallyInaudible,
   isParticipantMuted,
-  mergeActiveSpeakerNames,
   microphoneEnabledAfterDeafenEnd,
   muteVolume,
   participantStatusLabelFor,
@@ -21,6 +42,7 @@ import {
   readParticipantVolumes,
   readPushToTalkBinding,
   readPushToTalkEnabled,
+  roomAudioCaptureDefaults,
   microphonePublishOptions,
   participantConnectionWarningFor,
   screenShareAdaptiveStreamSettings,
@@ -31,17 +53,15 @@ import {
   screenShareProfileFor,
   screenSharePublishOptions,
   canShareScreen,
-  shouldReleaseMicrophoneInBackground,
-  shouldShowLocalVoiceActivity,
   shouldHandlePushToTalk,
   pushToTalkLabelFor,
-  VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
   writeNoiseFilter,
   writeParticipantVolumes,
   writePushToTalkBinding,
   writePushToTalkEnabled,
 } from "./voice";
+import { MicDeviceSwitchFailedError } from "./voice-errors";
 
 describe("push to talk", () => {
   it("handles V outside editable fields", () => {
@@ -85,43 +105,6 @@ describe("push to talk", () => {
 
     writePushToTalkBinding(storage, { code: "Space", label: "Espaço" });
     expect(readPushToTalkBinding(storage)).toEqual({ code: "Space", label: "Espaço" });
-  });
-});
-
-describe("isLocalVoiceActive", () => {
-  it("starts immediately when voice crosses the activation level", () => {
-    expect(isLocalVoiceActive(0.159, false)).toBe(false);
-    expect(isLocalVoiceActive(0.16, false)).toBe(true);
-  });
-
-  it("uses hysteresis to avoid flickering between syllables", () => {
-    expect(isLocalVoiceActive(0.08, true)).toBe(true);
-    expect(isLocalVoiceActive(0.069, true)).toBe(false);
-  });
-});
-
-describe("shouldShowLocalVoiceActivity", () => {
-  it("keeps the indicator visible during short pauses", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 39)).toBe(true);
-  });
-
-  it("hides the indicator after 40 milliseconds of continuous silence", () => {
-    expect(shouldShowLocalVoiceActivity(false, true, 40)).toBe(false);
-  });
-
-  it("shows voice immediately and does not delay the initial activation", () => {
-    expect(shouldShowLocalVoiceActivity(true, false, 0)).toBe(true);
-    expect(shouldShowLocalVoiceActivity(false, false, 0)).toBe(false);
-  });
-});
-
-describe("mergeActiveSpeakerNames", () => {
-  it("keeps releasing speakers while adding active speakers without duplicates", () => {
-    expect(mergeActiveSpeakerNames(["ana", "beto"], ["beto", "caio"])).toEqual([
-      "ana",
-      "beto",
-      "caio",
-    ]);
   });
 });
 
@@ -174,6 +157,11 @@ describe("audioCaptureOptions", () => {
     });
   });
 
+  it("requests voice isolation off with and without a device", () => {
+    expect(audioCaptureOptions(null).voiceIsolation).toBe(false);
+    expect(audioCaptureOptions("mic-1").voiceIsolation).toBe(false);
+  });
+
   it("adds the device id only when selected", () => {
     expect(audioCaptureOptions("mic-1").deviceId).toBe("mic-1");
     expect(audioCaptureOptions(null).deviceId).toBeUndefined();
@@ -187,16 +175,6 @@ describe("microphonePublishOptions", () => {
       dtx: true,
       forceStereo: false,
     });
-  });
-});
-
-describe("shouldReleaseMicrophoneInBackground", () => {
-  it("releases the microphone when the page goes to the background", () => {
-    expect(shouldReleaseMicrophoneInBackground(true)).toBe(true);
-  });
-
-  it("keeps the microphone while the page is visible", () => {
-    expect(shouldReleaseMicrophoneInBackground(false)).toBe(false);
   });
 });
 
@@ -282,6 +260,95 @@ describe("readMicDeviceId / writeMicDeviceId", () => {
 
     writeMicDeviceId(storage, "mic-9");
     expect(readMicDeviceId(storage)).toBe("mic-9");
+  });
+});
+
+describe("roomAudioCaptureDefaults", () => {
+  it("matches the capture options without a device", () => {
+    expect(roomAudioCaptureDefaults()).toEqual({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      voiceIsolation: false,
+    });
+  });
+});
+
+describe("applyMicDeviceChoice", () => {
+  const createStorage = () => {
+    const store = new Map<string, string>();
+    return {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    } as Storage;
+  };
+
+  it("selects and persists the device without a room", async () => {
+    const storage = createStorage();
+    const selected: string[] = [];
+
+    await applyMicDeviceChoice({
+      deviceId: "mic-2",
+      room: null,
+      storage,
+      onSelected: (deviceId) => selected.push(deviceId),
+    });
+
+    expect(selected).toEqual(["mic-2"]);
+    expect(readMicDeviceId(storage)).toBe("mic-2");
+  });
+
+  it("keeps selection and storage untouched when the switch rejects", async () => {
+    const storage = createStorage();
+    const onSelected = vi.fn();
+    const switchActiveDevice = vi.fn().mockRejectedValue(new Error("switch failed"));
+
+    await expect(
+      applyMicDeviceChoice({
+        deviceId: "mic-4",
+        room: { switchActiveDevice },
+        storage,
+        onSelected,
+      }),
+    ).rejects.toThrow("switch failed");
+
+    expect(onSelected).not.toHaveBeenCalled();
+    expect(readMicDeviceId(storage)).toBeNull();
+  });
+
+  it("fails and keeps selection and storage untouched when the switch resolves false", async () => {
+    const storage = createStorage();
+    const onSelected = vi.fn();
+    const switchActiveDevice = vi.fn().mockResolvedValue(false);
+
+    await expect(
+      applyMicDeviceChoice({
+        deviceId: "mic-5",
+        room: { switchActiveDevice },
+        storage,
+        onSelected,
+      }),
+    ).rejects.toBeInstanceOf(MicDeviceSwitchFailedError);
+
+    expect(onSelected).not.toHaveBeenCalled();
+    expect(readMicDeviceId(storage)).toBeNull();
+  });
+
+  it("switches the active device when a room exists", async () => {
+    const storage = createStorage();
+    const switchActiveDevice = vi.fn().mockResolvedValue(true);
+
+    await applyMicDeviceChoice({
+      deviceId: "mic-3",
+      room: { switchActiveDevice },
+      storage,
+      onSelected: () => undefined,
+    });
+
+    expect(switchActiveDevice).toHaveBeenCalledWith("audioinput", "mic-3");
+    expect(readMicDeviceId(storage)).toBe("mic-3");
   });
 });
 
@@ -388,34 +455,6 @@ describe("participantStatusLabelFor", () => {
 
   it("labels a neutral participant", () => {
     expect(participantStatusLabelFor(false, false)).toBe("Volume individual");
-  });
-});
-
-describe("applyVideoPlaybackDelay", () => {
-  it("sets playout delay in seconds on a track", () => {
-    let capturedDelay = 0;
-    const fakeTrack = {
-      setPlayoutDelay(delayInSeconds: number) {
-        capturedDelay = delayInSeconds;
-      },
-    };
-
-    applyVideoPlaybackDelay(fakeTrack, VIDEO_PLAYBACK_DELAY_MS);
-
-    expect(capturedDelay).toBe(VIDEO_PLAYBACK_DELAY_MS / 1000);
-  });
-
-  it("converts 500ms to 0.5 seconds", () => {
-    let capturedDelay = 0;
-    const fakeTrack = {
-      setPlayoutDelay(delayInSeconds: number) {
-        capturedDelay = delayInSeconds;
-      },
-    };
-
-    applyVideoPlaybackDelay(fakeTrack, 500);
-
-    expect(capturedDelay).toBe(0.5);
   });
 });
 
@@ -527,23 +566,237 @@ describe("canShareScreen", () => {
 });
 
 describe("isParticipantMuted", () => {
-  const mutedParticipants = { bia: true };
+  const mutedParticipants = { "id-bia": true };
 
   it("uses the local microphone for the current user", () => {
     expect(
-      isParticipantMuted({ name: "luan", username: "luan", micEnabled: false, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-luan",
+        isLocal: true,
+        micEnabled: false,
+        mutedParticipants,
+      }),
     ).toBe(true);
     expect(
-      isParticipantMuted({ name: "luan", username: "luan", micEnabled: true, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-luan",
+        isLocal: true,
+        micEnabled: true,
+        mutedParticipants,
+      }),
     ).toBe(false);
   });
 
-  it("uses the remote mute state for everyone else", () => {
+  it("uses the remote mute state for everyone else, keyed by identity", () => {
     expect(
-      isParticipantMuted({ name: "bia", username: "luan", micEnabled: true, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-bia",
+        isLocal: false,
+        micEnabled: true,
+        mutedParticipants,
+      }),
     ).toBe(true);
     expect(
-      isParticipantMuted({ name: "caio", username: "luan", micEnabled: true, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-caio",
+        isLocal: false,
+        micEnabled: true,
+        mutedParticipants,
+      }),
     ).toBe(false);
+  });
+});
+
+describe("initialMicEnabled", () => {
+  it("is on by default", () => {
+    expect(initialMicEnabled(false, undefined)).toBe(true);
+  });
+
+  it("restores a requested state", () => {
+    expect(initialMicEnabled(false, false)).toBe(false);
+    expect(initialMicEnabled(false, true)).toBe(true);
+  });
+
+  it("stays off with push-to-talk", () => {
+    expect(initialMicEnabled(true, undefined)).toBe(false);
+    expect(initialMicEnabled(true, true)).toBe(false);
+  });
+});
+
+describe("micEnabledToRestore", () => {
+  it("uses the live mic state when not deafened", () => {
+    expect(micEnabledToRestore({ deafen: false, micBeforeDeafen: true, micOn: false })).toBe(false);
+    expect(micEnabledToRestore({ deafen: false, micBeforeDeafen: false, micOn: true })).toBe(true);
+  });
+
+  it("uses the state from before the deafen when deafened", () => {
+    expect(micEnabledToRestore({ deafen: true, micBeforeDeafen: true, micOn: false })).toBe(true);
+    expect(micEnabledToRestore({ deafen: true, micBeforeDeafen: false, micOn: false })).toBe(false);
+  });
+});
+
+describe("localSpoke", () => {
+  it("detects the local identity in the raw speaker list", () => {
+    expect(localSpoke(["a", "me"], "me")).toBe(true);
+    expect(localSpoke(["a"], "me")).toBe(false);
+    expect(localSpoke([], "me")).toBe(false);
+  });
+});
+
+describe("remoteSpeakerIdentities", () => {
+  it("drops the local identity from the server speaker list", () => {
+    expect(remoteSpeakerIdentities(["a", "me"], "me")).toEqual(["a"]);
+    expect(remoteSpeakerIdentities(["a"], "me")).toEqual(["a"]);
+  });
+});
+
+describe("rmsDbFs", () => {
+  it("is -Infinity for digital silence and for no samples", () => {
+    expect(rmsDbFs(new Float32Array(128))).toBe(-Infinity);
+    expect(rmsDbFs(new Float32Array(0))).toBe(-Infinity);
+  });
+
+  it("is 0 dBFS for a full-scale square wave", () => {
+    expect(rmsDbFs(new Float32Array(128).fill(1))).toBeCloseTo(0, 5);
+  });
+
+  it("is about -20 dBFS at a tenth of full scale", () => {
+    expect(rmsDbFs(new Float32Array(128).fill(0.1))).toBeCloseTo(-20, 5);
+  });
+});
+
+describe("nextSpeechState", () => {
+  const thresholds = { onDb: SPEECH_ON_DB, stayDb: SPEECH_STAY_DB };
+
+  it("starts speaking on the first frame at the on threshold", () => {
+    expect(nextSpeechState(SILENT_SPEECH_STATE, SPEECH_ON_DB, 1000, thresholds)).toEqual({
+      active: true,
+      lastLoudAt: 1000,
+    });
+  });
+
+  it("does not start just below the on threshold", () => {
+    expect(nextSpeechState(SILENT_SPEECH_STATE, SPEECH_ON_DB - 0.1, 1000, thresholds)).toEqual(
+      SILENT_SPEECH_STATE,
+    );
+  });
+
+  it("stays speaking between the stay and on thresholds and refreshes the hold", () => {
+    const speaking = { active: true, lastLoudAt: 1000 };
+    expect(nextSpeechState(speaking, SPEECH_STAY_DB, 1100, thresholds)).toEqual({
+      active: true,
+      lastLoudAt: 1100,
+    });
+  });
+
+  it("holds through quiet frames shorter than the hold time", () => {
+    const speaking = { active: true, lastLoudAt: 1000 };
+    expect(nextSpeechState(speaking, -90, 1000 + SPEECH_HOLD_MS - 1, thresholds)).toBe(speaking);
+  });
+
+  it("stops once the hold time passed in silence", () => {
+    const speaking = { active: true, lastLoudAt: 1000 };
+    expect(nextSpeechState(speaking, -90, 1000 + SPEECH_HOLD_MS, thresholds)).toEqual(
+      SILENT_SPEECH_STATE,
+    );
+  });
+
+  it("stops when the signal falls under the stay threshold after the hold", () => {
+    const speaking = { active: true, lastLoudAt: 1000 };
+    expect(nextSpeechState(speaking, SPEECH_STAY_DB - 0.1, 1300, thresholds)).toEqual(
+      SILENT_SPEECH_STATE,
+    );
+  });
+});
+
+describe("speechThresholdsFor", () => {
+  it("uses the automatic constants", () => {
+    expect(speechThresholdsFor({ auto: true, thresholdDb: -30 })).toEqual({
+      onDb: SPEECH_ON_DB,
+      stayDb: SPEECH_STAY_DB,
+    });
+  });
+
+  it("maps the manual level to on, with stay 5 dB below", () => {
+    expect(speechThresholdsFor({ auto: false, thresholdDb: -40 })).toEqual({
+      onDb: -40,
+      stayDb: -45,
+    });
+  });
+
+  it("clamps the manual level to the slider range", () => {
+    expect(speechThresholdsFor({ auto: false, thresholdDb: -120 }).onDb).toBe(MIN_SENSITIVITY_DB);
+    expect(speechThresholdsFor({ auto: false, thresholdDb: -5 }).onDb).toBe(MAX_SENSITIVITY_DB);
+  });
+});
+
+describe("levelToMeterPercent", () => {
+  it("maps the slider range onto 0-100", () => {
+    expect(levelToMeterPercent(MIN_SENSITIVITY_DB)).toBe(0);
+    expect(levelToMeterPercent(MAX_SENSITIVITY_DB)).toBe(100);
+    expect(levelToMeterPercent(-50)).toBe(50);
+    expect(levelToMeterPercent(-Infinity)).toBe(0);
+    expect(levelToMeterPercent(0)).toBe(100);
+  });
+});
+
+describe("speech sensitivity storage", () => {
+  it("defaults to automatic", () => {
+    expect(readSpeechSensitivity(fakeStorage())).toEqual({ auto: true, thresholdDb: SPEECH_ON_DB });
+    expect(readSpeechSensitivity(null)).toEqual({ auto: true, thresholdDb: SPEECH_ON_DB });
+  });
+
+  it("round-trips a manual level", () => {
+    const storage = fakeStorage();
+    writeSpeechSensitivity(storage, { auto: false, thresholdDb: -35 });
+    expect(readSpeechSensitivity(storage)).toEqual({ auto: false, thresholdDb: -35 });
+  });
+
+  it("ignores a corrupt level", () => {
+    const storage = fakeStorage([["vozzera.speechSensitivityDb", "abc"]]);
+    expect(readSpeechSensitivity(storage).thresholdDb).toBe(SPEECH_ON_DB);
+  });
+});
+
+describe("push to talk release delay", () => {
+  it("defaults to 200 ms", () => {
+    expect(DEFAULT_PUSH_TO_TALK_RELEASE_DELAY_MS).toBe(200);
+    expect(readPushToTalkReleaseDelayMs(fakeStorage())).toBe(200);
+  });
+
+  it("round-trips and clamps to 0-2000 ms", () => {
+    const storage = fakeStorage();
+    writePushToTalkReleaseDelayMs(storage, 750);
+    expect(readPushToTalkReleaseDelayMs(storage)).toBe(750);
+    writePushToTalkReleaseDelayMs(storage, 9000);
+    expect(readPushToTalkReleaseDelayMs(storage)).toBe(MAX_PUSH_TO_TALK_RELEASE_DELAY_MS);
+    writePushToTalkReleaseDelayMs(storage, 0);
+    expect(readPushToTalkReleaseDelayMs(storage)).toBe(0);
+  });
+});
+
+describe("push to talk state payload", () => {
+  it("round-trips both states", () => {
+    expect(pushToTalkStateFromPayload(pushToTalkStatePayload(true))).toBe(true);
+    expect(pushToTalkStateFromPayload(pushToTalkStatePayload(false))).toBe(false);
+  });
+
+  it("rejects malformed payloads from other versions", () => {
+    expect(pushToTalkStateFromPayload(new Uint8Array([]))).toBeNull();
+    expect(pushToTalkStateFromPayload(new Uint8Array([2]))).toBeNull();
+    expect(pushToTalkStateFromPayload(new Uint8Array([1, 1]))).toBeNull();
+  });
+});
+
+describe("visibleMutedParticipants", () => {
+  it("hides the muted icon for people idle in push-to-talk", () => {
+    expect(visibleMutedParticipants({ ana: true, beto: true, caio: false }, { ana: true })).toEqual(
+      { ana: false, beto: true, caio: false },
+    );
+  });
+
+  it("returns the same object when nobody is in push-to-talk", () => {
+    const muted = { ana: true };
+    expect(visibleMutedParticipants(muted, {})).toBe(muted);
   });
 });

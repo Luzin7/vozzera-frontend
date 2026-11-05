@@ -42,7 +42,7 @@ Front em `http://localhost:3000`. Em dev, aponte pro backend Go via `VITE_API_UR
 VITE_API_URL=http://localhost:8080 npm run dev
 ```
 
-Em produção o build é servido pelo próprio Go na mesma origem — deixe `VITE_API_URL` vazio.
+Em produção a API é `https://vozzera.onrender.com`, definida em `VITE_API_URL` (variável de build: trocar exige novo deploy). O build de produção falha se a variável estiver ausente, vazia ou não for `https`.
 
 ## Scripts
 
