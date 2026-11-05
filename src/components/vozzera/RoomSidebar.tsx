@@ -20,9 +20,11 @@ import { memo, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CallDuration } from "@/components/vozzera/CallDuration";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { SpeakingRing } from "@/components/vozzera/SpeakingRing";
 import type { AwayPresence } from "@/lib/vozzera/away";
+import type { CallSessions } from "@/lib/vozzera/call-session";
 import { VoicePresenceList } from "@/components/vozzera/VoicePresenceList";
 import { cn } from "@/lib/utils";
 import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
@@ -57,6 +59,7 @@ type Props = {
   voiceParticipants: CallParticipant[];
   voicePresence: VoicePresence;
   awayPresence: AwayPresence;
+  callSessions: CallSessions;
   micEnabled: boolean;
   onToggleMic: () => void;
   onLeaveVoice: () => void;
@@ -198,6 +201,7 @@ export const RoomSidebar = memo(function RoomSidebar({
   voiceParticipants,
   voicePresence,
   awayPresence,
+  callSessions,
   micEnabled,
   onToggleMic,
   onLeaveVoice,
@@ -383,6 +387,10 @@ export const RoomSidebar = memo(function RoomSidebar({
                       </span>
                     )}
                     <span className="ml-auto flex shrink-0 items-center gap-1">
+                      <CallDuration
+                        startedAt={callSessions[room.id] ?? null}
+                        className="min-w-[7ch] text-right text-[10px] tabular-nums text-muted-foreground"
+                      />
                       {unread[room.id] ? (
                         <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
                           {unread[room.id]}

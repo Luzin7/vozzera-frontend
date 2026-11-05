@@ -41,6 +41,8 @@ import {
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
+import { applySessionSnapshot } from "@/lib/vozzera/call-session";
+import type { CallSessions } from "@/lib/vozzera/call-session";
 import { applyAwaySnapshot, createAwayConfirmation } from "@/lib/vozzera/away";
 import type { AwayPresence } from "@/lib/vozzera/away";
 import type { OnlineUsers, TypingUsers, VoicePresence } from "@/lib/vozzera/chat";
@@ -118,6 +120,7 @@ export function useChat(options?: ChatOptions) {
   const [typingUsers, setTypingUsers] = useState<TypingUsers>({});
   const [voicePresence, setVoicePresence] = useState<VoicePresence>({});
   const [awayPresence, setAwayPresence] = useState<AwayPresence>({});
+  const [callSessions, setCallSessions] = useState<CallSessions>({});
   const [onlineUsers, setOnlineUsers] = useState<OnlineUsers>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     if (typeof localStorage === "undefined") return false;
@@ -187,6 +190,7 @@ export function useChat(options?: ChatOptions) {
     setUnread({});
     setUnreadMarker(null);
     setTypingUsers({});
+    setCallSessions({});
     commitVoicePresence({});
     commitAwayPresence({});
     awayConfirmationRef.current.reset();
@@ -285,6 +289,7 @@ export function useChat(options?: ChatOptions) {
       setOlderHistory((prev) => removeRoom(prev, roomId));
       setUnread((prev) => removeRoom(prev, roomId));
       setTypingUsers((prev) => removeRoom(prev, roomId));
+      setCallSessions((prev) => removeRoom(prev, roomId));
       commitVoicePresence(removeRoom(voicePresenceRef.current, roomId));
       commitAwayPresence(removeRoom(awayPresenceRef.current, roomId));
       setActiveRoom((current) => (current?.id === roomId ? null : current));
@@ -433,6 +438,12 @@ export function useChat(options?: ChatOptions) {
         return;
       }
 
+      if (event.type === "voice.session.snapshot") {
+        const receivedAt = Date.now();
+        setCallSessions((prev) => applySessionSnapshot(prev, event, receivedAt));
+        return;
+      }
+
       if (event.type === "voice.away.resync") {
         awayConfirmationRef.current.reset();
         return;
@@ -500,7 +511,10 @@ export function useChat(options?: ChatOptions) {
     );
 
     for (const roomId of toSubscribe) subscribeRoom(roomId);
-    for (const roomId of toUnsubscribe) unsubscribeRoom(roomId);
+    for (const roomId of toUnsubscribe) {
+      unsubscribeRoom(roomId);
+      setCallSessions((prev) => removeRoom(prev, roomId));
+    }
     subscribedRoomsRef.current = new Set(toSubscribe);
   }, [rooms, subscribeRoom, unsubscribeRoom]);
 
@@ -909,6 +923,7 @@ export function useChat(options?: ChatOptions) {
     typingUsers,
     voicePresence,
     awayPresence,
+    callSessions,
     awayPresenceRef,
     voicePresenceRef,
     setAwayIntent,

@@ -27,6 +27,7 @@ const props = {
   voiceParticipants: [],
   voicePresence: {},
   awayPresence: {},
+  callSessions: {},
   micEnabled: true,
   onToggleMic: noop,
   onLeaveVoice: noop,

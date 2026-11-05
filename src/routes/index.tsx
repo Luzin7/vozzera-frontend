@@ -97,6 +97,7 @@ function Index() {
     typingUsers,
     voicePresence,
     awayPresence,
+    callSessions,
     awayPresenceRef,
     voicePresenceRef,
     setAwayIntent,
@@ -407,6 +408,7 @@ function Index() {
     voiceParticipants: voice.participants,
     voicePresence,
     awayPresence,
+    callSessions,
     micEnabled: voice.micEnabled,
     onToggleMic: handleToggleMic,
     onLeaveVoice: handleLeaveVoice,
@@ -640,7 +642,7 @@ function Index() {
                 onStopWatchingShare={voice.stopWatchingShare}
                 localPreview={voice.localPreview}
                 qualities={voice.qualities}
-                connectedAt={voice.connectedAt}
+                sessionStartedAt={callSessions[visibleVoiceRoom.id] ?? null}
                 miniWindowSupported={miniWindow.supported}
                 miniWindowOpen={miniWindow.isOpen}
                 onToggleMic={handleToggleMic}

@@ -1,28 +1,28 @@
-import { useEffect, useState } from "react";
-
 import { formatCallDuration } from "@/lib/vozzera/call-duration";
+import { useNow } from "@/lib/vozzera/clock-store";
 
-const TICK_MS = 1000;
+type Props = {
+  startedAt: number | null;
+  className?: string;
+};
 
-export function CallDuration({ connectedAt }: Readonly<{ connectedAt: number | null }>) {
-  const [now, setNow] = useState(() => Date.now());
+type TimerProps = {
+  startedAt: number;
+  className?: string | undefined;
+};
 
-  useEffect(() => {
-    if (connectedAt === null) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(timer);
-  }, [connectedAt]);
-
-  if (connectedAt === null) return null;
+function CallDurationTimer({ startedAt, className }: Readonly<TimerProps>) {
+  const now = useNow();
 
   return (
-    <span
-      role="timer"
-      aria-label="Duração da chamada"
-      className="absolute left-4 font-mono text-xs tabular-nums text-muted-foreground"
-    >
-      {formatCallDuration(now - connectedAt)}
+    <span role="timer" aria-label="Duração da chamada" className={className}>
+      {formatCallDuration(now - startedAt)}
     </span>
   );
+}
+
+export function CallDuration({ startedAt, className }: Readonly<Props>) {
+  if (startedAt === null) return null;
+
+  return <CallDurationTimer startedAt={startedAt} className={className} />;
 }
