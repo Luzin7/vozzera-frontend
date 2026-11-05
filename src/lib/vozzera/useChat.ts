@@ -50,12 +50,30 @@ import {
   writeNotificationsEnabled,
   writeSoundEnabled,
 } from "@/lib/vozzera/notifications";
+import {
+  diffRoomSubscriptions,
+  HISTORY_REFETCH_DELAY_MS,
+  createLiveEditTracker,
+  historyFailureStatus,
+  markHistoryStatus,
+  markStaleRooms,
+  mergeHistory,
+  needsHistory,
+  refetchHistoryStaggered,
+  rememberRecentRoom,
+  roomsToRefetch,
+  shouldRefetchAfterStatus,
+} from "@/lib/vozzera/chat-history";
+import type { HistoryStatuses } from "@/lib/vozzera/chat-history";
+import { createDraftStore } from "@/lib/vozzera/message-display";
 import { canManageRooms, canModerateMessages, canSeeRoom } from "@/lib/vozzera/permissions";
 import { isSessionRejected } from "@/lib/vozzera/session";
 import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
+
+const HISTORY_PAGE_SIZE = 50;
 
 export function useChat() {
   const { username, setUsername, clearUsername } = useAuth();
@@ -70,6 +88,7 @@ export function useChat() {
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [banner, setBanner] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<HistoryStatuses>({});
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [unreadMarker, setUnreadMarker] = useState<{
     roomId: string;
@@ -92,9 +111,19 @@ export function useChat() {
   const soundEnabledRef = useRef(soundEnabled);
   const selectedInitialRoomRef = useRef(false);
   const resubscribeRoomRef = useRef<((roomId: string) => void) | null>(null);
+  const messagesRef = useRef(messages);
+  const historyStatusRef = useRef(historyStatus);
+  const subscribedRoomsRef = useRef(new Set<string>());
+  const hasOpenedBeforeRef = useRef(false);
+  const deletedMessageIdsRef = useRef(new Set<string>());
+  const liveEditsRef = useRef(createLiveEditTracker());
+  const recentRoomIdsRef = useRef<string[]>([]);
+  const drafts = useMemo(() => createDraftStore(), []);
 
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
+  messagesRef.current = messages;
+  historyStatusRef.current = historyStatus;
   notificationsEnabledRef.current = notificationsEnabled;
   soundEnabledRef.current = soundEnabled;
 
@@ -108,6 +137,13 @@ export function useChat() {
     setCurrentUserId(null);
     setActiveRoom(null);
     setMessages({});
+    setHistoryStatus({});
+    historyStatusRef.current = {};
+    hasOpenedBeforeRef.current = false;
+    deletedMessageIdsRef.current = new Set();
+    liveEditsRef.current.clear();
+    recentRoomIdsRef.current = [];
+    drafts.clearAll();
     setUnread({});
     setUnreadMarker(null);
     setTypingUsers({});
@@ -117,7 +153,7 @@ export function useChat() {
     clearActiveRoomId(typeof localStorage === "undefined" ? null : localStorage);
     queryClient.removeQueries({ queryKey: ["rooms"] });
     queryClient.removeQueries({ queryKey: ["me"] });
-  }, [clearUsername, queryClient]);
+  }, [clearUsername, drafts, queryClient]);
 
   useEffect(() => {
     setUnauthorizedHandler(endSession);
@@ -201,6 +237,7 @@ export function useChat() {
   const removeRoomLocally = useCallback((roomId: string) => {
     setRooms((prev) => prev.filter((room) => room.id !== roomId));
     setMessages((prev) => removeRoom(prev, roomId));
+    setHistoryStatus((prev) => removeRoom(prev, roomId));
     setUnread((prev) => removeRoom(prev, roomId));
     setTypingUsers((prev) => removeRoom(prev, roomId));
     setVoicePresence((prev) => removeRoom(prev, roomId));
@@ -249,6 +286,7 @@ export function useChat() {
   const handleMessageEvent = useCallback(
     (event: Extract<OutboundEvent, { type: "message" }>) => {
       if (event.action === "deleted") {
+        deletedMessageIdsRef.current.add(event.id);
         setMessages((prev) => ({
           ...prev,
           [event.room_id]: (prev[event.room_id] ?? []).filter((message) => message.id !== event.id),
@@ -287,6 +325,7 @@ export function useChat() {
       }
 
       if (event.action === "updated") {
+        liveEditsRef.current.markEdited(event.id);
         setMessages((prev) => ({
           ...prev,
           [event.room_id]: (prev[event.room_id] ?? []).map((message) =>
@@ -368,13 +407,14 @@ export function useChat() {
   resubscribeRoomRef.current = resubscribeRoom;
 
   useEffect(() => {
-    const roomIds = rooms.filter((room) => room.has_voice).map((room) => room.id);
+    const { toSubscribe, toUnsubscribe } = diffRoomSubscriptions(
+      subscribedRoomsRef.current,
+      rooms.map((room) => room.id),
+    );
 
-    for (const roomId of roomIds) subscribeRoom(roomId);
-
-    return () => {
-      for (const roomId of roomIds) unsubscribeRoom(roomId);
-    };
+    for (const roomId of toSubscribe) subscribeRoom(roomId);
+    for (const roomId of toUnsubscribe) unsubscribeRoom(roomId);
+    subscribedRoomsRef.current = new Set(toSubscribe);
   }, [rooms, subscribeRoom, unsubscribeRoom]);
 
   useEffect(() => {
@@ -416,6 +456,58 @@ export function useChat() {
 
   useEffect(() => () => typingAnnouncer.stop(), [typingAnnouncer]);
 
+  const loadHistory = useCallback(async (roomId: string) => {
+    const knownBeforeFetch = new Set((messagesRef.current[roomId] ?? []).map((m) => m.id));
+    const editCheckpoint = liveEditsRef.current.checkpoint();
+    const history = await listMessages(roomId, HISTORY_PAGE_SIZE);
+    const fetched = history.map((message) => fromHistory(message, roomId));
+    const options = {
+      deletedIds: deletedMessageIdsRef.current,
+      editedDuringFetchIds: liveEditsRef.current.editedSince(editCheckpoint),
+      knownBeforeFetch,
+      pageSize: HISTORY_PAGE_SIZE,
+    };
+
+    setMessages((prev) => ({
+      ...prev,
+      [roomId]: mergeHistory(prev[roomId] ?? [], fetched, options),
+    }));
+
+    return mergeHistory(messagesRef.current[roomId] ?? [], fetched, options);
+  }, []);
+
+  const loadRoomHistory = useCallback(
+    async (roomId: string, unreadCount: number) => {
+      setHistoryStatus((prev) => markHistoryStatus(prev, roomId, "loading"));
+      historyStatusRef.current = markHistoryStatus(historyStatusRef.current, roomId, "loading");
+      setLoadingHistory(true);
+
+      try {
+        const merged = await loadHistory(roomId);
+        setHistoryStatus((prev) => markHistoryStatus(prev, roomId, "loaded"));
+        historyStatusRef.current = markHistoryStatus(historyStatusRef.current, roomId, "loaded");
+
+        const markerId = firstUnreadMessageId(merged, unreadCount);
+        if (activeRoomRef.current?.id === roomId && markerId) {
+          setUnreadMarker({ roomId, messageId: markerId });
+        }
+      } catch (err) {
+        setHistoryStatus((prev) => markHistoryStatus(prev, roomId, "failed"));
+        historyStatusRef.current = markHistoryStatus(historyStatusRef.current, roomId, "failed");
+
+        if (isUnauthorized(err)) {
+          setAuthed(false);
+          return;
+        }
+
+        setBanner("Não consegui carregar o histórico.");
+      } finally {
+        setLoadingHistory(false);
+      }
+    },
+    [loadHistory],
+  );
+
   const openRoom = useCallback(
     async (room: Room) => {
       if (room.id === activeRoomRef.current?.id) return;
@@ -434,36 +526,71 @@ export function useChat() {
       setUnreadMarker(cachedMarkerId ? { roomId: room.id, messageId: cachedMarkerId } : null);
       setUnread((prev) => clearUnread(prev, room.id));
       subscribeRoom(room.id);
+      recentRoomIdsRef.current = rememberRecentRoom(recentRoomIdsRef.current, room.id);
 
-      if (messages[room.id]) return;
+      if (!needsHistory(historyStatusRef.current, room.id)) return;
 
-      setLoadingHistory(true);
-
-      try {
-        const history = await listMessages(room.id, 50);
-        const nextMessages = history.map((message) => fromHistory(message, room.id));
-        const markerId = firstUnreadMessageId(nextMessages, unreadCount);
-
-        setMessages((prev) => ({
-          ...prev,
-          [room.id]: nextMessages,
-        }));
-        if (activeRoomRef.current?.id === room.id && markerId) {
-          setUnreadMarker({ roomId: room.id, messageId: markerId });
-        }
-      } catch (err) {
-        if (isUnauthorized(err)) {
-          setAuthed(false);
-          return;
-        }
-
-        setBanner("Não consegui carregar o histórico.");
-      } finally {
-        setLoadingHistory(false);
-      }
+      await loadRoomHistory(room.id, unreadCount);
     },
-    [messages, setTyping, subscribeRoom, unread],
+    [loadRoomHistory, messages, setTyping, subscribeRoom, unread],
   );
+
+  const retryHistory = useCallback(
+    async (roomId: string) => {
+      if (!needsHistory(historyStatusRef.current, roomId)) return;
+      await loadRoomHistory(roomId, 0);
+    },
+    [loadRoomHistory],
+  );
+
+  useEffect(() => {
+    if (status === "closed" || status === "connecting") return;
+
+    const shouldRefetch = shouldRefetchAfterStatus({
+      hasOpenedBefore: hasOpenedBeforeRef.current,
+      status,
+    });
+    hasOpenedBeforeRef.current = true;
+    if (!shouldRefetch) return;
+
+    let cancelled = false;
+    const roomIds = roomsToRefetch(
+      historyStatusRef.current,
+      roomsRef.current.map((room) => room.id),
+      {
+        activeRoomId: activeRoomRef.current?.id ?? null,
+        recentRoomIds: recentRoomIdsRef.current,
+      },
+    );
+
+    const staleStatuses = markStaleRooms(historyStatusRef.current, roomIds);
+    historyStatusRef.current = staleStatuses;
+    setHistoryStatus(staleStatuses);
+
+    void refetchHistoryStaggered({
+      roomIds,
+      fetchRoom: async (roomId) => {
+        await loadHistory(roomId);
+      },
+      onError: (roomId, error) => {
+        console.error(`Falha ao atualizar o histórico da sala ${roomId}:`, error);
+        const failureStatus = historyFailureStatus(roomId, activeRoomRef.current?.id ?? null);
+        setHistoryStatus((prev) => markHistoryStatus(prev, roomId, failureStatus));
+        historyStatusRef.current = markHistoryStatus(
+          historyStatusRef.current,
+          roomId,
+          failureStatus,
+        );
+      },
+      wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      delayMs: HISTORY_REFETCH_DELAY_MS,
+      isCancelled: () => cancelled,
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [status, loadHistory]);
 
   const dismissUnreadMarker = useCallback((roomId: string) => {
     setUnreadMarker((current) => (current?.roomId === roomId ? null : current));
@@ -527,6 +654,7 @@ export function useChat() {
   const deleteMessage = useCallback(async ({ id, roomId }: ChatMessage) => {
     try {
       await deleteMessageApi(roomId, id);
+      deletedMessageIdsRef.current.add(id);
 
       setMessages((prev) => ({
         ...prev,
@@ -647,6 +775,9 @@ export function useChat() {
     messages,
     banner,
     loadingHistory,
+    historyStatus,
+    retryHistory,
+    drafts,
     unread,
     unreadMarker,
     typingUsers,

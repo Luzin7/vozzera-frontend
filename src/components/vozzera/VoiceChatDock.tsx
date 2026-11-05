@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
+import type { DraftStore } from "@/lib/vozzera/message-display";
 import type { ChatMessage } from "@/lib/vozzera/types";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ type Props = {
   className?: string;
   roomId: string;
   roomName: string;
+  drafts: DraftStore;
   messages: ChatMessage[];
   loading: boolean;
   typingText: string | null;
@@ -20,12 +22,17 @@ type Props = {
   onSend: (content: string) => void;
   onTypingChange: (typing: boolean) => void;
   onClose: () => void;
+  historyFailed: boolean;
+  onRetryHistory: (roomId: string) => void;
+  editLastRequest: number;
+  onEditLast: () => void;
 };
 
 export const VoiceChatDock = memo(function VoiceChatDock({
   className,
   roomId,
   roomName,
+  drafts,
   messages,
   loading,
   typingText,
@@ -35,6 +42,10 @@ export const VoiceChatDock = memo(function VoiceChatDock({
   onSend,
   onTypingChange,
   onClose,
+  historyFailed,
+  onRetryHistory,
+  editLastRequest,
+  onEditLast,
 }: Readonly<Props>) {
   return (
     <aside
@@ -68,13 +79,19 @@ export const VoiceChatDock = memo(function VoiceChatDock({
         canModerateMessages={canModerateMessages}
         onDelete={onDelete}
         onRoomClick={undefined}
+        historyFailed={historyFailed}
+        onRetryHistory={onRetryHistory}
+        editLastRequest={editLastRequest}
       />
       <MessageComposer
+        key={roomId}
         roomId={roomId}
+        drafts={drafts}
         roomName={roomName}
         disabled={disabled}
         onSend={onSend}
         onTypingChange={onTypingChange}
+        onEditLast={onEditLast}
       />
     </aside>
   );

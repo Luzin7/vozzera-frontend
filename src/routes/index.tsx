@@ -23,6 +23,7 @@ import { useOnline } from "@/hooks/useOnline";
 import { totalUnread, typingIndicatorText } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
+import { useEditLastRequest } from "@/lib/vozzera/use-edit-last-request";
 import { useAppBadge } from "@/lib/vozzera/use-app-badge";
 import { useInstallPrompt } from "@/lib/vozzera/use-install-prompt";
 import { useVoiceMiniWindow } from "@/lib/vozzera/use-voice-mini-window";
@@ -74,6 +75,9 @@ function Index() {
     messages,
     banner,
     loadingHistory,
+    historyStatus,
+    retryHistory,
+    drafts,
     unread,
     unreadMarker,
     typingUsers,
@@ -113,6 +117,7 @@ function Index() {
   const isMobile = useIsMobile();
   const isOnline = useOnline();
   const voice = useVoice();
+  const { request: editLastRequest, requestEditLast } = useEditLastRequest();
   const {
     screenShareEnabled,
     activeRoomId: voiceActiveRoomId,
@@ -483,6 +488,7 @@ function Index() {
               className="flex-1 md:hidden"
               roomId={visibleVoiceRoom.id}
               roomName={visibleVoiceRoom.name}
+              drafts={drafts}
               messages={voiceChatMessages}
               loading={voiceChatLoading}
               typingText={voiceChatTypingText}
@@ -492,6 +498,10 @@ function Index() {
               onSend={handleSendVoiceMessage}
               onTypingChange={setTyping}
               onClose={() => setVoiceChatOpen(false)}
+              historyFailed={historyStatus[visibleVoiceRoom.id] === "failed"}
+              onRetryHistory={retryHistory}
+              editLastRequest={editLastRequest}
+              onEditLast={requestEditLast}
             />
           ) : (
             <Suspense
@@ -548,13 +558,19 @@ function Index() {
                 unreadMarker?.roomId === activeRoom.id ? unreadMarker.messageId : null
               }
               onUnreadMarkerRead={dismissUnreadMarker}
+              historyFailed={historyStatus[activeRoom.id] === "failed"}
+              onRetryHistory={retryHistory}
+              editLastRequest={editLastRequest}
             />
             <MessageComposer
+              key={activeRoom.id}
               roomId={activeRoom.id}
               roomName={activeRoom.name}
+              drafts={drafts}
               disabled={socketStatus !== "open"}
               onSend={handleSendMessage}
               onTypingChange={setTyping}
+              onEditLast={requestEditLast}
             />
           </>
         ) : (
@@ -576,6 +592,7 @@ function Index() {
           className="hidden md:flex"
           roomId={visibleVoiceRoom.id}
           roomName={visibleVoiceRoom.name}
+          drafts={drafts}
           messages={voiceChatMessages}
           loading={voiceChatLoading}
           typingText={voiceChatTypingText}
@@ -585,6 +602,10 @@ function Index() {
           onSend={handleSendVoiceMessage}
           onTypingChange={setTyping}
           onClose={() => setVoiceChatOpen(false)}
+          historyFailed={historyStatus[visibleVoiceRoom.id] === "failed"}
+          onRetryHistory={retryHistory}
+          editLastRequest={editLastRequest}
+          onEditLast={requestEditLast}
         />
       ) : (
         <MemberList

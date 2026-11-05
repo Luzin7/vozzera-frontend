@@ -1,35 +1,39 @@
 import { SendHorizonal } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import type { DraftStore } from "@/lib/vozzera/message-display";
 import { MAX_MESSAGE_LENGTH } from "@/lib/vozzera/types";
 
 export const MessageComposer = memo(function MessageComposer({
   roomId,
   roomName,
+  drafts,
   disabled,
   onSend,
   onTypingChange,
+  onEditLast,
 }: Readonly<{
   roomId: string;
   roomName: string;
+  drafts: DraftStore;
   disabled: boolean;
   onSend: (content: string) => void;
   onTypingChange: (typing: boolean) => void;
+  onEditLast?: () => void;
 }>) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(() => drafts.get(roomId));
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const trimmed = value.trim();
   const canSend = !disabled && trimmed.length > 0 && trimmed.length <= MAX_MESSAGE_LENGTH;
 
   useEffect(() => {
-    setValue("");
     onTypingChange(false);
     inputRef.current?.focus();
   }, [roomId, onTypingChange]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
@@ -40,6 +44,7 @@ export const MessageComposer = memo(function MessageComposer({
     if (!canSend) return;
     onSend(trimmed);
     onTypingChange(false);
+    drafts.clear(roomId);
     setValue("");
   };
 
@@ -51,12 +56,19 @@ export const MessageComposer = memo(function MessageComposer({
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
+            drafts.set(roomId, e.target.value);
             onTypingChange(e.target.value.length > 0);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submit();
+              return;
+            }
+
+            if (e.key === "ArrowUp" && value === "" && onEditLast) {
+              e.preventDefault();
+              onEditLast();
             }
           }}
           rows={1}
