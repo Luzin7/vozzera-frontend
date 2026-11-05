@@ -75,7 +75,6 @@ const SCREEN_SHARE_VOLUMES_KEY = "vozzera.screenShareVolumes";
 const VOICE_START_LEVEL = 0.16;
 const VOICE_CONTINUE_LEVEL = 0.07;
 export const VOICE_RELEASE_DELAY_MS = 40;
-export const VIDEO_PLAYBACK_DELAY_MS = 200;
 export const DEFAULT_PUSH_TO_TALK_BINDING = { code: "KeyV", label: "V" } as const;
 
 export type PushToTalkBinding = { code: string; label: string };
@@ -432,14 +431,6 @@ export function deafenStateFromPayload(payload: Uint8Array): boolean | null {
   if (payload[0] === 1) return true;
   if (payload[0] === 0) return false;
   return null;
-}
-
-type HasPlayoutDelay = {
-  setPlayoutDelay(delayInSeconds: number): void;
-};
-
-export function applyVideoPlaybackDelay(track: HasPlayoutDelay, delayMs: number): void {
-  track.setPlayoutDelay(delayMs / 1000);
 }
 
 export function participantStatusLabelFor(locallyMuted: boolean, isSpeaking: boolean): string {

@@ -50,7 +50,7 @@ export function ScreenShareDialog({
   onOpenChange: (open: boolean) => void;
   onStart: (intent: ScreenShareIntent) => void;
 }>) {
-  const [intent, setIntent] = useState<ScreenShareIntent>("text");
+  const [intent, setIntent] = useState<ScreenShareIntent>("video");
 
   const start = () => {
     onStart(intent);
