@@ -29,18 +29,23 @@ const roomTopic = z
   .regex(/^room:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 const timestamp = z.string().datetime({ offset: true });
 
+const knownOutboundTypes = new Set<string>();
+export const KNOWN_OUTBOUND_TYPES: ReadonlySet<string> = knownOutboundTypes;
+
 const envelope = <Type extends string, Topic extends z.ZodType<string>, Data extends z.ZodTypeAny>(
   type: Type,
   topic: Topic,
   data: Data,
-) =>
-  z.object({
+) => {
+  knownOutboundTypes.add(type);
+  return z.object({
     v: z.literal(1),
     type: z.literal(type),
     topic,
     ts: timestamp,
     data,
   });
+};
 
 const roomData = z.object({
   id: uuid,

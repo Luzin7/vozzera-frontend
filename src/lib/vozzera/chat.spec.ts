@@ -27,7 +27,7 @@ import {
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
-import { MAX_FRAME_BYTES } from "@/lib/vozzera/ws-schema";
+import { KNOWN_OUTBOUND_TYPES, MAX_FRAME_BYTES } from "@/lib/vozzera/ws-schema";
 import type { ActiveRoomStorage, TypingUsers } from "@/lib/vozzera/chat";
 
 function message(id: string, roomId = "r1"): ChatMessage {
@@ -250,7 +250,7 @@ describe("parseFrame", () => {
         created_at: wsTimestamp,
       },
     });
-    expect(parseFrame(raw).type).toBe("message");
+    expect(parseFrame(raw)?.type).toBe("message");
   });
 
   it("parses an updated frame without username and created_at", () => {
@@ -378,6 +378,98 @@ describe("parseFrame", () => {
     });
 
     expect(parseFrame(raw)).toMatchObject({ type: "typing", action: "start" });
+  });
+
+  it("ignores a frame whose type the client does not know", () => {
+    const raw = messageEvent({
+      v: 1,
+      type: "future.event",
+      topic: "__presence__",
+      ts: wsTimestamp,
+      data: {},
+    });
+    expect(parseFrame(raw)).toBeNull();
+  });
+
+  it("ignores an unknown type with a nanosecond timestamp in the envelope", () => {
+    const raw = messageEvent({
+      v: 1,
+      type: "future.event",
+      topic: "__presence__",
+      ts: "2026-11-05T15:04:05.123456789Z",
+      data: {},
+    });
+    expect(parseFrame(raw)).toBeNull();
+  });
+
+  it("logs an unknown type once per type", () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    const frame = (type: string) =>
+      messageEvent({ v: 1, type, topic: "__presence__", ts: wsTimestamp, data: {} });
+
+    parseFrame(frame("once.only"));
+    parseFrame(frame("once.only"));
+    parseFrame(frame("other.type"));
+
+    expect(debug).toHaveBeenCalledTimes(2);
+    debug.mockRestore();
+  });
+
+  it("still rejects a known type with an invalid payload", () => {
+    const raw = messageEvent({
+      v: 1,
+      type: "user.online",
+      topic: "__presence__",
+      ts: wsTimestamp,
+      data: { user_id: 1 },
+    });
+    expect(() => parseFrame(raw)).toThrow("evento WebSocket incompatível");
+  });
+
+  it("never ignores a known type", () => {
+    const room = `room:${wsRoomId}`;
+    const user = { user_id: wsUserId, username: "luan" };
+    const roomData = {
+      id: wsRoomId,
+      name: "geral",
+      has_voice: false,
+      staff_only: false,
+      created_at: wsTimestamp,
+    };
+    const messageRef = { content_id: wsMessageId, room_id: wsRoomId, user_id: wsUserId };
+    const samples: Record<string, { topic: string; data: unknown }> = {
+      "room.created": { topic: room, data: roomData },
+      "room.updated": { topic: room, data: roomData },
+      "room.deleted": { topic: room, data: { id: wsRoomId, is_mod: false } },
+      "message.created": {
+        topic: room,
+        data: {
+          id: wsMessageId,
+          room_id: wsRoomId,
+          user_id: wsUserId,
+          username: "luan",
+          content: "oi",
+          created_at: wsTimestamp,
+        },
+      },
+      "message.updated": { topic: room, data: { ...messageRef, content: "oi" } },
+      "message.deleted": { topic: room, data: { ...messageRef, is_mod: false } },
+      "typing.start": { topic: room, data: user },
+      "typing.stop": { topic: room, data: user },
+      "voice.presence.joined": { topic: room, data: [] },
+      "voice.presence.left": { topic: room, data: [] },
+      "voice.presence.snapshot": { topic: room, data: [] },
+      "system.error": { topic: "x", data: { error: "e" } },
+      "user.online": { topic: "__presence__", data: user },
+      "user.offline": { topic: "__presence__", data: user },
+      "presence.snapshot": { topic: "__presence__", data: { online: 0, offline: 0, total: 0 } },
+    };
+
+    expect([...KNOWN_OUTBOUND_TYPES].sort()).toEqual(Object.keys(samples).sort());
+    for (const [type, { topic, data }] of Object.entries(samples)) {
+      const raw = messageEvent({ v: 1, type, topic, ts: wsTimestamp, data });
+      expect(parseFrame(raw), type).not.toBeNull();
+    }
   });
 
   it("rejects invalid json with an explicit protocol error", () => {

@@ -85,7 +85,8 @@ export function useSocket({
 
       socket.onmessage = (raw) => {
         try {
-          onEventRef.current(parseFrame(raw));
+          const event = parseFrame(raw);
+          if (event) onEventRef.current(event);
         } catch (error) {
           if (error instanceof WebSocketProtocolError) {
             onProtocolErrorRef.current?.(error.message);
