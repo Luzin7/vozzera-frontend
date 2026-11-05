@@ -12,6 +12,7 @@ import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import { AppProviders } from "@/components/vozzera/AppProviders";
 import { TitleBar } from "@/components/vozzera/TitleBar";
 import { API_BASE } from "@/lib/vozzera/api";
 import { wsUrlFrom } from "@/lib/vozzera/api-url";
@@ -158,9 +159,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TitleBar />
-      <Outlet />
-      <Toaster theme="dark" position="bottom-right" />
+      <AppProviders>
+        <TitleBar />
+        <Outlet />
+        <Toaster theme="dark" position="bottom-right" />
+      </AppProviders>
     </QueryClientProvider>
   );
 }
