@@ -6,13 +6,186 @@
       "title": "fix: rolagem automática do chat e ajustes da revisão das PRs #166/#167",
       "kind": "fix",
       "pr": 169,
-      "summary": ""
+      "summary": "Sem perder o fio! Chegou mensagem, o chat desce sozinho. E se você subiu pra ler o histórico, ninguém te puxa de volta."
     },
     {
       "title": "feat(pwa): Vozzera instalável, com ícone do Papo e mini janela de voz",
       "kind": "feat",
       "pr": 168,
-      "summary": ""
+      "summary": "Vozzera virou app! Instale com o ícone do Papo e use a mini janela de voz."
+    }
+  ],
+  "next": {
+    "items": []
+  },
+  "releases": [
+    {
+      "version": "v1.21.0",
+      "releasedAt": "2026-10-13",
+      "items": [
+        {
+          "title": "fix: rolagem automática do chat e ajustes da revisão das PRs #166/#167",
+          "kind": "fix",
+          "pr": 169,
+          "summary": "Sem perder o fio! Chegou mensagem, o chat desce sozinho. E se você subiu pra ler o histórico, ninguém te puxa de volta."
+        },
+        {
+          "title": "feat(pwa): Vozzera instalável, com ícone do Papo e mini janela de voz",
+          "kind": "feat",
+          "pr": 168,
+          "summary": "Vozzera virou app! Instale com o ícone do Papo e use a mini janela de voz."
+        }
+      ]
+    },
+    {
+      "version": "v1.18.0",
+      "releasedAt": "2026-10-02",
+      "items": [
+        {
+          "title": "feat(chat): linkify de URLs cruas em mensagens",
+          "kind": "feat",
+          "pr": 162,
+          "summary": "Linkou, clicou! Agora qualquer URL colada no chat vira link clicável na hora. Sem copiar e colar."
+        },
+        {
+          "title": "feat(rooms): config de sala e qualidade da tela",
+          "kind": "feat",
+          "pr": 161,
+          "summary": "Sua sala, do seu jeito! Visibilidade por cargo, transmissão de tela bem mais nítida e chat de texto durante a call."
+        }
+      ]
+    },
+    {
+      "version": "v1.13.0",
+      "releasedAt": "2026-09-11",
+      "items": [
+        {
+          "title": "feat(voice): adicionar push-to-talk configuravel",
+          "kind": "feat",
+          "pr": 150,
+          "summary": "Fala quando quiser! O push-to-talk chegou: escolha a sua tecla e só abra o mic na hora certa."
+        },
+        {
+          "title": "feat(voice): adicionar sons às ações da chamada",
+          "kind": "feat",
+          "pr": 149,
+          "summary": "Dá pra ouvir a call ganhando vida! Sons próprios pra entrar, sair, mutar, desmutar e começar ou parar uma live."
+        },
+        {
+          "title": "feat(chat): marcador de mensagens não lidas",
+          "kind": "feat",
+          "pr": 148,
+          "summary": "Voltou e não sabe onde parou? Agora um marcador mostra onde começam as mensagens que você não leu."
+        },
+        {
+          "title": "fix(voice): áudio de transmissão mutada vaza ao iniciar transmissão local",
+          "kind": "fix",
+          "pr": 147,
+          "summary": "Mutou a live, mutou mesmo! Corrigimos o vazamento de áudio ao iniciar a sua própria transmissão."
+        },
+        {
+          "title": "feat(voice): monitoramento de FPS, modo qualidade e sugestão adaptativa no screen share",
+          "kind": "feat",
+          "pr": 146,
+          "summary": "FPS na tela! Acompanhe a fluidez da sua live em tempo real e receba sugestão de qualidade pra ela nunca engasgar."
+        }
+      ]
+    },
+    {
+      "version": "v1.11.0",
+      "releasedAt": "2026-09-09",
+      "items": [
+        {
+          "title": "feat(chat): presença online global com evento user.online/offline e snapshot",
+          "kind": "feat",
+          "pr": 136,
+          "summary": "Quem tá online? Agora você vê na hora, numa lista de membros ao lado do chat."
+        }
+      ]
+    },
+    {
+      "version": "v1.10.1",
+      "releasedAt": "2026-08-31",
+      "items": [
+        {
+          "title": "fix(voice): restaura qualidade da transmissão ao voltar à aba",
+          "kind": "fix",
+          "pr": 131,
+          "summary": "Voltou pra aba, a live já tá nítida! A qualidade da transmissão não demora mais a se recuperar."
+        }
+      ]
+    },
+    {
+      "version": "v1.8.0",
+      "releasedAt": "2026-08-27",
+      "items": [
+        {
+          "title": "feat(voice): exibir presença nas salas de voz",
+          "kind": "feat",
+          "pr": 114,
+          "summary": "Espiou antes de entrar! A barra lateral mostra quem já está em cada sala de voz."
+        }
+      ]
+    },
+    {
+      "version": "v1.7.1",
+      "releasedAt": "2026-08-26",
+      "items": [
+        {
+          "title": "fix(voice): melhora qualidade de audio e video da transmissao",
+          "kind": "fix",
+          "pr": 111,
+          "summary": "Live com cara de live! Áudio e vídeo mais claros e estáveis nas transmissões, com volume separado pra voz e transmissão."
+        }
+      ]
+    },
+    {
+      "version": "v1.5.0",
+      "releasedAt": "2026-08-21",
+      "items": [
+        {
+          "title": "feat(voice): deafen — silenciar todos e o mic de uma vez",
+          "kind": "feat",
+          "pr": 91,
+          "summary": "Modo deafen chegou! Um clique desliga seu microfone e corta o som da sala pra você. Ao desativar, tudo volta como estava."
+        },
+        {
+          "title": "feat(chat): som sutil em mensagem nova com aba escondida",
+          "kind": "feat",
+          "pr": 89,
+          "summary": "Aba escondida, mensagem não passa batido! Um som discreto avisa quando chega mensagem. Ative nas configurações."
+        },
+        {
+          "title": "fix(voice): compartilhar áudio ao compartilhar a tela inteira",
+          "kind": "fix",
+          "pr": 53,
+          "summary": "Agora a live tem som! Ao compartilhar a tela inteira, o áudio do sistema também vai pra todo mundo na sala."
+        },
+        {
+          "title": "Feat/layout responsivo mobile drawer salas",
+          "kind": "feat",
+          "pr": 50,
+          "summary": "Vozzera no bolso! No celular, a lista de salas vira menu lateral, o chat ocupa a tela toda e os controles se ajustam."
+        },
+        {
+          "title": "feat(chat): moderação de mensagens por mod/admin",
+          "kind": "feat",
+          "pr": 48,
+          "summary": "Sala sob controle! Mods e admins podem apagar mensagens de qualquer pessoa. Editar continua só pra quem escreveu."
+        }
+      ]
+    },
+    {
+      "version": "v1.4.0",
+      "releasedAt": "2026-08-21",
+      "items": [
+        {
+          "title": "feat(voice): notificar entrada/saída de participantes do canal",
+          "kind": "feat",
+          "pr": 92,
+          "summary": "Alguém entrou na call? Você fica sabendo na hora, com notificação e som, mesmo com a aba minimizada."
+        }
+      ]
     }
   ]
 }
