@@ -338,7 +338,7 @@ function Index() {
     screenShares: voice.screenShares,
     mutedParticipants: voice.mutedParticipants,
     deafenedParticipants: voice.deafenedParticipants,
-    speakingNames: voice.speakingNames,
+    speakingIdentities: voice.speakingIdentities,
     deafen: voice.deafen,
     onToggleDeafen: handleToggleDeafen,
   };
@@ -507,13 +507,12 @@ function Index() {
                 status={voice.status}
                 connectionState={voice.connectionState}
                 participants={voice.participants}
-                username={username}
                 micEnabled={voice.micEnabled}
                 deafen={voice.deafen}
                 volumes={voice.volumes}
                 mutedParticipants={voice.mutedParticipants}
                 deafenedParticipants={voice.deafenedParticipants}
-                speakingNames={voice.speakingNames}
+                speakingIdentities={voice.speakingIdentities}
                 screenShareEnabled={voice.screenShareEnabled}
                 screenShareHealth={voice.screenShareHealth}
                 screenShares={voice.screenShares}
@@ -645,11 +644,10 @@ function Index() {
           <VoiceMiniWindow
             roomName={miniWindowRoomName}
             participants={voice.participants}
-            username={username}
             micEnabled={voice.micEnabled}
             deafen={voice.deafen}
             mutedParticipants={voice.mutedParticipants}
-            speakingNames={voice.speakingNames}
+            speakingIdentities={voice.speakingIdentities}
             onToggleMic={handleToggleMic}
             onToggleDeafen={handleToggleDeafen}
             onLeave={handleLeaveVoice}

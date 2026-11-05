@@ -17,6 +17,8 @@ import { ConnectionQualityBadge } from "@/components/vozzera/ConnectionQualityBa
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import { initials } from "@/lib/vozzera/avatar";
 import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
+import type { CallParticipant } from "@/lib/vozzera/call-participants";
+import { findShareByIdentity } from "@/lib/vozzera/call-participants";
 import type { ScreenShareHealth } from "@/lib/vozzera/voice";
 import {
   isParticipantLocallyInaudible,
@@ -30,14 +32,13 @@ type Props = {
   roomName: string;
   status: VoiceStatus;
   connectionState: ConnectionState;
-  participants: string[];
-  username: string | null;
+  participants: CallParticipant[];
   micEnabled: boolean;
   deafen: boolean;
   volumes: Record<string, number>;
   mutedParticipants: Record<string, boolean>;
   deafenedParticipants: Record<string, boolean>;
-  speakingNames: string[];
+  speakingIdentities: string[];
   screenShareEnabled: boolean;
   screenShareHealth: ScreenShareHealth;
   screenShares: ScreenShare[];
@@ -69,13 +70,12 @@ export function VoiceCallView({
   status,
   connectionState,
   participants,
-  username,
   micEnabled,
   deafen,
   volumes,
   mutedParticipants,
   deafenedParticipants,
-  speakingNames,
+  speakingIdentities,
   screenShareEnabled,
   screenShareHealth,
   screenShares,
@@ -124,24 +124,24 @@ export function VoiceCallView({
               <div
                 className={`mx-auto grid min-h-full w-full content-center grid-cols-1 gap-3 ${gridLayout}`}
               >
-                {participants.map((name, index) => {
-                  const isSpeaking = speakingNames.includes(name);
+                {participants.map(({ identity, name, isLocal }, index) => {
+                  const isSpeaking = speakingIdentities.includes(identity);
                   const isMuted = isParticipantMuted({
-                    name,
-                    username,
+                    identity,
+                    isLocal,
                     micEnabled,
                     mutedParticipants,
                   });
                   const isLocallyInaudible = isParticipantLocallyInaudible(
-                    name === username,
-                    volumes[name],
+                    isLocal,
+                    volumes[identity],
                   );
-                  const liveShare = liveShares.find((share) => share.name === name);
+                  const liveShare = findShareByIdentity(liveShares, identity);
                   const centersLastParticipant = participants.length === 3 && index === 2;
 
                   return (
                     <article
-                      key={name}
+                      key={identity}
                       className={`relative flex aspect-video w-full items-center justify-center rounded-xl border bg-card p-6 transition-colors ${
                         isSolo ? "max-w-4xl" : ""
                       } ${
@@ -163,14 +163,12 @@ export function VoiceCallView({
 
                       <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
                         <span className="truncate">{name}</span>
-                        <ConnectionQualityBadge quality={remoteQualities[name]} />
+                        <ConnectionQualityBadge quality={remoteQualities[identity]} />
                         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
-                        {((name === username && deafen) || deafenedParticipants[name]) && (
+                        {((isLocal && deafen) || deafenedParticipants[identity]) && (
                           <HeadphoneOff
                             aria-label={
-                              name === username
-                                ? "Você está no mudo total"
-                                : `${name} está no mudo total`
+                              isLocal ? "Você está no mudo total" : `${name} está no mudo total`
                             }
                             className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                           />

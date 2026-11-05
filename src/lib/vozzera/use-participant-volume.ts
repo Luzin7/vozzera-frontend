@@ -9,6 +9,7 @@ import {
   writeParticipantVolumes,
   writeScreenShareVolumes,
 } from "./voice";
+import { migrateScreenShareVolumeKey, migrateVolumeKey } from "./call-participants";
 
 export type ScreenShareAudioSource = NonNullable<Parameters<RemoteParticipant["setVolume"]>[1]>;
 
@@ -33,14 +34,14 @@ export type VolumeResult = {
   mutedParticipants: Record<string, boolean>;
   screenShareMutedParticipants: Record<string, boolean>;
   applyParticipantVolumes: (p: RemoteParticipant) => void;
-  removeParticipant: (name: string) => void;
-  setParticipantVolume: (name: string, volume: number) => void;
-  setScreenShareVolume: (name: string, volume: number) => void;
-  setLocalMute: (name: string, muted: boolean) => void;
-  toggleLocalMute: (name: string) => void;
-  setLocalScreenShareMute: (name: string, muted: boolean) => void;
-  toggleLocalScreenShareMute: (name: string) => void;
-  setRemoteMuted: (name: string, muted: boolean) => void;
+  removeParticipant: (identity: string) => void;
+  setParticipantVolume: (identity: string, volume: number) => void;
+  setScreenShareVolume: (identity: string, volume: number) => void;
+  setLocalMute: (identity: string, muted: boolean) => void;
+  toggleLocalMute: (identity: string) => void;
+  setLocalScreenShareMute: (identity: string, muted: boolean) => void;
+  toggleLocalScreenShareMute: (identity: string) => void;
+  setRemoteMuted: (identity: string, muted: boolean) => void;
   getScreenShareVolumeRef: () => Record<string, number>;
   resetState: () => void;
 };
@@ -72,42 +73,52 @@ export function useParticipantVolume(
   volumesRef.current = volumes;
   screenShareVolumesRef.current = screenShareVolumes;
 
+  const migrateLegacyVolumes = useCallback((p: RemoteParticipant) => {
+    if (typeof localStorage === "undefined") return;
+    const keys = { identity: p.identity, name: p.name || p.identity };
+
+    if (migrateVolumeKey(localStorage, keys)) {
+      volumesRef.current = readParticipantVolumes(localStorage);
+      setVolumes(volumesRef.current);
+    }
+    if (migrateScreenShareVolumeKey(localStorage, keys)) {
+      screenShareVolumesRef.current = readScreenShareVolumes(localStorage);
+      setScreenShareVolumes(screenShareVolumesRef.current);
+    }
+  }, []);
+
   const applyParticipantVolumes = useCallback(
     (p: RemoteParticipant) => {
-      const name = p.name || p.identity;
-      const volume = volumesRef.current[name];
-      const ssVolume = screenShareVolumesRef.current[name];
+      migrateLegacyVolumes(p);
+      const volume = volumesRef.current[p.identity];
+      const ssVolume = screenShareVolumesRef.current[p.identity];
       setRemoteParticipantVolume(p, volume);
       setRemoteParticipantScreenShareVolume(p, ssVolume, screenShareAudioSourceRef.current);
     },
-    [screenShareAudioSourceRef],
+    [migrateLegacyVolumes, screenShareAudioSourceRef],
   );
 
   const setParticipantVolume = useCallback(
-    (name: string, volume: number) => {
-      const next = { ...volumesRef.current, [name]: volume };
+    (identity: string, volume: number) => {
+      const next = { ...volumesRef.current, [identity]: volume };
       volumesRef.current = next;
       setVolumes(next);
       writeParticipantVolumes(typeof localStorage === "undefined" ? null : localStorage, next);
 
-      const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
-        (p) => (p.name || p.identity) === name,
-      );
+      const participant = roomRef.current?.remoteParticipants.get(identity);
       if (participant) setRemoteParticipantVolume(participant, volume);
     },
     [roomRef],
   );
 
   const setScreenShareVolume = useCallback(
-    (name: string, volume: number) => {
-      const next = { ...screenShareVolumesRef.current, [name]: volume };
+    (identity: string, volume: number) => {
+      const next = { ...screenShareVolumesRef.current, [identity]: volume };
       screenShareVolumesRef.current = next;
       setScreenShareVolumes(next);
       writeScreenShareVolumes(typeof localStorage === "undefined" ? null : localStorage, next);
 
-      const participant = Array.from(roomRef.current?.remoteParticipants.values() ?? []).find(
-        (p) => (p.name || p.identity) === name,
-      );
+      const participant = roomRef.current?.remoteParticipants.get(identity);
       if (participant)
         setRemoteParticipantScreenShareVolume(
           participant,
@@ -119,74 +130,74 @@ export function useParticipantVolume(
   );
 
   const setLocalMute = useCallback(
-    (name: string, muted: boolean) => {
-      const current = volumesRef.current[name];
+    (identity: string, muted: boolean) => {
+      const current = volumesRef.current[identity];
 
       if (muted) {
-        mutedVolumesRef.current[name] = current ?? 1;
-        setParticipantVolume(name, muteVolume(true, undefined));
+        mutedVolumesRef.current[identity] = current ?? 1;
+        setParticipantVolume(identity, muteVolume(true, undefined));
         return;
       }
 
-      const previous = mutedVolumesRef.current[name];
-      delete mutedVolumesRef.current[name];
-      setParticipantVolume(name, muteVolume(false, previous));
+      const previous = mutedVolumesRef.current[identity];
+      delete mutedVolumesRef.current[identity];
+      setParticipantVolume(identity, muteVolume(false, previous));
     },
     [setParticipantVolume],
   );
 
   const toggleLocalMute = useCallback(
-    (name: string) => {
-      setLocalMute(name, volumesRef.current[name] !== 0);
+    (identity: string) => {
+      setLocalMute(identity, volumesRef.current[identity] !== 0);
     },
     [setLocalMute],
   );
 
   const setLocalScreenShareMute = useCallback(
-    (name: string, muted: boolean) => {
-      const current = screenShareVolumesRef.current[name];
+    (identity: string, muted: boolean) => {
+      const current = screenShareVolumesRef.current[identity];
 
       if (muted) {
-        screenShareMutedVolumesRef.current[name] = current ?? 1;
-        setScreenShareVolume(name, muteVolume(true, undefined));
-        setScreenShareMutedParticipants((prev) => ({ ...prev, [name]: true }));
+        screenShareMutedVolumesRef.current[identity] = current ?? 1;
+        setScreenShareVolume(identity, muteVolume(true, undefined));
+        setScreenShareMutedParticipants((prev) => ({ ...prev, [identity]: true }));
         return;
       }
 
-      const previous = screenShareMutedVolumesRef.current[name];
-      delete screenShareMutedVolumesRef.current[name];
-      setScreenShareVolume(name, muteVolume(false, previous));
-      setScreenShareMutedParticipants((prev) => ({ ...prev, [name]: false }));
+      const previous = screenShareMutedVolumesRef.current[identity];
+      delete screenShareMutedVolumesRef.current[identity];
+      setScreenShareVolume(identity, muteVolume(false, previous));
+      setScreenShareMutedParticipants((prev) => ({ ...prev, [identity]: false }));
     },
     [setScreenShareVolume],
   );
 
   const toggleLocalScreenShareMute = useCallback(
-    (name: string) => {
-      setLocalScreenShareMute(name, screenShareVolumesRef.current[name] !== 0);
+    (identity: string) => {
+      setLocalScreenShareMute(identity, screenShareVolumesRef.current[identity] !== 0);
     },
     [setLocalScreenShareMute],
   );
 
-  const removeParticipant = useCallback((name: string) => {
+  const removeParticipant = useCallback((identity: string) => {
     setMutedParticipants((prev) => {
-      if (!(name in prev)) return prev;
+      if (!(identity in prev)) return prev;
       const next = { ...prev };
-      delete next[name];
+      delete next[identity];
       return next;
     });
     setScreenShareMutedParticipants((prev) => {
-      if (!(name in prev)) return prev;
+      if (!(identity in prev)) return prev;
       const next = { ...prev };
-      delete next[name];
+      delete next[identity];
       return next;
     });
-    delete mutedVolumesRef.current[name];
-    delete screenShareMutedVolumesRef.current[name];
+    delete mutedVolumesRef.current[identity];
+    delete screenShareMutedVolumesRef.current[identity];
   }, []);
 
-  const setRemoteMuted = useCallback((name: string, muted: boolean) => {
-    setMutedParticipants((prev) => ({ ...prev, [name]: muted }));
+  const setRemoteMuted = useCallback((identity: string, muted: boolean) => {
+    setMutedParticipants((prev) => ({ ...prev, [identity]: muted }));
   }, []);
 
   const getScreenShareVolumeRef = useCallback(() => screenShareVolumesRef.current, []);

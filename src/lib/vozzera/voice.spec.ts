@@ -13,7 +13,7 @@ import {
   isLocalVoiceActive,
   isParticipantLocallyInaudible,
   isParticipantMuted,
-  mergeActiveSpeakerNames,
+  mergeActiveSpeakerIdentities,
   microphoneEnabledAfterDeafenEnd,
   muteVolume,
   participantStatusLabelFor,
@@ -117,9 +117,9 @@ describe("shouldShowLocalVoiceActivity", () => {
   });
 });
 
-describe("mergeActiveSpeakerNames", () => {
+describe("mergeActiveSpeakerIdentities", () => {
   it("keeps releasing speakers while adding active speakers without duplicates", () => {
-    expect(mergeActiveSpeakerNames(["ana", "beto"], ["beto", "caio"])).toEqual([
+    expect(mergeActiveSpeakerIdentities(["ana", "beto"], ["beto", "caio"])).toEqual([
       "ana",
       "beto",
       "caio",
@@ -605,23 +605,43 @@ describe("canShareScreen", () => {
 });
 
 describe("isParticipantMuted", () => {
-  const mutedParticipants = { bia: true };
+  const mutedParticipants = { "id-bia": true };
 
   it("uses the local microphone for the current user", () => {
     expect(
-      isParticipantMuted({ name: "luan", username: "luan", micEnabled: false, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-luan",
+        isLocal: true,
+        micEnabled: false,
+        mutedParticipants,
+      }),
     ).toBe(true);
     expect(
-      isParticipantMuted({ name: "luan", username: "luan", micEnabled: true, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-luan",
+        isLocal: true,
+        micEnabled: true,
+        mutedParticipants,
+      }),
     ).toBe(false);
   });
 
-  it("uses the remote mute state for everyone else", () => {
+  it("uses the remote mute state for everyone else, keyed by identity", () => {
     expect(
-      isParticipantMuted({ name: "bia", username: "luan", micEnabled: true, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-bia",
+        isLocal: false,
+        micEnabled: true,
+        mutedParticipants,
+      }),
     ).toBe(true);
     expect(
-      isParticipantMuted({ name: "caio", username: "luan", micEnabled: true, mutedParticipants }),
+      isParticipantMuted({
+        identity: "id-caio",
+        isLocal: false,
+        micEnabled: true,
+        mutedParticipants,
+      }),
     ).toBe(false);
   });
 });

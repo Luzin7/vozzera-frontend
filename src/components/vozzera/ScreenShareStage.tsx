@@ -152,7 +152,7 @@ export const ScreenShareStage = memo(function ScreenShareStage({
   const featuredId = featuredShareId(selectedShareId, shares);
   const featured = shares.find((share) => share.id === featuredId);
   const networkWarning = featured
-    ? participantConnectionWarningFor(remoteQualities[featured.name], featured.name)
+    ? participantConnectionWarningFor(remoteQualities[featured.identity], featured.name)
     : null;
 
   return (
