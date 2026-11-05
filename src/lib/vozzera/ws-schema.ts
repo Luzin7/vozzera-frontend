@@ -206,6 +206,17 @@ const awayResyncFrame = envelope(
   z.object({}).passthrough(),
 ).transform((): OutboundEvent => ({ type: "voice.away.resync" }));
 
+const sessionSnapshotFrame = envelope(
+  "voice.session.snapshot",
+  roomTopic,
+  z.object({ started_at: timestamp.nullable() }),
+).transform((frame): OutboundEvent => ({
+  type: "voice.session.snapshot",
+  room_id: roomIdFromTopic(frame.topic),
+  started_at: frame.data.started_at,
+  server_ts: frame.ts,
+}));
+
 const systemErrorFrame = envelope(
   "system.error",
   z.string(),
@@ -270,5 +281,6 @@ export const outboundFrameSchema = z.union([
   awaySnapshotFrame,
   awayEndedFrame,
   awayResyncFrame,
+  sessionSnapshotFrame,
   systemErrorFrame,
 ]);

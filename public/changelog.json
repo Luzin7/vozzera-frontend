@@ -1,54 +1,30 @@
 {
-  "version": "v1.23.0",
+  "version": "v1.24.0",
   "releasedAt": "2026-11-05",
   "items": [
     {
-      "title": "fix(ui): cores de avatar menos saturadas",
-      "kind": "fix",
-      "pr": 197,
-      "summary": "Perfil mais gostoso de olhar! As cores dos avatares ficaram mais suaves, sem perder a leitura das iniciais."
-    },
-    {
-      "title": "feat(changelog): listar novidades não vistas",
+      "title": "feat(voz): contador global da call",
       "kind": "feat",
-      "pr": 195,
-      "summary": "Ficou uns dias fora? O Tem coisa nova agora mostra tudo que você perdeu, versão por versão, e não só a última."
-    },
-    {
-      "title": "feat(chat): carregar mensagens antigas ao rolar",
-      "kind": "feat",
-      "pr": 192,
-      "summary": "Chat sem fim! Role pra cima e as mensagens antigas vão chegando, sem a tela pular. Dá pra reler a conversa desde o começo."
-    },
-    {
-      "title": "feat(voz): participantes visíveis durante a live",
-      "kind": "feat",
-      "pr": 191,
-      "summary": "Live sem perder a galera de vista! Quem tá na call fica ao lado da transmissão, com anel de fala e volume na mão. Precisa de espaço? É só ocultar."
-    },
-    {
-      "title": "feat(voz): anel de fala, push-to-talk e atalhos",
-      "kind": "feat",
-      "pr": 189,
-      "summary": "Quem fala baixinho também acende o anel! Sensibilidade ajustável, push-to-talk sem aparecer mutado e atalhos Ctrl+Shift+M e D."
-    },
-    {
-      "title": "feat(voz): live mais sincronizada com a voz",
-      "kind": "feat",
-      "pr": 188,
-      "summary": "Live mais sincronizada com a voz! Tiramos o atraso da transmissão e agora ela roda suave por padrão, em 60 fps."
-    },
-    {
-      "title": "feat(ui): polimento visual e volume mais fácil de achar",
-      "kind": "feat",
-      "pr": 187,
-      "summary": "Visual repaginado! Tudo ficou mais bonito e agora é fácil achar onde clicar pra ajustar o volume de cada pessoa."
+      "pr": 199,
+      "summary": "Contador da call agora é global! Todo mundo, dentro ou fora da call, vê há quanto tempo a resenha tá rolando, desde o primeiro que entrou."
     }
   ],
   "next": {
     "items": []
   },
   "releases": [
+    {
+      "version": "v1.24.0",
+      "releasedAt": "2026-11-05",
+      "items": [
+        {
+          "title": "feat(voz): contador global da call",
+          "kind": "feat",
+          "pr": 199,
+          "summary": "Contador da call agora é global! Todo mundo, dentro ou fora da call, vê há quanto tempo a resenha tá rolando, desde o primeiro que entrou."
+        }
+      ]
+    },
     {
       "version": "v1.23.0",
       "releasedAt": "2026-11-05",

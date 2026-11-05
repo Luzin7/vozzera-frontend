@@ -170,6 +170,12 @@ export type OutboundEvent =
     }
   | {
       type: "voice.away.resync";
+    }
+  | {
+      type: "voice.session.snapshot";
+      room_id: string;
+      started_at: string | null;
+      server_ts: string;
     };
 
 export const ZERO_UUID = "00000000-0000-0000-0000-000000000000";

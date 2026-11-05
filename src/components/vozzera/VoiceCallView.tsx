@@ -54,7 +54,7 @@ type Props = {
   watchingIdentities: WatchIntents;
   localPreview: ScreenShare | null;
   qualities: Record<string, string>;
-  connectedAt: number | null;
+  sessionStartedAt: number | null;
   miniWindowSupported: boolean;
   miniWindowOpen: boolean;
   onToggleMic: () => void;
@@ -107,7 +107,7 @@ export function VoiceCallView({
   watchingIdentities,
   localPreview,
   qualities,
-  connectedAt,
+  sessionStartedAt,
   miniWindowSupported,
   miniWindowOpen,
   onToggleMic,
@@ -282,7 +282,10 @@ export function VoiceCallView({
           </div>
         ) : (
           <div className="relative flex shrink-0 items-center justify-center gap-2 border-t border-border px-4 py-3">
-            <CallDuration connectedAt={connectedAt} />
+            <CallDuration
+              startedAt={sessionStartedAt}
+              className="absolute left-4 font-mono text-xs tabular-nums text-muted-foreground"
+            />
             <Button
               size="icon"
               variant={micEnabled ? "secondary" : "destructive"}
