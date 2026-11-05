@@ -9,9 +9,94 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
+import { LabeledSlider } from "@/components/vozzera/LabeledSlider";
 import { Switch } from "@/components/ui/switch";
 import { reducePushToTalkCapture } from "@/lib/vozzera/push-to-talk-capture";
-import { pushToTalkLabelFor, type MicDevice } from "@/lib/vozzera/voice";
+import { useMicLevelDb } from "@/lib/vozzera/speaking-store";
+import { updateVoicePreferences, useVoicePreferences } from "@/lib/vozzera/voice-preferences";
+import {
+  MAX_PUSH_TO_TALK_RELEASE_DELAY_MS,
+  MAX_SENSITIVITY_DB,
+  MIN_SENSITIVITY_DB,
+  levelToMeterPercent,
+  pushToTalkLabelFor,
+  type MicDevice,
+} from "@/lib/vozzera/voice";
+
+const RELEASE_DELAY_STEP_MS = 50;
+
+function MicLevelMeter() {
+  const levelDb = useMicLevelDb();
+  return (
+    <Progress
+      value={levelToMeterPercent(levelDb)}
+      aria-label="Nível do microfone"
+      className="h-1.5"
+    />
+  );
+}
+
+function SensitivitySetting() {
+  const { sensitivity } = useVoicePreferences();
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label id="speech-sensitivity-label">Sensibilidade</Label>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="speech-sensitivity-auto" className="text-xs text-muted-foreground">
+            Automática
+          </Label>
+          <Switch
+            id="speech-sensitivity-auto"
+            checked={sensitivity.auto}
+            onCheckedChange={(auto) =>
+              updateVoicePreferences({ sensitivity: { ...sensitivity, auto } })
+            }
+          />
+        </div>
+      </div>
+      <MicLevelMeter />
+      <LabeledSlider
+        labelId="speech-sensitivity-label"
+        valueText={`${sensitivity.thresholdDb} dB`}
+        min={MIN_SENSITIVITY_DB}
+        max={MAX_SENSITIVITY_DB}
+        step={1}
+        value={[sensitivity.thresholdDb]}
+        disabled={sensitivity.auto}
+        onValueChange={([thresholdDb]) => {
+          if (thresholdDb === undefined) return;
+          updateVoicePreferences({ sensitivity: { ...sensitivity, thresholdDb } });
+        }}
+      />
+    </div>
+  );
+}
+
+function PushToTalkReleaseDelaySetting() {
+  const { pushToTalkReleaseDelayMs } = useVoicePreferences();
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label id="push-to-talk-release-delay-label">Atraso ao soltar a tecla</Label>
+        <span className="text-xs text-muted-foreground">{pushToTalkReleaseDelayMs} ms</span>
+      </div>
+      <LabeledSlider
+        labelId="push-to-talk-release-delay-label"
+        valueText={`${pushToTalkReleaseDelayMs} ms`}
+        min={0}
+        max={MAX_PUSH_TO_TALK_RELEASE_DELAY_MS}
+        step={RELEASE_DELAY_STEP_MS}
+        value={[pushToTalkReleaseDelayMs]}
+        onValueChange={([delayMs]) => {
+          if (delayMs === undefined) return;
+          updateVoicePreferences({ pushToTalkReleaseDelayMs: delayMs });
+        }}
+      />
+    </div>
+  );
+}
 
 type Props = {
   micDevices: MicDevice[];
@@ -117,6 +202,8 @@ export function MicSettings({
         />
       </div>
 
+      <SensitivitySetting />
+
       <div className="flex items-center justify-between gap-2">
         <div>
           <Label htmlFor="self-monitor">Ouvir minha voz</Label>
@@ -161,6 +248,8 @@ export function MicSettings({
           {capturingPushToTalkKey ? "Aguardando…" : pushToTalkKeyLabel}
         </Button>
       </div>
+
+      {pushToTalkEnabled && <PushToTalkReleaseDelaySetting />}
     </div>
   );
 }

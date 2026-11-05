@@ -104,7 +104,6 @@ export function useKrispFilter(): KrispFilterResult {
       if (krispProcessorRef.current) {
         try {
           await krispProcessorRef.current.setEnabled(true);
-          setMicProcessorRevision((revision) => revision + 1);
         } catch {
           // KrispProcessor falhou ao ativar
         }

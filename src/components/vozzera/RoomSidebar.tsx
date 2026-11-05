@@ -21,10 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
+import { SpeakingRing } from "@/components/vozzera/SpeakingRing";
 import type { AwayPresence } from "@/lib/vozzera/away";
 import { VoicePresenceList } from "@/components/vozzera/VoicePresenceList";
 import { cn } from "@/lib/utils";
 import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
+import { labelWithShortcut } from "@/lib/vozzera/voice-shortcuts";
 import { nextRoomIndex, type VoicePresence } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
@@ -70,7 +72,6 @@ type Props = {
   screenShares: ScreenShare[];
   mutedParticipants: Record<string, boolean>;
   deafenedParticipants: Record<string, boolean>;
-  speakingIdentities: string[];
   deafen: boolean;
   onToggleDeafen: () => void;
 };
@@ -212,7 +213,6 @@ export const RoomSidebar = memo(function RoomSidebar({
   screenShares,
   mutedParticipants,
   deafenedParticipants,
-  speakingIdentities,
   deafen,
   onToggleDeafen,
 }: Readonly<Props>) {
@@ -411,7 +411,6 @@ export const RoomSidebar = memo(function RoomSidebar({
                 {isConnected && voiceStatus === "connected" && voiceParticipants.length > 0 && (
                   <ul className="mb-1 ml-8 mt-1.5 space-y-2">
                     {voiceParticipants.map(({ identity, name, isLocal }) => {
-                      const isSpeaking = speakingIdentities.includes(identity);
                       const isMuted = isParticipantMuted({
                         identity,
                         isLocal,
@@ -431,15 +430,14 @@ export const RoomSidebar = memo(function RoomSidebar({
 
                       const row = (
                         <span className="flex items-center gap-1.5 truncate">
-                          <span
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-semibold ring-offset-sidebar transition-[box-shadow] duration-150 motion-reduce:transition-none ${avatarColorClass(name)} ${
-                              isSpeaking
-                                ? "ring-2 ring-primary ring-offset-2"
-                                : "ring-0 ring-offset-0"
-                            }`}
+                          <SpeakingRing
+                            identity={identity}
+                            baseClassName={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-semibold ring-offset-sidebar transition-[box-shadow] duration-150 motion-reduce:transition-none ${avatarColorClass(name)}`}
+                            speakingClassName="ring-2 ring-primary ring-offset-2"
+                            idleClassName="ring-0 ring-offset-0"
                           >
                             {initials(name)}
-                          </span>
+                          </SpeakingRing>
                           <span className="truncate">{name}</span>
                           {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
                           {((isLocal && deafen) || deafenedParticipants[identity]) && (
@@ -476,7 +474,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                               screenShareLocallyMuted={isScreenShareLocallyMuted}
                               isMuted={isMuted}
                               isStreaming={isStreaming}
-                              isSpeaking={isSpeaking}
+                              identity={identity}
                               onSetVolume={(volume) => onSetVolume(identity, volume)}
                               onSetScreenShareVolume={(volume) =>
                                 onSetScreenShareVolume(identity, volume)
@@ -554,7 +552,10 @@ export const RoomSidebar = memo(function RoomSidebar({
                 </Tooltip>
               </TooltipProvider>
               <VoiceControlButton
-                label={deafen ? "Parar de ensurdecer" : "Ensurdecer"}
+                label={labelWithShortcut(
+                  deafen ? "Parar de ensurdecer" : "Ensurdecer",
+                  "toggle-deafen",
+                )}
                 active={deafen}
                 disabled={voiceStatus !== "connected"}
                 onClick={onToggleDeafen}
@@ -562,7 +563,7 @@ export const RoomSidebar = memo(function RoomSidebar({
                 {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
               </VoiceControlButton>
               <VoiceControlButton
-                label={micEnabled ? "Mutar" : "Desmutar"}
+                label={labelWithShortcut(micEnabled ? "Mutar" : "Desmutar", "toggle-mic")}
                 active={!micEnabled}
                 disabled={voiceStatus !== "connected"}
                 onClick={onToggleMic}

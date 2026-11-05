@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
+import { useIsSpeaking } from "@/lib/vozzera/speaking-store";
 import { participantStatusLabelFor } from "@/lib/vozzera/voice";
 
 const ROW_TRIGGER_CLASS =
@@ -19,7 +20,7 @@ type Props = {
   screenShareLocallyMuted: boolean;
   isMuted: boolean;
   isStreaming: boolean;
-  isSpeaking: boolean;
+  identity: string;
   onSetVolume: (volume: number) => void;
   onSetScreenShareVolume: (volume: number) => void;
   onToggleLocalMute: () => void;
@@ -88,7 +89,7 @@ export function ParticipantMenu({
   screenShareLocallyMuted,
   isMuted,
   isStreaming,
-  isSpeaking,
+  identity,
   onSetVolume,
   onSetScreenShareVolume,
   onToggleLocalMute,
@@ -97,6 +98,7 @@ export function ParticipantMenu({
   iconClassName = "ml-auto",
   children,
 }: Readonly<Props>) {
+  const isSpeaking = useIsSpeaking(identity);
   return (
     <Popover>
       <PopoverTrigger asChild>

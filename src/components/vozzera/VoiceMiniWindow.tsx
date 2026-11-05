@@ -1,10 +1,12 @@
 import { HeadphoneOff, Headphones, Mic, MicOff, PhoneOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SpeakingRing } from "@/components/vozzera/SpeakingRing";
 import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 import { AWAY_TOOLTIP_TEXT } from "@/lib/vozzera/away";
 import type { CallTile } from "@/lib/vozzera/away";
 import { isParticipantMuted } from "@/lib/vozzera/voice";
+import { labelWithShortcut } from "@/lib/vozzera/voice-shortcuts";
 
 type Props = {
   roomName: string;
@@ -12,7 +14,6 @@ type Props = {
   micEnabled: boolean;
   deafen: boolean;
   mutedParticipants: Record<string, boolean>;
-  speakingIdentities: string[];
   onToggleMic: () => void;
   onToggleDeafen: () => void;
   onLeave: () => void;
@@ -24,11 +25,15 @@ export function VoiceMiniWindow({
   micEnabled,
   deafen,
   mutedParticipants,
-  speakingIdentities,
   onToggleMic,
   onToggleDeafen,
   onLeave,
 }: Readonly<Props>) {
+  const micLabel = labelWithShortcut(micEnabled ? "Mutar" : "Desmutar", "toggle-mic");
+  const deafenLabel = labelWithShortcut(
+    deafen ? "Parar de ensurdecer" : "Ensurdecer",
+    "toggle-deafen",
+  );
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="shrink-0 truncate border-b border-border px-3 py-2 text-sm font-medium">
@@ -52,13 +57,14 @@ export function VoiceMiniWindow({
                 isAway ? "opacity-50" : ""
               }`}
             >
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold ring-2 ${avatarColorClass(name)} ${
-                  speakingIdentities.includes(identity) ? "ring-primary" : "ring-transparent"
-                }`}
+              <SpeakingRing
+                identity={identity}
+                baseClassName={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold ring-2 ${avatarColorClass(name)}`}
+                speakingClassName="ring-primary"
+                idleClassName="ring-transparent"
               >
                 {initials(name)}
-              </span>
+              </SpeakingRing>
               <span className="truncate">{name}</span>
               {isAway && (
                 <>
@@ -82,18 +88,20 @@ export function VoiceMiniWindow({
           variant={micEnabled ? "secondary" : "destructive"}
           className="h-10 w-10"
           onClick={onToggleMic}
+          title={micLabel}
         >
           {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
+          <span className="sr-only">{micLabel}</span>
         </Button>
         <Button
           size="icon"
           variant={deafen ? "destructive" : "secondary"}
           className="h-10 w-10"
           onClick={onToggleDeafen}
+          title={deafenLabel}
         >
           {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
-          <span className="sr-only">{deafen ? "Ativar som" : "Mudo total"}</span>
+          <span className="sr-only">{deafenLabel}</span>
         </Button>
         <Button size="icon" variant="destructive" className="h-10 w-10" onClick={onLeave}>
           <PhoneOff className="h-4 w-4" />

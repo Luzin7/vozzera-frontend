@@ -6,7 +6,6 @@ import {
   callParticipantFrom,
   omitIdentity,
   reuseCallParticipants,
-  sameStringList,
   setIdentityValue,
 } from "./call-participants";
 import type { CallParticipant } from "./call-participants";
@@ -27,7 +26,8 @@ import { disconnectRouteFor } from "./away";
 import type { ExitNoticeReason } from "./away";
 import type { AwayReason } from "./away-intent";
 import { useKrispFilter } from "./use-krisp-filter";
-import { useLocalVoiceActivity } from "./use-local-voice-activity";
+import { useSpeakingDetection } from "./use-speaking-detection";
+import { getVoicePreferences } from "./voice-preferences";
 import type { VoiceTokenResponse } from "./types";
 import {
   applyMicDeviceChoice,
@@ -36,20 +36,22 @@ import {
   audioInputDevices,
   DEAFEN_DATA_TOPIC,
   deafenStateFromPayload,
-  deafenStatePayload,
+  flagStatePayload,
   initialMicEnabled,
   localSpoke,
-  mergeActiveSpeakerIdentities,
   micEnabledToRestore,
   microphoneEnabledAfterDeafenEnd,
   microphonePublishOptions,
+  PUSH_TO_TALK_DATA_TOPIC,
+  pushToTalkStateFromPayload,
   readMicDeviceId,
+  remoteSpeakerIdentities,
   readPushToTalkBinding,
   readPushToTalkEnabled,
   roomAudioCaptureDefaults,
   screenShareAdaptiveStreamSettings,
   shouldHandlePushToTalk,
-  visibleSpeakerIdentities,
+  visibleMutedParticipants,
   writePushToTalkBinding,
   writePushToTalkEnabled,
 } from "./voice";
@@ -60,13 +62,18 @@ import { playVoiceActionSound } from "./voice-sounds";
 
 export type VoiceStatus = "idle" | "connecting" | "connected" | "away";
 
-type SessionSnapshot = { roomId: string; micEnabled: boolean; deafen: boolean };
+type SessionSnapshot = {
+  roomId: string;
+  micEnabled: boolean;
+  deafen: boolean;
+  hardMuted: boolean;
+};
 
 export type AwayInfo = SessionSnapshot & { reason: AwayReason };
 
 export type ExitNotice = SessionSnapshot & { reason: ExitNoticeReason };
 
-export type ConnectOptions = { micEnabled?: boolean; deafen?: boolean };
+export type ConnectOptions = { micEnabled?: boolean; deafen?: boolean; hardMuted?: boolean };
 
 type UseVoiceOptions = { onReturned?: () => void };
 
@@ -80,7 +87,6 @@ export type ScreenShareTrack = import("./use-screen-share").ScreenShareTrack;
 
 export type ScreenShare = ScreenShareType;
 
-const VOICE_RELEASE_DELAY_MS = 40;
 const AWAY_DISCONNECT_TIMEOUT_MS = 5_000;
 
 async function disconnectWithin(room: LiveKitRoom, timeoutMs: number): Promise<void> {
@@ -111,13 +117,29 @@ function suspendAudioForDeafen(
   void setAudioContextSuspended(audioContextRef.current, true);
 }
 
-function publishDeafenState(room: LiveKitRoom | null, enabled: boolean) {
+function publishFlag(room: LiveKitRoom | null, topic: string, enabled: boolean) {
   if (!room) return;
   void room.localParticipant
-    .publishData(deafenStatePayload(enabled), { reliable: true, topic: DEAFEN_DATA_TOPIC })
+    .publishData(flagStatePayload(enabled), { reliable: true, topic })
     .catch(() => {
-      // best-effort: falha ao publicar o mudo total não deve interromper o áudio
+      // best-effort: falha ao publicar o estado não deve interromper o áudio
     });
+}
+
+function publishDeafenState(room: LiveKitRoom | null, enabled: boolean) {
+  publishFlag(room, DEAFEN_DATA_TOPIC, enabled);
+}
+
+function publishPushToTalkIdleState(room: LiveKitRoom | null, idle: boolean) {
+  publishFlag(room, PUSH_TO_TALK_DATA_TOPIC, idle);
+}
+
+function clearPushToTalkReleaseTimer(timerRef: {
+  current: ReturnType<typeof setTimeout> | null;
+}): void {
+  if (timerRef.current === null) return;
+  clearTimeout(timerRef.current);
+  timerRef.current = null;
 }
 
 function editableDetailsFor(target: EventTarget | null) {
@@ -135,11 +157,16 @@ type RoomEventHandlerCtx = {
   Track: typeof import("livekit-client").Track;
   notificationsEnabledRef: { readonly current: boolean };
   roomRef: { current: LiveKitRoom | null };
-  screenShareRef: { current: boolean };
   voiceAudioContextRef: { readonly current: AudioContext | null };
   deafenRef: { readonly current: boolean };
+  pushToTalkIdleRef: { readonly current: boolean };
   setRemoteMuted: (identity: string, muted: boolean) => void;
   setRemoteDeafened: (identity: string, deafened: boolean) => void;
+  setRemotePushToTalkIdle: (identity: string, idle: boolean) => void;
+  speaking: Pick<
+    ReturnType<typeof useSpeakingDetection>,
+    "addRemoteMicrophone" | "removeRemote" | "setServerSpeakers"
+  >;
   applyParticipantVolumes: (p: import("livekit-client").RemoteParticipant) => void;
   onTrackSubscribed: (
     track: import("livekit-client").Track,
@@ -158,7 +185,6 @@ type RoomEventHandlerCtx = {
     | "hasWatchIntent"
   >;
   syncLocalMicTrack: (room: LiveKitRoom) => void;
-  syncActiveSpeakerIdentities: (identities: string[]) => void;
   onLocalSpeech: () => void;
   onDisconnected: (reason: import("livekit-client").DisconnectReason | undefined) => void;
   setConnectionState: (state: ConnectionState) => void;
@@ -177,18 +203,19 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     Track,
     notificationsEnabledRef,
     roomRef,
-    screenShareRef,
     voiceAudioContextRef,
     deafenRef,
+    pushToTalkIdleRef,
     setRemoteMuted,
     setRemoteDeafened,
+    setRemotePushToTalkIdle,
+    speaking,
     applyParticipantVolumes,
     onTrackSubscribed,
     onTrackUnsubscribed,
     onLocalTrackUnpublished,
     liveShare,
     syncLocalMicTrack,
-    syncActiveSpeakerIdentities,
     setConnectionState,
     setQualities,
     syncParticipants,
@@ -228,6 +255,10 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       suspendAudioForDeafen(voiceAudioContextRef, deafenRef),
     );
 
+    if (!participant.isLocal && publication.source === Track.Source.Microphone) {
+      speaking.addRemoteMicrophone(participant.identity, track);
+    }
+
     const el = track.attach();
     el.style.display = "none";
     document.body.appendChild(el);
@@ -246,7 +277,9 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     applyParticipantVolumes(participant);
   });
 
-  room.on(RoomEvent.TrackUnsubscribed, (track) => {
+  room.on(RoomEvent.TrackUnsubscribed, (track, _publication, participant) => {
+    if (track.source === Track.Source.Microphone)
+      speaking.removeRemote(participant.identity, track);
     if (track.source !== Track.Source.ScreenShare) {
       track.detach().forEach((el) => el.remove());
       return;
@@ -280,9 +313,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const localIdentity = room.localParticipant.identity;
     const rawIdentities = speakers.map((p) => p.identity);
     if (localSpoke(rawIdentities, localIdentity)) onLocalSpeech();
-    syncActiveSpeakerIdentities(
-      visibleSpeakerIdentities(rawIdentities, localIdentity, screenShareRef.current),
-    );
+    speaking.setServerSpeakers(remoteSpeakerIdentities(rawIdentities, localIdentity));
   });
 
   room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
@@ -290,7 +321,13 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   });
 
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
-    if (topic !== DEAFEN_DATA_TOPIC || !participant) return;
+    if (!participant) return;
+    if (topic === PUSH_TO_TALK_DATA_TOPIC) {
+      const idle = pushToTalkStateFromPayload(payload);
+      if (idle !== null) setRemotePushToTalkIdle(participant.identity, idle);
+      return;
+    }
+    if (topic !== DEAFEN_DATA_TOPIC) return;
     const deafened = deafenStateFromPayload(payload);
     if (deafened === null) return;
     setRemoteDeafened(participant.identity, deafened);
@@ -331,6 +368,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     const name = participant.name || participant.identity;
     if (participant.identity === room.localParticipant.identity) return;
     publishDeafenState(room, deafenRef.current);
+    publishPushToTalkIdleState(room, pushToTalkIdleRef.current);
 
     if (
       typeof document !== "undefined" &&
@@ -393,7 +431,10 @@ export function useVoice(options?: UseVoiceOptions) {
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
   const [qualities, setQualities] = useState<Record<string, ConnectionQuality>>({});
   const [deafenedParticipants, setDeafenedParticipants] = useState<Record<string, boolean>>({});
-  const [serverSpeakingIdentities, setServerSpeakingIdentities] = useState<string[]>([]);
+  const [pushToTalkIdleParticipants, setPushToTalkIdleParticipants] = useState<
+    Record<string, boolean>
+  >({});
+  const [hardMuted, setHardMuted] = useState(false);
 
   const roomRef = useRef<LiveKitRoom | null>(null);
   const statusRef = useRef(status);
@@ -406,13 +447,12 @@ export function useVoice(options?: UseVoiceOptions) {
   const onReturnedRef = useRef(options?.onReturned);
   const voiceAudioContextRef = useRef<AudioContext | null>(null);
   const connectionAttemptRef = useRef(0);
-  const serverSpeakingIdentitiesRef = useRef<string[]>([]);
-  const speakerReleaseTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const hardMutedRef = useRef(hardMuted);
   const micPermissionRef = useRef(false);
   const selectedDeviceIdRef = useRef(selectedMic);
-  const screenShareRef = useRef(false);
   const deafenRef = useRef(deafen);
   deafenRef.current = deafen;
+  hardMutedRef.current = hardMuted;
   statusRef.current = status;
   activeRoomIdRef.current = activeRoomId;
   awayInfoRef.current = awayInfo;
@@ -424,6 +464,9 @@ export function useVoice(options?: UseVoiceOptions) {
   const micEnabledBeforeDeafenRef = useRef(true);
   const pushToTalkTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const pushToTalkPressedRef = useRef(false);
+  const pushToTalkMicOpenRef = useRef(false);
+  const pushToTalkReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushToTalkIdleRef = useRef(false);
   const pushToTalkEnabledRef = useRef(pushToTalkEnabled);
   const pushToTalkBindingRef = useRef(pushToTalkBinding);
   const notificationsEnabledRef = useRef(
@@ -494,19 +537,25 @@ export function useVoice(options?: UseVoiceOptions) {
     resetState: resetKrispFilterState,
   } = useKrispFilter();
 
-  const { localSpeaking } = useLocalVoiceActivity({
-    status,
-    micEnabled: micOn,
+  const onLocalSpeech = useCallback(() => {
+    lastLocalSpeechAtRef.current = Date.now();
+  }, []);
+
+  const getLocalIdentity = useCallback(() => roomRef.current?.localParticipant.identity, []);
+
+  const speaking = useSpeakingDetection({
+    connected: status === "connected",
+    micOpen: micOn,
     localMicTrack,
     micProcessorRevision,
+    audioContextRef: voiceAudioContextRef,
+    getLocalIdentity,
+    onLocalSpeech,
   });
+  const resetSpeaking = speaking.reset;
+  const removeSpeaker = speaking.removeRemote;
 
-  screenShareRef.current = screenShareEnabled;
-
-  const publishServerSpeakers = useCallback((next: string[]) => {
-    serverSpeakingIdentitiesRef.current = next;
-    setServerSpeakingIdentities((prev) => (sameStringList(prev, next) ? prev : next));
-  }, []);
+  pushToTalkIdleRef.current = pushToTalkEnabled && !hardMuted;
 
   const syncParticipants = useCallback(
     (room: LiveKitRoom) => {
@@ -526,38 +575,37 @@ export function useVoice(options?: UseVoiceOptions) {
     setDeafenedParticipants((prev) => setIdentityValue(prev, identity, deafened));
   }, []);
 
+  const setRemotePushToTalkIdle = useCallback((identity: string, idle: boolean) => {
+    setPushToTalkIdleParticipants((prev) => setIdentityValue(prev, identity, idle));
+  }, []);
+
   const removeParticipant = useCallback(
     (identity: string) => {
       removeParticipantVolume(identity);
-
-      const releaseTimer = speakerReleaseTimersRef.current.get(identity);
-      if (releaseTimer) clearTimeout(releaseTimer);
-      speakerReleaseTimersRef.current.delete(identity);
-      publishServerSpeakers(
-        serverSpeakingIdentitiesRef.current.filter((speaker) => speaker !== identity),
-      );
+      removeSpeaker(identity);
       setQualities((prev) => omitIdentity(prev, identity));
       setDeafenedParticipants((prev) => omitIdentity(prev, identity));
+      setPushToTalkIdleParticipants((prev) => omitIdentity(prev, identity));
     },
-    [publishServerSpeakers, removeParticipantVolume],
+    [removeSpeaker, removeParticipantVolume],
   );
 
   const resetRoomState = useCallback(() => {
     setParticipants([]);
-    setServerSpeakingIdentities([]);
     setDeafen(false);
+    setHardMuted(false);
     setLocalMicTrack(null);
     setQualities({});
     setConnectedAt(null);
     setDeafenedParticipants({});
-    for (const timer of speakerReleaseTimersRef.current.values()) clearTimeout(timer);
-    speakerReleaseTimersRef.current.clear();
-    serverSpeakingIdentitiesRef.current = [];
+    setPushToTalkIdleParticipants({});
+    resetSpeaking();
     resetParticipantVolumeState();
     resetScreenShareState();
     resetLiveShareState();
     resetKrispFilterState();
   }, [
+    resetSpeaking,
     resetParticipantVolumeState,
     resetScreenShareState,
     resetLiveShareState,
@@ -602,6 +650,7 @@ export function useVoice(options?: UseVoiceOptions) {
     (roomId: string): SessionSnapshot => ({
       roomId,
       deafen: deafenRef.current,
+      hardMuted: hardMutedRef.current,
       micEnabled: micEnabledToRestore({
         deafen: deafenRef.current,
         micBeforeDeafen: micEnabledBeforeDeafenRef.current,
@@ -665,6 +714,7 @@ export function useVoice(options?: UseVoiceOptions) {
       roomId: info.roomId,
       micEnabled: info.micEnabled,
       deafen: info.deafen,
+      hardMuted: info.hardMuted,
       reason,
     });
     setStatus("idle");
@@ -694,41 +744,7 @@ export function useVoice(options?: UseVoiceOptions) {
     [captureSession, resetRoomState],
   );
 
-  const onLocalSpeech = useCallback(() => {
-    lastLocalSpeechAtRef.current = Date.now();
-  }, []);
-
   const getLastLocalSpeechAt = useCallback(() => lastLocalSpeechAtRef.current, []);
-
-  const syncActiveSpeakerIdentities = useCallback(
-    (activeIdentities: string[]) => {
-      const activeIdentitySet = new Set(activeIdentities);
-
-      for (const identity of activeIdentities) {
-        const releaseTimer = speakerReleaseTimersRef.current.get(identity);
-        if (releaseTimer) clearTimeout(releaseTimer);
-        speakerReleaseTimersRef.current.delete(identity);
-      }
-
-      for (const identity of serverSpeakingIdentitiesRef.current) {
-        if (activeIdentitySet.has(identity)) continue;
-        if (speakerReleaseTimersRef.current.has(identity)) continue;
-
-        const releaseTimer = setTimeout(() => {
-          speakerReleaseTimersRef.current.delete(identity);
-          publishServerSpeakers(
-            serverSpeakingIdentitiesRef.current.filter((speaker) => speaker !== identity),
-          );
-        }, VOICE_RELEASE_DELAY_MS);
-        speakerReleaseTimersRef.current.set(identity, releaseTimer);
-      }
-
-      publishServerSpeakers(
-        mergeActiveSpeakerIdentities(serverSpeakingIdentitiesRef.current, activeIdentities),
-      );
-    },
-    [publishServerSpeakers],
-  );
 
   const watchShare = useCallback(
     (identity: string) => {
@@ -747,7 +763,7 @@ export function useVoice(options?: UseVoiceOptions) {
   );
 
   const setMicEnabled = useCallback(
-    async (enabled: boolean) => {
+    async (enabled: boolean, { silent = false }: { silent?: boolean } = {}) => {
       const room = roomRef.current;
       const participant = room?.localParticipant;
       if (!participant) return;
@@ -760,7 +776,7 @@ export function useVoice(options?: UseVoiceOptions) {
       if (enabled && track) await attachKrispNoiseFilter(track);
       syncLocalMicTrack(room);
       setMicOn(enabled);
-      playVoiceActionSound(enabled ? "unmute" : "mute");
+      if (!silent) playVoiceActionSound(enabled ? "unmute" : "mute");
     },
     [attachKrispNoiseFilter, syncLocalMicTrack],
   );
@@ -874,11 +890,17 @@ export function useVoice(options?: UseVoiceOptions) {
           Track,
           notificationsEnabledRef,
           roomRef,
-          screenShareRef,
           voiceAudioContextRef,
           deafenRef,
+          pushToTalkIdleRef,
           setRemoteMuted,
           setRemoteDeafened,
+          setRemotePushToTalkIdle,
+          speaking: {
+            addRemoteMicrophone: speaking.addRemoteMicrophone,
+            removeRemote: speaking.removeRemote,
+            setServerSpeakers: speaking.setServerSpeakers,
+          },
           applyParticipantVolumes,
           onTrackSubscribed,
           onTrackUnsubscribed,
@@ -892,7 +914,6 @@ export function useVoice(options?: UseVoiceOptions) {
             hasWatchIntent,
           },
           syncLocalMicTrack,
-          syncActiveSpeakerIdentities,
           onLocalSpeech,
           onDisconnected: handleDisconnected,
           setConnectionState,
@@ -952,6 +973,10 @@ export function useVoice(options?: UseVoiceOptions) {
         applyInitialShares(room);
         setAwayInfo(null);
         setExitNotice(null);
+        const hardMutedAtStart = pushToTalkEnabledRef.current && connectOptions?.hardMuted === true;
+        hardMutedRef.current = hardMutedAtStart;
+        setHardMuted(hardMutedAtStart);
+        publishPushToTalkIdleState(room, pushToTalkEnabledRef.current && !hardMutedAtStart);
         if (connectOptions?.deafen) {
           micEnabledBeforeDeafenRef.current = connectOptions.micEnabled ?? true;
           deafenRef.current = true;
@@ -987,7 +1012,8 @@ export function useVoice(options?: UseVoiceOptions) {
       closeVoiceAudioContext,
       syncParticipants,
       removeParticipant,
-      syncActiveSpeakerIdentities,
+      speaking,
+      setRemotePushToTalkIdle,
       syncLocalMicTrack,
       onTrackSubscribed,
       onTrackUnsubscribed,
@@ -1010,6 +1036,7 @@ export function useVoice(options?: UseVoiceOptions) {
     const connected = await connect(target.roomId, {
       micEnabled: target.micEnabled,
       deafen: target.deafen,
+      hardMuted: target.hardMuted,
     });
     if (connected) {
       onReturnedRef.current?.();
@@ -1030,7 +1057,9 @@ export function useVoice(options?: UseVoiceOptions) {
 
   const queuePushToTalkMicrophoneState = useCallback(
     (enabled: boolean) => {
-      const transition = pushToTalkTransitionRef.current.then(() => setMicEnabled(enabled));
+      const transition = pushToTalkTransitionRef.current.then(() =>
+        setMicEnabled(enabled, { silent: true }),
+      );
       pushToTalkTransitionRef.current = transition.then(
         () => undefined,
         (err: unknown) => setError(microphoneToggleErrorMessageFor(err)),
@@ -1043,10 +1072,15 @@ export function useVoice(options?: UseVoiceOptions) {
     (enabled: boolean) => {
       pushToTalkEnabledRef.current = enabled;
       pushToTalkPressedRef.current = false;
+      pushToTalkMicOpenRef.current = false;
+      clearPushToTalkReleaseTimer(pushToTalkReleaseTimerRef);
+      hardMutedRef.current = false;
+      setHardMuted(false);
       setPushToTalkEnabledState(enabled);
       writePushToTalkEnabled(typeof localStorage === "undefined" ? null : localStorage, enabled);
       if (status === "connected") {
         queuePushToTalkMicrophoneState(!enabled && !deafenRef.current);
+        publishPushToTalkIdleState(roomRef.current, enabled);
       }
     },
     [queuePushToTalkMicrophoneState, status],
@@ -1063,25 +1097,53 @@ export function useVoice(options?: UseVoiceOptions) {
     applyDeafen(!deafenRef.current);
   }, [applyDeafen]);
 
+  const toggleHardMute = useCallback(() => {
+    const muted = !hardMutedRef.current;
+    hardMutedRef.current = muted;
+    setHardMuted(muted);
+    publishPushToTalkIdleState(roomRef.current, !muted);
+    playVoiceActionSound(muted ? "mute" : "unmute");
+    if (!muted) return;
+    pushToTalkPressedRef.current = false;
+    pushToTalkMicOpenRef.current = false;
+    clearPushToTalkReleaseTimer(pushToTalkReleaseTimerRef);
+    queuePushToTalkMicrophoneState(false);
+  }, [queuePushToTalkMicrophoneState]);
+
   const toggleMic = useCallback(() => {
     if (deafenRef.current) {
       applyDeafen(false);
       return;
     }
+    if (pushToTalkEnabledRef.current) {
+      toggleHardMute();
+      return;
+    }
     setMicEnabled(!micOn).catch((err: unknown) => {
       setError(microphoneToggleErrorMessageFor(err));
     });
-  }, [applyDeafen, micOn, setMicEnabled]);
+  }, [applyDeafen, micOn, setMicEnabled, toggleHardMute]);
 
   // --- Effects ---
 
   useEffect(() => {
     if (!pushToTalkEnabled || status !== "connected") return;
 
+    const closeMicrophone = () => {
+      clearPushToTalkReleaseTimer(pushToTalkReleaseTimerRef);
+      if (!pushToTalkMicOpenRef.current) return;
+      pushToTalkMicOpenRef.current = false;
+      queuePushToTalkMicrophoneState(false);
+    };
     const releaseMicrophone = () => {
       if (!pushToTalkPressedRef.current) return;
       pushToTalkPressedRef.current = false;
-      queuePushToTalkMicrophoneState(false);
+      const releaseDelayMs = getVoicePreferences().pushToTalkReleaseDelayMs;
+      if (releaseDelayMs === 0) {
+        closeMicrophone();
+        return;
+      }
+      pushToTalkReleaseTimerRef.current = setTimeout(closeMicrophone, releaseDelayMs);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       const { tagName, contentEditable } = editableDetailsFor(event.target);
@@ -1095,8 +1157,11 @@ export function useVoice(options?: UseVoiceOptions) {
         )
       )
         return;
-      if (deafenRef.current) return;
+      if (deafenRef.current || hardMutedRef.current) return;
+      clearPushToTalkReleaseTimer(pushToTalkReleaseTimerRef);
       pushToTalkPressedRef.current = true;
+      if (pushToTalkMicOpenRef.current) return;
+      pushToTalkMicOpenRef.current = true;
       queuePushToTalkMicrophoneState(true);
     };
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -1111,7 +1176,8 @@ export function useVoice(options?: UseVoiceOptions) {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", releaseMicrophone);
-      releaseMicrophone();
+      pushToTalkPressedRef.current = false;
+      closeMicrophone();
     };
   }, [pushToTalkEnabled, queuePushToTalkMicrophoneState, status]);
 
@@ -1150,11 +1216,11 @@ export function useVoice(options?: UseVoiceOptions) {
     };
   }, [closeVoiceAudioContext]);
 
-  const localIdentity = participants.find((participant) => participant.isLocal)?.identity;
-  const speakingIdentities = useMemo(() => {
-    if (!localSpeaking || !localIdentity) return serverSpeakingIdentities;
-    return Array.from(new Set([...serverSpeakingIdentities, localIdentity]));
-  }, [localSpeaking, localIdentity, serverSpeakingIdentities]);
+  const displayedMutedParticipants = useMemo(
+    () => visibleMutedParticipants(mutedParticipants, pushToTalkIdleParticipants),
+    [mutedParticipants, pushToTalkIdleParticipants],
+  );
+  const micEnabled = pushToTalkEnabled ? !hardMuted : micOn;
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -1188,7 +1254,7 @@ export function useVoice(options?: UseVoiceOptions) {
     status,
     activeRoomId,
     participants,
-    micEnabled: micOn,
+    micEnabled,
     volumes,
     screenShareVolumes,
     screenShareEnabled,
@@ -1204,10 +1270,9 @@ export function useVoice(options?: UseVoiceOptions) {
     selfMonitor,
     pushToTalkEnabled,
     pushToTalkBinding,
-    mutedParticipants,
+    mutedParticipants: displayedMutedParticipants,
     deafenedParticipants,
     screenShareMutedParticipants,
-    speakingIdentities,
     localPreview,
     deafen,
     error,
