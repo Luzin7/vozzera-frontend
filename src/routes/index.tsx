@@ -519,6 +519,7 @@ function Index() {
                 screenShares={voice.screenShares}
                 localPreview={voice.localPreview}
                 remoteQualities={voice.remoteQualities}
+                connectedAt={voice.connectedAt}
                 miniWindowSupported={miniWindow.supported}
                 miniWindowOpen={miniWindow.isOpen}
                 onToggleMic={handleToggleMic}
