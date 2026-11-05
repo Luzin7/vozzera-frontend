@@ -30,12 +30,6 @@
         "summary": "Perdeu alguma novidade? A nova aba Novidades, nas Configurações, mostra tudo que mudou em cada versão, com data."
       },
       {
-        "title": "feat(changelog): aba Novidades e gerador corrigido",
-        "kind": "feat",
-        "pr": 181,
-        "summary": ""
-      },
-      {
         "title": "perf(voz): menos re-renders na call e ajustes da live",
         "kind": "perf",
         "pr": 178,
@@ -64,12 +58,6 @@
         "kind": "fix",
         "pr": 173,
         "summary": "Som que não fura o ouvido! Entrar, sair, mutar e compartilhar tela agora têm sons mais graves e suaves."
-      },
-      {
-        "title": "fix(voz): sons de entrada e saída mais suaves",
-        "kind": "fix",
-        "pr": 173,
-        "summary": ""
       },
       {
         "title": "fix(voz): microfone livre nas outras abas",
