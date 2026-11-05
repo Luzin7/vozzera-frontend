@@ -11,7 +11,7 @@ Contrato que o front assume sobre o backend Go. Versão atualizada a partir do c
 - `POST /api/logout` encerra a sessão no servidor (204). Best-effort: o front limpa o estado local mesmo se a rota falhar.
 - **Sessão morreu** = qualquer `401` em rota autenticada ou o servidor fechar o WebSocket com `code 4001` (revogação). Qualquer outro fechamento passa por `GET /api/me` antes de reconectar: `401` desloga, o resto reconecta com backoff — sem retry infinito com sessão morta.
 - **Servidor indisponível ≠ deslogado**: se o carregamento da sessão falha por outro motivo que não `401`, o front mostra "Não consegui falar com o servidor." com "Tentar de novo", e não a tela de login.
-- Base da API: `VITE_API_URL` (default `http://localhost:8080`). Em produção o front (`vozzera.vercel.app`) e a API (`*.onrender.com`) estão em sites diferentes. WebSocket deriva da mesma base.
+- Base da API: `VITE_API_URL` (default `http://localhost:8080`). Em produção o front (`vozzera.vercel.app`) e a API (`https://vozzera.onrender.com`, definida em `VITE_API_URL` no build; trocar exige redeploy) estão em sites diferentes. WebSocket deriva da mesma base.
 
 ## REST
 
