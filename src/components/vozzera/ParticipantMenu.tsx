@@ -27,7 +27,7 @@ type Props = {
   onToggleLocalScreenShareMute: () => void;
   triggerClassName?: string;
   iconClassName?: string;
-  children: ReactNode;
+  children?: ReactNode;
 };
 
 function VolumeControl({
