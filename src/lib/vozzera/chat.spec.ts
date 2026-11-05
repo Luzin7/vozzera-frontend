@@ -459,6 +459,12 @@ describe("parseFrame", () => {
       "voice.presence.joined": { topic: room, data: [] },
       "voice.presence.left": { topic: room, data: [] },
       "voice.presence.snapshot": { topic: room, data: [] },
+      "voice.away.snapshot": {
+        topic: room,
+        data: [{ user_id: wsUserId, username: "luan", since: wsTimestamp }],
+      },
+      "voice.away.ended": { topic: room, data: { user_id: wsUserId, reason: "returned" } },
+      "voice.away.resync": { topic: "__presence__", data: {} },
       "system.error": { topic: "x", data: { error: "e" } },
       "user.online": { topic: "__presence__", data: user },
       "user.offline": { topic: "__presence__", data: user },
@@ -498,6 +504,76 @@ describe("parseFrame", () => {
       });
     },
   );
+
+  describe("away frames", () => {
+    const frame = (type: string, topic: string, data: unknown) =>
+      messageEvent({ v: 1, type, topic, ts: wsTimestamp, data });
+
+    it("maps voice.away.snapshot, keeping the Go nanosecond since", () => {
+      const since = "2026-08-13T00:00:00.123456789Z";
+      const raw = frame("voice.away.snapshot", `room:${wsRoomId}`, [
+        { user_id: wsUserId, username: "luan", since },
+      ]);
+      expect(parseFrame(raw)).toEqual({
+        type: "voice.away.snapshot",
+        room_id: wsRoomId,
+        away: [{ userId: wsUserId, username: "luan", since }],
+      });
+    });
+
+    it("accepts an empty voice.away.snapshot", () => {
+      expect(parseFrame(frame("voice.away.snapshot", `room:${wsRoomId}`, []))).toEqual({
+        type: "voice.away.snapshot",
+        room_id: wsRoomId,
+        away: [],
+      });
+    });
+
+    it.each(["room_empty", "returned", "connection_closed"])(
+      "maps voice.away.ended with reason %s",
+      (reason) => {
+        const raw = frame("voice.away.ended", `room:${wsRoomId}`, { user_id: wsUserId, reason });
+        expect(parseFrame(raw)).toEqual({
+          type: "voice.away.ended",
+          room_id: wsRoomId,
+          user_id: wsUserId,
+          reason,
+        });
+      },
+    );
+
+    it("maps voice.away.resync", () => {
+      expect(parseFrame(frame("voice.away.resync", "__presence__", {}))).toEqual({
+        type: "voice.away.resync",
+      });
+    });
+
+    it.each([
+      [
+        "a snapshot entry without since",
+        "voice.away.snapshot",
+        `room:${wsRoomId}`,
+        [{ user_id: wsUserId, username: "luan" }],
+      ],
+      [
+        "a snapshot with a non-uuid user",
+        "voice.away.snapshot",
+        `room:${wsRoomId}`,
+        [{ user_id: "x", username: "l", since: wsTimestamp }],
+      ],
+      ["a snapshot that is not a list", "voice.away.snapshot", `room:${wsRoomId}`, {}],
+      ["a snapshot on a bad topic", "voice.away.snapshot", "room:r1", []],
+      [
+        "an ended with an unknown reason",
+        "voice.away.ended",
+        `room:${wsRoomId}`,
+        { user_id: wsUserId, reason: "x" },
+      ],
+      ["a resync on a room topic", "voice.away.resync", `room:${wsRoomId}`, {}],
+    ])("raises the protocol error for %s", (_name, type, topic, data) => {
+      expect(() => parseFrame(frame(type, topic, data))).toThrow("evento WebSocket incompatível");
+    });
+  });
 
   it("rejects a room topic without an UUID", () => {
     const raw = messageEvent({

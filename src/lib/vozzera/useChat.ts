@@ -40,6 +40,8 @@ import {
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
+import { applyAwaySnapshot, createAwayConfirmation } from "@/lib/vozzera/away";
+import type { AwayPresence } from "@/lib/vozzera/away";
 import type { OnlineUsers, TypingUsers, VoicePresence } from "@/lib/vozzera/chat";
 import {
   canNotify,
@@ -68,14 +70,27 @@ import type { HistoryStatuses } from "@/lib/vozzera/chat-history";
 import { createDraftStore } from "@/lib/vozzera/message-display";
 import { canManageRooms, canModerateMessages, canSeeRoom } from "@/lib/vozzera/permissions";
 import { isSessionRejected } from "@/lib/vozzera/session";
-import type { ChatMessage, CurrentUser, OutboundEvent, Room, UserRole } from "@/lib/vozzera/types";
+import type {
+  AwayEndedReason,
+  ChatMessage,
+  CurrentUser,
+  OutboundEvent,
+  Room,
+  UserRole,
+} from "@/lib/vozzera/types";
 import { fromEvent, fromHistory, ZERO_UUID } from "@/lib/vozzera/types";
 import { useAuth } from "@/lib/vozzera/useAuth";
 import { useSocket } from "@/lib/vozzera/useSocket";
 
 const HISTORY_PAGE_SIZE = 50;
 
-export function useChat() {
+export type AwayEndedEventReason = AwayEndedReason | "snapshot_absent";
+
+export type AwayEndedEvent = { roomId: string; userId: string; reason: AwayEndedEventReason };
+
+type ChatOptions = { onAwayEnded?: (event: AwayEndedEvent) => void };
+
+export function useChat(options?: ChatOptions) {
   const { username, setUsername, clearUsername } = useAuth();
   const queryClient = useQueryClient();
   const [authed, setAuthed] = useState<boolean | null>(null);
@@ -96,6 +111,7 @@ export function useChat() {
   } | null>(null);
   const [typingUsers, setTypingUsers] = useState<TypingUsers>({});
   const [voicePresence, setVoicePresence] = useState<VoicePresence>({});
+  const [awayPresence, setAwayPresence] = useState<AwayPresence>({});
   const [onlineUsers, setOnlineUsers] = useState<OnlineUsers>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     if (typeof localStorage === "undefined") return false;
@@ -105,6 +121,10 @@ export function useChat() {
     if (typeof localStorage === "undefined") return false;
     return readSoundEnabled(localStorage);
   });
+  const awayPresenceRef = useRef(awayPresence);
+  const voicePresenceRef = useRef(voicePresence);
+  const awayConfirmationRef = useRef(createAwayConfirmation());
+  const onAwayEndedRef = useRef(options?.onAwayEnded);
   const activeRoomRef = useRef(activeRoom);
   const roomsRef = useRef(rooms);
   const notificationsEnabledRef = useRef(notificationsEnabled);
@@ -120,12 +140,23 @@ export function useChat() {
   const recentRoomIdsRef = useRef<string[]>([]);
   const drafts = useMemo(() => createDraftStore(), []);
 
+  onAwayEndedRef.current = options?.onAwayEnded;
   activeRoomRef.current = activeRoom;
   roomsRef.current = rooms;
   messagesRef.current = messages;
   historyStatusRef.current = historyStatus;
   notificationsEnabledRef.current = notificationsEnabled;
   soundEnabledRef.current = soundEnabled;
+
+  const commitVoicePresence = useCallback((next: VoicePresence) => {
+    voicePresenceRef.current = next;
+    setVoicePresence(next);
+  }, []);
+
+  const commitAwayPresence = useCallback((next: AwayPresence) => {
+    awayPresenceRef.current = next;
+    setAwayPresence(next);
+  }, []);
 
   const endSession = useCallback(() => {
     setBanner(null);
@@ -147,13 +178,15 @@ export function useChat() {
     setUnread({});
     setUnreadMarker(null);
     setTypingUsers({});
-    setVoicePresence({});
+    commitVoicePresence({});
+    commitAwayPresence({});
+    awayConfirmationRef.current.reset();
     setOnlineUsers({});
     selectedInitialRoomRef.current = false;
     clearActiveRoomId(typeof localStorage === "undefined" ? null : localStorage);
     queryClient.removeQueries({ queryKey: ["rooms"] });
     queryClient.removeQueries({ queryKey: ["me"] });
-  }, [clearUsername, drafts, queryClient]);
+  }, [clearUsername, commitAwayPresence, commitVoicePresence, drafts, queryClient]);
 
   useEffect(() => {
     setUnauthorizedHandler(endSession);
@@ -234,16 +267,20 @@ export function useChat() {
     void loadSession();
   }, [loadSession]);
 
-  const removeRoomLocally = useCallback((roomId: string) => {
-    setRooms((prev) => prev.filter((room) => room.id !== roomId));
-    setMessages((prev) => removeRoom(prev, roomId));
-    setHistoryStatus((prev) => removeRoom(prev, roomId));
-    setUnread((prev) => removeRoom(prev, roomId));
-    setTypingUsers((prev) => removeRoom(prev, roomId));
-    setVoicePresence((prev) => removeRoom(prev, roomId));
-    setActiveRoom((current) => (current?.id === roomId ? null : current));
-    setUnreadMarker((current) => (current?.roomId === roomId ? null : current));
-  }, []);
+  const removeRoomLocally = useCallback(
+    (roomId: string) => {
+      setRooms((prev) => prev.filter((room) => room.id !== roomId));
+      setMessages((prev) => removeRoom(prev, roomId));
+      setHistoryStatus((prev) => removeRoom(prev, roomId));
+      setUnread((prev) => removeRoom(prev, roomId));
+      setTypingUsers((prev) => removeRoom(prev, roomId));
+      commitVoicePresence(removeRoom(voicePresenceRef.current, roomId));
+      commitAwayPresence(removeRoom(awayPresenceRef.current, roomId));
+      setActiveRoom((current) => (current?.id === roomId ? null : current));
+      setUnreadMarker((current) => (current?.roomId === roomId ? null : current));
+    },
+    [commitAwayPresence, commitVoicePresence],
+  );
 
   const handleRoomEvent = useCallback(
     (event: Extract<OutboundEvent, { type: "room" }>) => {
@@ -365,7 +402,36 @@ export function useChat() {
         event.type === "voice.presence.left" ||
         event.type === "voice.presence.snapshot"
       ) {
-        setVoicePresence((prev) => updateVoicePresence(prev, event));
+        commitVoicePresence(updateVoicePresence(voicePresenceRef.current, event));
+        return;
+      }
+
+      if (event.type === "voice.away.snapshot") {
+        commitAwayPresence(applyAwaySnapshot(awayPresenceRef.current, event.room_id, event.away));
+        if (
+          currentUserId !== null &&
+          awayConfirmationRef.current.observe(event.room_id, event.away, currentUserId)
+        ) {
+          onAwayEndedRef.current?.({
+            roomId: event.room_id,
+            userId: currentUserId,
+            reason: "snapshot_absent",
+          });
+        }
+        return;
+      }
+
+      if (event.type === "voice.away.resync") {
+        awayConfirmationRef.current.reset();
+        return;
+      }
+
+      if (event.type === "voice.away.ended") {
+        onAwayEndedRef.current?.({
+          roomId: event.room_id,
+          userId: event.user_id,
+          reason: event.reason,
+        });
         return;
       }
 
@@ -389,20 +455,29 @@ export function useChat() {
       if (event.type !== "message" || event.room_id === ZERO_UUID) return;
       handleMessageEvent(event);
     },
-    [currentUserId, handleMessageEvent, handleRoomEvent],
+    [commitAwayPresence, commitVoicePresence, currentUserId, handleMessageEvent, handleRoomEvent],
   );
 
-  const { status, subscribeRoom, unsubscribeRoom, resubscribeRoom, sendMessage, sendTyping } =
-    useSocket({
-      enabled: authed === true,
-      onEvent: handleEvent,
-      onProtocolError: setBanner,
-      onSessionExpired: () => {
-        endSession();
-        setBanner("Sessão encerrada no servidor. Entre novamente.");
-      },
-      isSessionAlive,
-    });
+  const {
+    status,
+    subscribeRoom,
+    unsubscribeRoom,
+    resubscribeRoom,
+    sendMessage,
+    sendTyping,
+    setAwayIntent,
+    dropAwayIntent,
+    resendAwayIntent,
+  } = useSocket({
+    enabled: authed === true,
+    onEvent: handleEvent,
+    onProtocolError: setBanner,
+    onSessionExpired: () => {
+      endSession();
+      setBanner("Sessão encerrada no servidor. Entre novamente.");
+    },
+    isSessionAlive,
+  });
 
   resubscribeRoomRef.current = resubscribeRoom;
 
@@ -419,7 +494,7 @@ export function useChat() {
 
   useEffect(() => {
     if (status !== "connecting") return;
-    setVoicePresence({});
+    awayConfirmationRef.current.reset();
   }, [status]);
 
   const typingAnnouncer = useMemo(
@@ -782,6 +857,12 @@ export function useChat() {
     unreadMarker,
     typingUsers,
     voicePresence,
+    awayPresence,
+    awayPresenceRef,
+    voicePresenceRef,
+    setAwayIntent,
+    dropAwayIntent,
+    resendAwayIntent,
     socketStatus: status,
     openRoom,
     createRoom,

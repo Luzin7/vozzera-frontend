@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { AwayCommand } from "@/lib/vozzera/away-intent";
 import {
   MAX_MESSAGE_LENGTH,
   type InboundEvent,
@@ -20,6 +21,22 @@ export function inboundFrame(
     topic: `room:${roomId}`,
     ts: new Date().toISOString(),
     data: content === undefined ? { room_id: roomId } : { room_id: roomId, content },
+  };
+}
+
+export function awayFrame(command: AwayCommand): InboundEvent {
+  const ts = new Date().toISOString();
+  if (command.type === "leave") {
+    return { v: 1, type: "voice.away.leave", topic: "__presence__", ts, data: {} };
+  }
+
+  const { roomId, reason } = command.intent;
+  return {
+    v: 1,
+    type: "voice.away.enter",
+    topic: `room:${roomId}`,
+    ts,
+    data: { room_id: roomId, reason },
   };
 }
 
@@ -158,6 +175,37 @@ const presenceFrame = z
     participants: frame.data,
   }));
 
+const awayEntry = z.object({ user_id: uuid, username: z.string(), since: timestamp });
+
+const awaySnapshotFrame = envelope("voice.away.snapshot", roomTopic, z.array(awayEntry)).transform(
+  (frame): OutboundEvent => ({
+    type: "voice.away.snapshot",
+    room_id: roomIdFromTopic(frame.topic),
+    away: frame.data.map((entry) => ({
+      userId: entry.user_id,
+      username: entry.username,
+      since: entry.since,
+    })),
+  }),
+);
+
+const awayEndedFrame = envelope(
+  "voice.away.ended",
+  roomTopic,
+  z.object({ user_id: uuid, reason: z.enum(["room_empty", "returned", "connection_closed"]) }),
+).transform((frame): OutboundEvent => ({
+  type: "voice.away.ended",
+  room_id: roomIdFromTopic(frame.topic),
+  user_id: frame.data.user_id,
+  reason: frame.data.reason,
+}));
+
+const awayResyncFrame = envelope(
+  "voice.away.resync",
+  z.literal("__presence__"),
+  z.object({}).passthrough(),
+).transform((): OutboundEvent => ({ type: "voice.away.resync" }));
+
 const systemErrorFrame = envelope(
   "system.error",
   z.string(),
@@ -219,5 +267,8 @@ export const outboundFrameSchema = z.union([
   userOnlineFrame,
   userOfflineFrame,
   presenceSnapshotFrame,
+  awaySnapshotFrame,
+  awayEndedFrame,
+  awayResyncFrame,
   systemErrorFrame,
 ]);

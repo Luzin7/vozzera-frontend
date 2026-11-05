@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyMicDeviceChoice,
+  initialMicEnabled,
+  localSpoke,
+  micEnabledToRestore,
+  visibleSpeakerIdentities,
   applyVideoPlaybackDelay,
   applyVolumeWithElementMuted,
   audioCaptureOptions,
@@ -662,5 +666,51 @@ describe("isParticipantMuted", () => {
         mutedParticipants,
       }),
     ).toBe(false);
+  });
+});
+
+describe("initialMicEnabled", () => {
+  it("is on by default", () => {
+    expect(initialMicEnabled(false, undefined)).toBe(true);
+  });
+
+  it("restores a requested state", () => {
+    expect(initialMicEnabled(false, false)).toBe(false);
+    expect(initialMicEnabled(false, true)).toBe(true);
+  });
+
+  it("stays off with push-to-talk", () => {
+    expect(initialMicEnabled(true, undefined)).toBe(false);
+    expect(initialMicEnabled(true, true)).toBe(false);
+  });
+});
+
+describe("micEnabledToRestore", () => {
+  it("uses the live mic state when not deafened", () => {
+    expect(micEnabledToRestore({ deafen: false, micBeforeDeafen: true, micOn: false })).toBe(false);
+    expect(micEnabledToRestore({ deafen: false, micBeforeDeafen: false, micOn: true })).toBe(true);
+  });
+
+  it("uses the state from before the deafen when deafened", () => {
+    expect(micEnabledToRestore({ deafen: true, micBeforeDeafen: true, micOn: false })).toBe(true);
+    expect(micEnabledToRestore({ deafen: true, micBeforeDeafen: false, micOn: false })).toBe(false);
+  });
+});
+
+describe("localSpoke", () => {
+  it("detects the local identity in the raw speaker list", () => {
+    expect(localSpoke(["a", "me"], "me")).toBe(true);
+    expect(localSpoke(["a"], "me")).toBe(false);
+    expect(localSpoke([], "me")).toBe(false);
+  });
+});
+
+describe("visibleSpeakerIdentities", () => {
+  it("keeps everyone when not sharing", () => {
+    expect(visibleSpeakerIdentities(["a", "me"], "me", false)).toEqual(["a", "me"]);
+  });
+
+  it("drops the local speaker while sharing the screen", () => {
+    expect(visibleSpeakerIdentities(["a", "me"], "me", true)).toEqual(["a"]);
   });
 });

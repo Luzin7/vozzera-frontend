@@ -460,3 +460,30 @@ export function applyVolumeWithElementMuted(
   applyVolume();
   element.volume = 1;
 }
+
+export function initialMicEnabled(
+  pushToTalkEnabled: boolean,
+  requested: boolean | undefined,
+): boolean {
+  if (pushToTalkEnabled) return false;
+  return requested ?? true;
+}
+
+type MicRestoreInputs = { deafen: boolean; micBeforeDeafen: boolean; micOn: boolean };
+
+export function micEnabledToRestore({ deafen, micBeforeDeafen, micOn }: MicRestoreInputs): boolean {
+  return deafen ? micBeforeDeafen : micOn;
+}
+
+export function localSpoke(speakerIdentities: string[], localIdentity: string): boolean {
+  return speakerIdentities.includes(localIdentity);
+}
+
+export function visibleSpeakerIdentities(
+  speakerIdentities: string[],
+  localIdentity: string,
+  sharingScreen: boolean,
+): string[] {
+  if (!sharingScreen) return speakerIdentities;
+  return speakerIdentities.filter((identity) => identity !== localIdentity);
+}
