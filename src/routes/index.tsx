@@ -123,8 +123,8 @@ function Index() {
     dismissUnreadMarker,
   } = useChat({ onAwayEnded: handleAwayEndedEvent });
   const {
-    changelog,
     shouldShow: shouldShowChangelog,
+    releases: unseenChangelogReleases,
     dismiss: dismissChangelog,
   } = useChangelog(authed === true);
   const [roomDialogOpen, setRoomDialogOpen] = useState(false);
@@ -791,9 +791,7 @@ function Index() {
 
       <WhatsNewDialog
         open={shouldShowChangelog}
-        items={changelog?.items ?? []}
-        version={changelog?.version ?? ""}
-        releasedAt={changelog?.releasedAt}
+        releases={unseenChangelogReleases}
         onDismiss={dismissChangelog}
       />
     </AppViewport>

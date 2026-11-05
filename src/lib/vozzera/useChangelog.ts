@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ChangelogLoadError,
   changelogSchema,
   readSeenRelease,
-  shouldShowChangelog,
+  unseenReleases,
   writeSeenRelease,
 } from "@/lib/vozzera/changelog";
 import type { Changelog } from "@/lib/vozzera/changelog";
@@ -57,9 +57,12 @@ export function useChangelog(enabled: boolean) {
     setSeen(changelog.version);
   }, [query.data]);
 
+  const releases = useMemo(() => unseenReleases(query.data ?? null, seen), [query.data, seen]);
+
   return {
     changelog: query.data ?? null,
-    shouldShow: shouldShowChangelog(query.data ?? null, seen),
+    releases,
+    shouldShow: releases.length > 0,
     dismiss,
   };
 }

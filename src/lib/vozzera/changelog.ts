@@ -35,6 +35,12 @@ export class ChangelogLoadError extends Error {
   }
 }
 
+const VALID_VERSION = /^v?\d+(\.\d+)*$/;
+
+function isValidVersion(version: string | null): version is string {
+  return version !== null && VALID_VERSION.test(version);
+}
+
 function versionParts(version: string): number[] {
   return version
     .replace(/^v/, "")
@@ -55,9 +61,15 @@ function compareVersionsDesc(a: string, b: string): number {
 }
 
 export function releasesOf(changelog: Changelog): ChangelogRelease[] {
-  const releases = changelog.releases ?? [
-    { version: changelog.version, releasedAt: changelog.releasedAt, items: changelog.items },
-  ];
+  const topLevel: ChangelogRelease = {
+    version: changelog.version,
+    releasedAt: changelog.releasedAt,
+    items: changelog.items,
+  };
+  const listed = changelog.releases ?? [];
+  const releases = listed.some((release) => release.version === topLevel.version)
+    ? listed
+    : [topLevel, ...listed];
 
   return [...releases].sort((a, b) => compareVersionsDesc(a.version, b.version));
 }
@@ -93,8 +105,29 @@ export function writeSeenRelease(storage: ChangelogStorage | null, version: stri
   storage.setItem(SEEN_RELEASE_KEY, version);
 }
 
+export const MAX_UNSEEN_RELEASES = 5;
+
+function withVisibleItems(release: ChangelogRelease): ChangelogRelease {
+  return { ...release, items: visibleItems(release.items) };
+}
+
+export function unseenReleases(
+  changelog: Changelog | null,
+  lastSeenVersion: string | null,
+): ChangelogRelease[] {
+  if (changelog === null) return [];
+
+  const releases = releasesOf(changelog);
+  const newer = isValidVersion(lastSeenVersion)
+    ? releases.filter((release) => compareVersionsDesc(release.version, lastSeenVersion) < 0)
+    : releases.slice(0, 1);
+
+  return newer
+    .map(withVisibleItems)
+    .filter((release) => release.items.length > 0)
+    .slice(0, MAX_UNSEEN_RELEASES);
+}
+
 export function shouldShowChangelog(changelog: Changelog | null, seen: string | null): boolean {
-  if (changelog === null) return false;
-  if (visibleItems(changelog.items).length === 0) return false;
-  return changelog.version !== seen;
+  return unseenReleases(changelog, seen).length > 0;
 }

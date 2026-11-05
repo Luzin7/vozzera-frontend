@@ -10,6 +10,8 @@ import {
   visibleItems,
   SEEN_RELEASE_KEY,
   shouldShowChangelog,
+  unseenReleases,
+  MAX_UNSEEN_RELEASES,
   writeSeenRelease,
 } from "./changelog";
 import type { Changelog, ChangelogStorage } from "./changelog";
@@ -92,6 +94,100 @@ describe("shouldShowChangelog without summaries", () => {
     const raw: Changelog = { version: "v1.0.0", items: [{ title: "fix: x", summary: " " }] };
 
     expect(shouldShowChangelog(raw, null)).toBe(false);
+  });
+});
+
+function withReleases(versions: string[]): Changelog {
+  const releases = versions.map((version) => ({
+    version,
+    releasedAt: "2026-01-01",
+    items: [{ title: `t ${version}`, summary: `Resumo ${version}` }],
+  }));
+
+  return { version: versions[0] ?? "", items: releases[0]?.items ?? [], releases };
+}
+
+function versionsOf(releases: { version: string }[]): string[] {
+  return releases.map((release) => release.version);
+}
+
+describe("unseenReleases", () => {
+  const raw = withReleases(["v1.4.0", "v1.3.0", "v1.2.0", "v1.1.0"]);
+
+  it("returns only the release newer than the last seen by one version", () => {
+    expect(versionsOf(unseenReleases(raw, "v1.3.0"))).toEqual(["v1.4.0"]);
+  });
+
+  it("returns every release newer than the last seen by three versions, newest first", () => {
+    expect(versionsOf(unseenReleases(raw, "v1.1.0"))).toEqual(["v1.4.0", "v1.3.0", "v1.2.0"]);
+  });
+
+  it("returns nothing when the last seen is the latest", () => {
+    expect(unseenReleases(raw, "v1.4.0")).toEqual([]);
+  });
+
+  it("returns only the latest release on the first visit", () => {
+    expect(versionsOf(unseenReleases(raw, null))).toEqual(["v1.4.0"]);
+  });
+
+  it("shows every listed release newer than a last seen that is not listed", () => {
+    const sparse = withReleases(["v1.22.0", "v1.21.0", "v1.18.0", "v1.13.0"]);
+
+    expect(versionsOf(unseenReleases(sparse, "1.20.0"))).toEqual(["v1.22.0", "v1.21.0"]);
+  });
+
+  it("returns nothing when the last seen is newer than the latest", () => {
+    expect(unseenReleases(raw, "v9.9.9")).toEqual([]);
+  });
+
+  it("treats an unparseable last seen as the first visit", () => {
+    expect(versionsOf(unseenReleases(raw, "banana"))).toEqual(["v1.4.0"]);
+  });
+
+  it("includes the top-level release missing from releases", () => {
+    const partial: Changelog = {
+      version: "v1.5.0",
+      items: [{ title: "top", summary: "Do topo" }],
+      releases: [{ version: "v1.4.0", items: [{ title: "a", summary: "A" }] }],
+    };
+
+    expect(versionsOf(unseenReleases(partial, "v1.3.0"))).toEqual(["v1.5.0", "v1.4.0"]);
+  });
+
+  it("returns nothing without a changelog", () => {
+    expect(unseenReleases(null, null)).toEqual([]);
+  });
+
+  it("skips items without summary and drops releases left empty", () => {
+    const mixed: Changelog = {
+      version: "v1.3.0",
+      items: [],
+      releases: [
+        {
+          version: "v1.3.0",
+          items: [
+            { title: "a", summary: "Ok" },
+            { title: "b", summary: " " },
+          ],
+        },
+        { version: "v1.2.0", items: [{ title: "c" }] },
+        { version: "v1.1.0", items: [{ title: "d", summary: "Velho" }] },
+      ],
+    };
+
+    expect(unseenReleases(mixed, "v1.1.0")).toEqual([
+      { version: "v1.3.0", items: [{ title: "a", summary: "Ok" }] },
+    ]);
+  });
+
+  it("caps the number of releases keeping the newest", () => {
+    const versions = Array.from({ length: MAX_UNSEEN_RELEASES + 3 }, (_, i) => `v2.${20 - i}.0`);
+    const many = withReleases(versions);
+    const oldest = versions[versions.length - 1] ?? "";
+
+    expect(versionsOf(unseenReleases(many, oldest))).toEqual(
+      versions.slice(0, MAX_UNSEEN_RELEASES),
+    );
   });
 });
 
