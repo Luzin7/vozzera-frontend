@@ -17,7 +17,7 @@ export function VoicePresenceList({ participants, away }: Readonly<Props>) {
         <li
           key={entry.userId}
           title={entry.isAway ? AWAY_TOOLTIP_TEXT : undefined}
-          className={`flex items-center gap-1.5 truncate text-xs text-muted-foreground ${
+          className={`flex items-center gap-1.5 min-w-0 text-xs text-muted-foreground ${
             entry.isAway ? "opacity-50" : ""
           }`}
         >
