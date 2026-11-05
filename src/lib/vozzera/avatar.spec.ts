@@ -31,6 +31,16 @@ describe("avatarColorClass", () => {
     expect(used.size).toBe(AVATAR_COLOR_CLASSES.length);
   });
 
+  it("uses the dedicated avatar tokens", () => {
+    expect([...AVATAR_COLOR_CLASSES]).toEqual([
+      "bg-avatar-1 text-background",
+      "bg-avatar-2 text-background",
+      "bg-avatar-3 text-background",
+      "bg-avatar-4 text-background",
+      "bg-avatar-5 text-background",
+    ]);
+  });
+
   it("falls back to a palette class for an empty key", () => {
     expect(AVATAR_COLOR_CLASSES).toContain(avatarColorClass(""));
   });
