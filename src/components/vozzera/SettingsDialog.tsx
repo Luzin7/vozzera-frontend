@@ -1,6 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { AppWindow, LogOut, Mic2, Sparkles, User } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -78,13 +78,22 @@ export function SettingsDialog({
   onLogout,
 }: Readonly<Props>) {
   const [section, setSection] = useState<Section>("microphone");
+  const capturingPushToTalkKeyRef = useRef(false);
+  const setCapturingPushToTalkKey = useCallback((capturing: boolean) => {
+    capturingPushToTalkKeyRef.current = capturing;
+  }, []);
   const visibleSections = sections.filter(
     ({ id }) => id !== "app" || appSettingsAvailable(installOption),
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(520px,calc(100dvh-2rem))] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-lg p-0 sm:flex-row [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center">
+      <DialogContent
+        onEscapeKeyDown={(event) => {
+          if (capturingPushToTalkKeyRef.current) event.preventDefault();
+        }}
+        className="flex h-[min(520px,calc(100dvh-2rem))] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-lg p-0 sm:flex-row [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
+      >
         <nav className="flex w-full shrink-0 gap-0.5 overflow-x-auto border-b border-border bg-muted/30 p-2 pr-14 sm:w-44 sm:flex-col sm:overflow-x-visible sm:border-b-0 sm:border-r sm:pr-2">
           {visibleSections.map(({ id, label, icon: Icon }) => (
             <button
@@ -122,6 +131,7 @@ export function SettingsDialog({
                 onToggleSelfMonitor={onToggleSelfMonitor}
                 onTogglePushToTalk={onTogglePushToTalk}
                 onPushToTalkKeyChange={onPushToTalkKeyChange}
+                onPushToTalkCaptureChange={setCapturingPushToTalkKey}
               />
               <div className="mt-5 flex items-center justify-between gap-2 border-t border-border pt-5">
                 <div>
