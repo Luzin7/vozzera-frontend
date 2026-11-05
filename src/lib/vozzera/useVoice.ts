@@ -31,7 +31,6 @@ import { useLocalVoiceActivity } from "./use-local-voice-activity";
 import type { VoiceTokenResponse } from "./types";
 import {
   applyMicDeviceChoice,
-  applyVideoPlaybackDelay,
   applyVolumeWithElementMuted,
   audioCaptureOptions,
   audioInputDevices,
@@ -51,7 +50,6 @@ import {
   screenShareAdaptiveStreamSettings,
   shouldHandlePushToTalk,
   visibleSpeakerIdentities,
-  VIDEO_PLAYBACK_DELAY_MS,
   writePushToTalkBinding,
   writePushToTalkEnabled,
 } from "./voice";
@@ -242,7 +240,6 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
       return;
     }
     if (publication.source === Track.Source.ScreenShareAudio) {
-      applyVideoPlaybackDelay(track, VIDEO_PLAYBACK_DELAY_MS);
       applyVolumeWithElementMuted(el, () => applyParticipantVolumes(participant));
       return;
     }

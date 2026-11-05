@@ -6,7 +6,6 @@ import {
   localSpoke,
   micEnabledToRestore,
   visibleSpeakerIdentities,
-  applyVideoPlaybackDelay,
   applyVolumeWithElementMuted,
   audioCaptureOptions,
   audioInputDevices,
@@ -40,7 +39,6 @@ import {
   shouldShowLocalVoiceActivity,
   shouldHandlePushToTalk,
   pushToTalkLabelFor,
-  VIDEO_PLAYBACK_DELAY_MS,
   writeMicDeviceId,
   writeNoiseFilter,
   writeParticipantVolumes,
@@ -478,34 +476,6 @@ describe("participantStatusLabelFor", () => {
 
   it("labels a neutral participant", () => {
     expect(participantStatusLabelFor(false, false)).toBe("Volume individual");
-  });
-});
-
-describe("applyVideoPlaybackDelay", () => {
-  it("sets playout delay in seconds on a track", () => {
-    let capturedDelay = 0;
-    const fakeTrack = {
-      setPlayoutDelay(delayInSeconds: number) {
-        capturedDelay = delayInSeconds;
-      },
-    };
-
-    applyVideoPlaybackDelay(fakeTrack, VIDEO_PLAYBACK_DELAY_MS);
-
-    expect(capturedDelay).toBe(VIDEO_PLAYBACK_DELAY_MS / 1000);
-  });
-
-  it("converts 500ms to 0.5 seconds", () => {
-    let capturedDelay = 0;
-    const fakeTrack = {
-      setPlayoutDelay(delayInSeconds: number) {
-        capturedDelay = delayInSeconds;
-      },
-    };
-
-    applyVideoPlaybackDelay(fakeTrack, 500);
-
-    expect(capturedDelay).toBe(0.5);
   });
 });
 

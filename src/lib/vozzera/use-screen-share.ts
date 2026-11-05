@@ -8,11 +8,9 @@ import type {
 } from "livekit-client";
 import { ScreenSharePresets, Track } from "livekit-client";
 import {
-  applyVideoPlaybackDelay,
   screenShareAudioCaptureOptions,
   screenShareProfileFor,
   screenSharePublishOptions,
-  VIDEO_PLAYBACK_DELAY_MS,
 } from "./voice";
 import type { ScreenShareIntent, ScreenShareProfile } from "./voice";
 
@@ -48,7 +46,7 @@ export type ScreenShareResult = {
   resetState: () => void;
 };
 
-const DEFAULT_SCREEN_SHARE_INTENT: ScreenShareIntent = "text";
+const DEFAULT_SCREEN_SHARE_INTENT: ScreenShareIntent = "video";
 
 function screenShareConstraintsFor(profile: ScreenShareProfile): MediaTrackConstraints {
   return {
@@ -145,7 +143,6 @@ export function useScreenShare(): ScreenShareResult {
 
       const remotePub = publication as import("livekit-client").RemoteTrackPublication;
       remotePub.setEnabled(true);
-      applyVideoPlaybackDelay(track as RemoteVideoTrack, VIDEO_PLAYBACK_DELAY_MS);
 
       shownTracksRef.current.add(track);
       const name = participant.name || participant.identity;
