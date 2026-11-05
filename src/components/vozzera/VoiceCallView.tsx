@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   HeadphoneOff,
   Headphones,
@@ -8,11 +8,13 @@ import {
   MonitorX,
   PhoneOff,
   PictureInPicture2,
+  Users,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CallDuration } from "@/components/vozzera/CallDuration";
+import { ParticipantStrip } from "@/components/vozzera/ParticipantStrip";
 import { SpeakingParticipantTile } from "@/components/vozzera/SpeakingParticipantTile";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
@@ -26,6 +28,8 @@ import {
   isParticipantMuted,
   screenShareHealthMessageFor,
 } from "@/lib/vozzera/voice";
+import { shouldRenderStrip } from "@/lib/vozzera/participant-strip";
+import { useParticipantStripVisibility } from "@/lib/vozzera/use-participant-strip-visibility";
 import { useCanShareScreen } from "@/lib/vozzera/use-can-share-screen";
 import { labelWithShortcut } from "@/lib/vozzera/voice-shortcuts";
 import type { ConnectionState, ScreenShare, VoiceStatus } from "@/lib/vozzera/useVoice";
@@ -138,6 +142,13 @@ export function VoiceCallView({
   const featuredShare = screenShares.find((share) => share.id === featuredId);
   const featuredQuality = featuredShare ? qualities[featuredShare.identity] : undefined;
   const liveShareNames = new Map(liveShares.map((share) => [share.identity, share.name]));
+  const { visible: stripVisible, toggle: toggleStrip } = useParticipantStripVisibility();
+  const streamingIdentities = useMemo(
+    () => new Set(screenShares.map((share) => share.identity)),
+    [screenShares],
+  );
+  const showsStrip = hasScreenShares && shouldRenderStrip(stripVisible, tiles.length);
+  const stripLabel = stripVisible ? "Ocultar participantes" : "Mostrar participantes";
   const healthMessage = screenShareHealthMessageFor(screenShareHealth);
   const showHealth =
     screenShareEnabled && healthMessage !== null && onReduceLocalQuality !== undefined;
@@ -146,17 +157,38 @@ export function VoiceCallView({
     <TooltipProvider>
       <div className="flex min-h-0 flex-1 flex-col bg-background">
         <div className="relative flex min-h-0 flex-1 flex-col">
-          {screenShares.length > 0 ? (
-            <ScreenShareStage
-              shares={screenShares}
-              featuredId={featuredId}
-              featuredQuality={featuredQuality}
-              onSelectShare={setSelectedShareId}
-              liveShares={liveShares}
-              watchingIdentities={watchingIdentities}
-              onWatchShare={onWatchShare}
-              onStopWatchingShare={onStopWatchingShare}
-            />
+          {hasScreenShares ? (
+            <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <ScreenShareStage
+                  shares={screenShares}
+                  featuredId={featuredId}
+                  featuredQuality={featuredQuality}
+                  onSelectShare={setSelectedShareId}
+                  liveShares={liveShares}
+                  watchingIdentities={watchingIdentities}
+                  onWatchShare={onWatchShare}
+                  onStopWatchingShare={onStopWatchingShare}
+                />
+              </div>
+              {showsStrip && (
+                <ParticipantStrip
+                  tiles={tiles}
+                  micEnabled={micEnabled}
+                  deafen={deafen}
+                  volumes={volumes}
+                  screenShareVolumes={screenShareVolumes}
+                  mutedParticipants={mutedParticipants}
+                  deafenedParticipants={deafenedParticipants}
+                  qualities={qualities}
+                  streamingIdentities={streamingIdentities}
+                  onSetVolume={onSetVolume}
+                  onSetScreenShareVolume={onSetScreenShareVolume}
+                  onToggleLocalMute={onToggleLocalMute}
+                  onToggleLocalScreenShareMute={onToggleLocalScreenShareMute}
+                />
+              )}
+            </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {showsExitNotice ? (
@@ -326,6 +358,23 @@ export function VoiceCallView({
                 <TooltipContent>
                   {miniWindowOpen ? "Fechar mini janela de voz" : "Abrir mini janela de voz"}
                 </TooltipContent>
+              </Tooltip>
+            )}
+
+            {hasScreenShares && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant={stripVisible ? "default" : "secondary"}
+                    className="h-11 w-11"
+                    onClick={toggleStrip}
+                  >
+                    <Users className="h-4 w-4" />
+                    <span className="sr-only">{stripLabel}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{stripLabel}</TooltipContent>
               </Tooltip>
             )}
 
