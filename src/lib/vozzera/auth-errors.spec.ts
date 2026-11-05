@@ -28,6 +28,18 @@ describe("authErrorMessageFor", () => {
     ).toBe("Senha deve ter pelo menos 8 caracteres.");
   });
 
+  it("tells an email conflict from a username conflict on register", () => {
+    expect(authErrorMessageFor(new ApiError(409, "Email já está em uso"), "register")).toBe(
+      "Esse email já está em uso.",
+    );
+    expect(authErrorMessageFor(new ApiError(409, "Username já está em uso"), "register")).toBe(
+      "Esse nome de usuário já está em uso.",
+    );
+    expect(authErrorMessageFor(new ApiError(409, "Conflito"), "register")).toBe(
+      "Esse nome de usuário já está em uso.",
+    );
+  });
+
   it("falls back to the api message for other ApiErrors", () => {
     expect(authErrorMessageFor(new ApiError(500, "Erro interno."))).toBe("Erro interno.");
     expect(authErrorMessageFor(new ApiError(400, "Payload inválido."))).toBe("Payload inválido.");
