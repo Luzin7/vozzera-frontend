@@ -1,6 +1,12 @@
-import { memo } from "react";
+import { memo, useEffect, useLayoutEffect, useRef } from "react";
 
 import { initials } from "@/lib/vozzera/avatar";
+import {
+  editorKeyAction,
+  formatEditedAt,
+  formatMessageTime,
+  wasEdited,
+} from "@/lib/vozzera/message-display";
 import type { ChatMessage } from "@/lib/vozzera/types";
 import { Check, MoreHorizontal, Pen, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,17 +16,105 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/vozzera/Markdown";
 
-function time(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+function EditedLabel({ message }: Readonly<{ message: ChatMessage }>) {
+  if (!wasEdited(message)) return null;
 
-  return d.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return (
+    <span className="text-[11px] text-muted-foreground" title={formatEditedAt(message.updatedAt)}>
+      (editado)
+    </span>
+  );
+}
+
+function MessageEditor({
+  messageId,
+  value,
+  error,
+  onChange,
+  onSave,
+  onCancel,
+}: Readonly<{
+  messageId: string;
+  value: string;
+  error: string | null;
+  onChange: (content: string) => void;
+  onSave: (messageId: string) => void;
+  onCancel: () => void;
+}>) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  return (
+    <div>
+      <div className="flex gap-2">
+        <Textarea
+          ref={textareaRef}
+          id={`message-edit-${messageId}`}
+          value={value}
+          rows={1}
+          autoComplete="off"
+          aria-invalid={error !== null}
+          className="max-h-60 min-h-9 resize-none overflow-y-auto py-1.5 leading-5"
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            const action = editorKeyAction({
+              key: event.key,
+              shiftKey: event.shiftKey,
+              isComposing: event.nativeEvent.isComposing,
+            });
+            if (action === "save") {
+              event.preventDefault();
+              onSave(messageId);
+            }
+            if (action === "cancel") onCancel();
+          }}
+        />
+
+        <div className="flex shrink-0 gap-1">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-8 w-8 p-0 text-primary [&_svg]:size-4"
+            onClick={() => onSave(messageId)}
+          >
+            <Check />
+            <span className="sr-only">Salvar edição</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-8 w-8 p-0 text-muted-foreground [&_svg]:size-4"
+            onClick={onCancel}
+          >
+            <X />
+            <span className="sr-only">Cancelar edição</span>
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function MessageActions({
@@ -105,6 +199,7 @@ type MessageItemProps = Readonly<{
   canDeleteMessage: boolean;
   isEditing: boolean;
   editContent: string;
+  editError: string | null;
   onStartEdit: (message: ChatMessage) => void;
   onRequestDelete: (message: ChatMessage) => void;
   onEditContentChange: (content: string) => void;
@@ -121,6 +216,7 @@ export const MessageItem = memo(function MessageItem({
   canDeleteMessage,
   isEditing,
   editContent,
+  editError,
   onStartEdit,
   onRequestDelete,
   onEditContentChange,
@@ -130,7 +226,9 @@ export const MessageItem = memo(function MessageItem({
 }: MessageItemProps) {
   return (
     <li
-      className={`${grouped ? "" : "pt-3"} ${!isLast ? "[content-visibility:auto] [contain-intrinsic-size:auto_4rem]" : ""}`}
+      data-message-id={message.id}
+      tabIndex={-1}
+      className={`rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${grouped ? "" : "pt-3"} ${!isLast ? "[content-visibility:auto] [contain-intrinsic-size:auto_4rem]" : ""}`}
     >
       <div className="group relative flex gap-2 rounded-md px-1 py-0.5 hover:z-10 hover:bg-muted/40 sm:gap-3 sm:px-2">
         <div className="w-9 shrink-0">
@@ -146,7 +244,10 @@ export const MessageItem = memo(function MessageItem({
             <div className="flex items-baseline gap-2">
               <span className="text-sm font-semibold text-foreground">{message.username}</span>
 
-              <span className="text-[11px] text-muted-foreground">{time(message.createdAt)}</span>
+              <span className="text-[11px] text-muted-foreground">
+                {formatMessageTime(message.createdAt)}
+              </span>
+              <EditedLabel message={message} />
             </div>
           )}
 
@@ -159,51 +260,20 @@ export const MessageItem = memo(function MessageItem({
           )}
 
           {isEditing ? (
-            <div className="flex gap-2">
-              <Input
-                id={`message-edit-${message.id}`}
-                type="text"
-                value={editContent}
-                autoComplete="off"
-                onChange={(event) => onEditContentChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    onSaveEdit(message.id);
-                  }
-
-                  if (event.key === "Escape") {
-                    onCancelEdit();
-                  }
-                }}
-              />
-
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-8 w-8 p-0 text-primary [&_svg]:size-4"
-                  onClick={() => onSaveEdit(message.id)}
-                >
-                  <Check />
-                  <span className="sr-only">Salvar edição</span>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="h-8 w-8 p-0 text-muted-foreground [&_svg]:size-4"
-                  onClick={onCancelEdit}
-                >
-                  <X />
-                  <span className="sr-only">Cancelar edição</span>
-                </Button>
-              </div>
-            </div>
+            <MessageEditor
+              messageId={message.id}
+              value={editContent}
+              error={editError}
+              onChange={onEditContentChange}
+              onSave={onSaveEdit}
+              onCancel={onCancelEdit}
+            />
           ) : (
             <div
               className={`relative text-sm leading-relaxed text-foreground/90 ${canDeleteMessage ? "pr-12 md:pr-0" : ""}`}
             >
               <Markdown content={message.content} onRoomClick={onRoomClick} />
+              {grouped && <EditedLabel message={message} />}
               {canDeleteMessage && (
                 <MessageActions
                   isOwnMessage={isOwnMessage}

@@ -109,8 +109,12 @@ export const updateRoom = (roomId: string, input: UpdateRoomInput) =>
 export const deleteRoom = (roomId: string) =>
   api<void>(`/api/rooms/${roomId}`, { method: "DELETE" });
 
+const HISTORY_FETCH_TIMEOUT_MS = 10_000;
+
 export const listMessages = (roomId: string, limit = 50) =>
-  api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`);
+  api<HistoryMessage[]>(`/api/rooms/${roomId}/messages?limit=${limit}`, {
+    signal: AbortSignal.timeout(HISTORY_FETCH_TIMEOUT_MS),
+  });
 
 export const updateMessage = (roomId: string, messageId: string, content: string) =>
   api<HistoryMessage>(`/api/rooms/${roomId}/messages/${messageId}`, {
