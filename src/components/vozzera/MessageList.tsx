@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+
 import { updateMessage } from "@/lib/vozzera/api";
 import { dateGroupLabelFor, isNearBottom } from "@/lib/vozzera/chat";
 import { lastOwnMessage, shouldGroupMessages } from "@/lib/vozzera/message-display";
@@ -50,7 +52,6 @@ export const MessageList = memo(function MessageList({
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
@@ -155,13 +156,11 @@ export const MessageList = memo(function MessageList({
     focusAfterEditRef.current = messageId;
     setEditingMessageId(null);
     setEditContent("");
-    setEditError(null);
   }, []);
 
   const startEditing = useCallback((message: ChatMessage) => {
     setEditingMessageId(message.id);
     setEditContent(message.content);
-    setEditError(null);
   }, []);
 
   useEffect(() => {
@@ -194,7 +193,6 @@ export const MessageList = memo(function MessageList({
       }
 
       savingEditRef.current = true;
-      setEditError(null);
 
       try {
         await updateMessage(roomId, messageId, content);
@@ -202,7 +200,9 @@ export const MessageList = memo(function MessageList({
         closeEditing(messageId);
       } catch (error) {
         console.error(`Falha ao editar a mensagem ${messageId}:`, error);
-        setEditError("Não consegui salvar a edição. Tente de novo.");
+        toast.error("Não consegui salvar a edição. Tente de novo.", {
+          id: "message-edit-failed",
+        });
       } finally {
         savingEditRef.current = false;
       }
@@ -338,7 +338,6 @@ export const MessageList = memo(function MessageList({
                   canDeleteMessage={canDeleteMessage}
                   isEditing={isEditing}
                   editContent={isEditing ? editContent : ""}
-                  editError={isEditing ? editError : null}
                   onStartEdit={startEditing}
                   onRequestDelete={setDeleteTarget}
                   onEditContentChange={handleEditContentChange}

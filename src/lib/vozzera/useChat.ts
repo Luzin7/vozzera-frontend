@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import {
   createRoom as createRoomApi,
@@ -383,7 +384,8 @@ export function useChat(options?: ChatOptions) {
   const handleEvent = useCallback(
     (event: OutboundEvent) => {
       if (event.type === "error") {
-        setBanner(event.error ?? "Erro no servidor.");
+        const message = event.error ?? "Erro no servidor.";
+        toast.error(message, { id: message });
         return;
       }
 
@@ -575,7 +577,7 @@ export function useChat(options?: ChatOptions) {
           return;
         }
 
-        setBanner("Não consegui carregar o histórico.");
+        toast.error("Não consegui carregar o histórico.", { id: "history-load-failed" });
       } finally {
         setLoadingHistory(false);
       }
@@ -741,7 +743,7 @@ export function useChat(options?: ChatOptions) {
         return;
       }
 
-      setBanner("Não consegui excluir a mensagem.");
+      toast.error("Não consegui excluir a mensagem.", { id: "message-delete-failed" });
     }
   }, []);
 
@@ -798,8 +800,9 @@ export function useChat(options?: ChatOptions) {
     }
 
     if (!notificationPermissionGranted()) {
-      setBanner(
+      toast.error(
         "Notificações bloqueadas no navegador. Libere nas configurações do navegador e tente de novo.",
+        { id: "notifications-blocked" },
       );
       return;
     }

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, BellOff, Menu, Settings, Volume2 } from "lucide-react";
+import { Bell, BellOff, Menu, Settings, Volume2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -48,6 +49,7 @@ const SettingsDialog = lazy(() =>
 const title = "Vozzera — servidor privado de chat e voz";
 const description =
   "Chat em tempo real por convite: salas de texto, histórico e mensagens ao vivo para você e seus amigos.";
+const notifyError = (message: string) => toast.error(message, { id: message });
 const offlineBanner = "Você está offline. A conexão volta sozinha.";
 
 export const Route = createFileRoute("/")({
@@ -132,6 +134,7 @@ function Index() {
   const isMobile = useIsMobile();
   const isOnline = useOnline();
   const voice = useVoice();
+  const { error: voiceError, clearError: clearVoiceError } = voice;
   const { request: editLastRequest, requestEditLast } = useEditLastRequest();
   const {
     screenShareEnabled,
@@ -249,7 +252,7 @@ function Index() {
   const appBadge = useAppBadge(totalUnread(unread));
   const miniWindow = useVoiceMiniWindow({
     active: voice.status === "connected",
-    onError: showBanner,
+    onError: notifyError,
   });
   const inactivity = useInactivity({
     enabled: authed === true,
@@ -298,8 +301,10 @@ function Index() {
   }, []);
 
   useEffect(() => {
-    if (voice.error) showBanner(voice.error);
-  }, [voice.error, showBanner]);
+    if (!voiceError) return;
+    toast.error(voiceError, { id: voiceError });
+    clearVoiceError();
+  }, [voiceError, clearVoiceError]);
 
   useEffect(() => {
     if (settingsOpen) void ensureKrispLoaded();
@@ -544,8 +549,13 @@ function Index() {
             className="flex items-center justify-between gap-3 border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground"
           >
             <span>{banner}</span>
-            <button onClick={dismissBanner} className="underline">
-              ok
+            <button
+              type="button"
+              onClick={dismissBanner}
+              aria-label="Fechar aviso"
+              className="inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/15 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         )}
@@ -604,6 +614,11 @@ function Index() {
                 micEnabled={voice.micEnabled}
                 deafen={voice.deafen}
                 volumes={voice.volumes}
+                screenShareVolumes={voice.screenShareVolumes}
+                onSetVolume={voice.setParticipantVolume}
+                onSetScreenShareVolume={voice.setScreenShareVolume}
+                onToggleLocalMute={voice.toggleLocalMute}
+                onToggleLocalScreenShareMute={voice.toggleLocalScreenShareMute}
                 mutedParticipants={voice.mutedParticipants}
                 deafenedParticipants={voice.deafenedParticipants}
                 speakingIdentities={voice.speakingIdentities}
@@ -620,6 +635,7 @@ function Index() {
                 miniWindowSupported={miniWindow.supported}
                 miniWindowOpen={miniWindow.isOpen}
                 onToggleMic={handleToggleMic}
+                onToggleDeafen={handleToggleDeafen}
                 onToggleScreenShare={handleToggleScreenShare}
                 onReduceLocalQuality={reduceScreenQuality}
                 onToggleMiniWindow={miniWindow.toggle}

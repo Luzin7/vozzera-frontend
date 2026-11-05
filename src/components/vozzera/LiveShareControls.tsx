@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import type { ReactNode } from "react";
 import { MonitorPlay, MonitorX } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import type { LiveShare } from "@/lib/vozzera/screen-share-watch";
@@ -25,6 +26,10 @@ function WatchShareButton({
   const handleTimeout = useCallback(() => onStopWatching(identity), [onStopWatching, identity]);
   const { failed, clearFailure } = useLiveShareLoadTimeout(pending, handleTimeout);
 
+  useEffect(() => {
+    if (failed) toast.error(FAILED_LABEL, { id: FAILED_LABEL });
+  }, [failed]);
+
   const handleWatch = () => {
     clearFailure();
     onWatch(identity);
@@ -42,13 +47,6 @@ function WatchShareButton({
         <MonitorPlay className="h-3.5 w-3.5" />
         {pending ? LOADING_LABEL : children}
       </Button>
-      <span
-        role="status"
-        aria-live="polite"
-        className={failed ? "shrink-0 text-xs text-destructive" : "sr-only"}
-      >
-        {failed ? FAILED_LABEL : ""}
-      </span>
     </>
   );
 }

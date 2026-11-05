@@ -15,7 +15,7 @@ import {
   HeadphoneOff,
   Headphones,
 } from "lucide-react";
-import { memo, useRef, type KeyboardEvent } from "react";
+import { memo, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,7 +24,7 @@ import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import type { AwayPresence } from "@/lib/vozzera/away";
 import { VoicePresenceList } from "@/components/vozzera/VoicePresenceList";
 import { cn } from "@/lib/utils";
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 import { nextRoomIndex, type VoicePresence } from "@/lib/vozzera/chat";
 import type { Room } from "@/lib/vozzera/types";
 import type { SocketStatus } from "@/lib/vozzera/useSocket";
@@ -135,6 +135,43 @@ function RoomRowActions({
         </Button>
       )}
     </div>
+  );
+}
+
+function VoiceControlButton({
+  label,
+  active,
+  disabled,
+  onClick,
+  children,
+}: Readonly<{
+  label: string;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button
+            size="icon"
+            variant="ghost"
+            className={cn(
+              "h-11 w-11 md:h-7 md:w-7",
+              active && "text-destructive hover:text-destructive",
+            )}
+            onClick={onClick}
+            disabled={disabled}
+          >
+            {children}
+            <span className="sr-only">{label}</span>
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -278,7 +315,13 @@ export const RoomSidebar = memo(function RoomSidebar({
                 }`}
               >
                 <Hash className="h-4 w-4 shrink-0 opacity-70" />
-                <span className="truncate">{room.name}</span>
+                <span
+                  className={
+                    unread[room.id] ? "truncate font-semibold text-sidebar-foreground" : "truncate"
+                  }
+                >
+                  {room.name}
+                </span>
                 {room.staff_only && (
                   <span className="inline-flex shrink-0" title="Só para moderação">
                     <Lock aria-hidden="true" className="h-3 w-3 text-muted-foreground" />
@@ -389,13 +432,13 @@ export const RoomSidebar = memo(function RoomSidebar({
                       const row = (
                         <span className="flex items-center gap-1.5 truncate">
                           <span
-                            className={`inline-flex shrink-0 rounded-full p-0.5 ${
-                              isSpeaking ? "bg-primary" : "bg-transparent"
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-semibold ring-offset-sidebar transition-[box-shadow] duration-150 motion-reduce:transition-none ${avatarColorClass(name)} ${
+                              isSpeaking
+                                ? "ring-2 ring-primary ring-offset-2"
+                                : "ring-0 ring-offset-0"
                             }`}
                           >
-                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted font-mono text-[10px] font-semibold text-foreground">
-                              {initials(name)}
-                            </span>
+                            {initials(name)}
                           </span>
                           <span className="truncate">{name}</span>
                           {isMuted && <MicOff className="h-3 w-3 shrink-0 text-destructive" />}
@@ -510,26 +553,22 @@ export const RoomSidebar = memo(function RoomSidebar({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-11 w-11 md:h-7 md:w-7"
-                onClick={onToggleDeafen}
+              <VoiceControlButton
+                label={deafen ? "Parar de ensurdecer" : "Ensurdecer"}
+                active={deafen}
                 disabled={voiceStatus !== "connected"}
+                onClick={onToggleDeafen}
               >
                 {deafen ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
-                <span className="sr-only">{deafen ? "Ativar som" : "Mudo total"}</span>
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-11 w-11 md:h-7 md:w-7"
-                onClick={onToggleMic}
+              </VoiceControlButton>
+              <VoiceControlButton
+                label={micEnabled ? "Mutar" : "Desmutar"}
+                active={!micEnabled}
                 disabled={voiceStatus !== "connected"}
+                onClick={onToggleMic}
               >
                 {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-                <span className="sr-only">{micEnabled ? "Silenciar" : "Ativar microfone"}</span>
-              </Button>
+              </VoiceControlButton>
               <Button
                 size="icon"
                 variant="ghost"

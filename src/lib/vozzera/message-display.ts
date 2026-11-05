@@ -35,6 +35,12 @@ export function formatMessageTime(iso: string, timeZone: string = browserTimeZon
   return date.toLocaleTimeString("pt-BR", { timeZone, hour: "2-digit", minute: "2-digit" });
 }
 
+export function formatMessageDateTime(iso: string, timeZone: string = browserTimeZone()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("pt-BR", { timeZone, dateStyle: "short", timeStyle: "short" });
+}
+
 export function formatEditedAt(iso: string, timeZone: string = browserTimeZone()): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

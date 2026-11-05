@@ -1,7 +1,7 @@
 import { HeadphoneOff, Headphones, Mic, MicOff, PhoneOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { initials } from "@/lib/vozzera/avatar";
+import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
 import { AWAY_TOOLTIP_TEXT } from "@/lib/vozzera/away";
 import type { CallTile } from "@/lib/vozzera/away";
 import { isParticipantMuted } from "@/lib/vozzera/voice";
@@ -53,7 +53,7 @@ export function VoiceMiniWindow({
               }`}
             >
               <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs ring-2 ${
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold ring-2 ${avatarColorClass(name)} ${
                   speakingIdentities.includes(identity) ? "ring-primary" : "ring-transparent"
                 }`}
               >
