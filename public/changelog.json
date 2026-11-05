@@ -52,7 +52,26 @@
     }
   ],
   "next": {
-    "items": []
+    "items": [
+      {
+        "title": "feat(voz): anel de fala, push-to-talk e atalhos",
+        "kind": "feat",
+        "pr": 189,
+        "summary": ""
+      },
+      {
+        "title": "feat(voz): live mais sincronizada com a voz",
+        "kind": "feat",
+        "pr": 188,
+        "summary": ""
+      },
+      {
+        "title": "feat(ui): polimento visual e volume mais fácil de achar",
+        "kind": "feat",
+        "pr": 187,
+        "summary": ""
+      }
+    ]
   },
   "releases": [
     {
