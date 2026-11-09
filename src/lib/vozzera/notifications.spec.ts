@@ -3,12 +3,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   canNotify,
   initialNotificationsEnabled,
+  NOTIFICATIONS_NUDGE_STORAGE_KEY,
   playMessageSound,
   NOTIFICATIONS_STORAGE_KEY,
   readNotificationsEnabled,
+  readNotificationsNudgeAsked,
   readSoundEnabled,
+  shouldShowNotificationsNudge,
   SOUND_STORAGE_KEY,
   writeNotificationsEnabled,
+  writeNotificationsNudgeAsked,
   writeSoundEnabled,
 } from "./notifications";
 import type { NotificationStorage } from "./notifications";
@@ -124,6 +128,59 @@ describe("writeSoundEnabled", () => {
 
   it("does nothing when storage is unavailable", () => {
     expect(() => writeSoundEnabled(null, true)).not.toThrow();
+  });
+});
+
+describe("notifications nudge", () => {
+  const base = {
+    clientReady: true,
+    authenticated: true,
+    changelogSettled: true,
+    changelogOpen: false,
+    notificationsEnabled: false,
+    asked: false,
+    permission: "default" as const,
+  };
+
+  it("shows once for an authenticated user with a fresh permission", () => {
+    expect(shouldShowNotificationsNudge(base)).toBe(true);
+  });
+
+  it("waits until the changelog query settles", () => {
+    expect(shouldShowNotificationsNudge({ ...base, changelogSettled: false })).toBe(false);
+  });
+
+  it("stays hidden when the nudge was already asked", () => {
+    const storage = memoryStorage();
+    writeNotificationsNudgeAsked(storage, true);
+
+    expect(readNotificationsNudgeAsked(storage)).toBe(true);
+    expect(shouldShowNotificationsNudge({ ...base, asked: true })).toBe(false);
+  });
+
+  it("waits while the changelog dialog is open", () => {
+    expect(shouldShowNotificationsNudge({ ...base, changelogOpen: true })).toBe(false);
+  });
+
+  it("stays hidden when notifications are already enabled or permission is decided", () => {
+    expect(shouldShowNotificationsNudge({ ...base, notificationsEnabled: true })).toBe(false);
+    expect(shouldShowNotificationsNudge({ ...base, permission: "granted" })).toBe(false);
+    expect(shouldShowNotificationsNudge({ ...base, permission: "denied" })).toBe(false);
+    expect(shouldShowNotificationsNudge({ ...base, permission: "unsupported" })).toBe(false);
+  });
+
+  it("stays hidden before the client is ready or before authentication", () => {
+    expect(shouldShowNotificationsNudge({ ...base, clientReady: false })).toBe(false);
+    expect(shouldShowNotificationsNudge({ ...base, authenticated: false })).toBe(false);
+  });
+
+  it("persists the asked choice", () => {
+    const storage = memoryStorage();
+    writeNotificationsNudgeAsked(storage, true);
+    expect(storage.getItem(NOTIFICATIONS_NUDGE_STORAGE_KEY)).toBe("1");
+
+    writeNotificationsNudgeAsked(storage, false);
+    expect(storage.getItem(NOTIFICATIONS_NUDGE_STORAGE_KEY)).toBeNull();
   });
 });
 

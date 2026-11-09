@@ -48,3 +48,13 @@ export function authErrorMessageFor(err: unknown, mode: AuthMode = "login"): str
   if (err.status === 400) return invalidEmailMessageFor(err, mode) ?? err.message;
   return statusMessageFor(err, mode) ?? (err.message || "Não foi possível concluir.");
 }
+
+export type AuthFormError = "passwordMismatch";
+
+const AUTH_FORM_ERROR_MESSAGES: Record<AuthFormError, string> = {
+  passwordMismatch: "As senhas não coincidem.",
+};
+
+export function authFormErrorMessageFor(error: AuthFormError): string {
+  return AUTH_FORM_ERROR_MESSAGES[error];
+}

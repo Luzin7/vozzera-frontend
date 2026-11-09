@@ -3,11 +3,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { wsUrl } from "@/lib/vozzera/api";
 import {
   backoffDelay,
+  createSocketHeartbeat,
+  isPongFrame,
   isSessionRevokedClose,
   parseFrame,
+  sendPingFrame,
+  SOCKET_FRAME_WATCHDOG_MS,
+  SOCKET_PING_INTERVAL_MS,
   WebSocketProtocolError,
 } from "@/lib/vozzera/chat";
-import type { TypingAction } from "@/lib/vozzera/chat";
+import type { SocketHeartbeat, TypingAction } from "@/lib/vozzera/chat";
 import { createAwayIntentTracker } from "@/lib/vozzera/away-intent";
 import type { AwayCommand, AwayIntent } from "@/lib/vozzera/away-intent";
 import type { InboundEvent, OutboundEvent } from "@/lib/vozzera/types";
@@ -37,6 +42,7 @@ export function useSocket({
   const queue = useRef<InboundEvent[]>([]);
   const attempt = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatRef = useRef<SocketHeartbeat | null>(null);
   const onEventRef = useRef(onEvent);
   const onProtocolErrorRef = useRef(onProtocolError);
   const onSessionExpiredRef = useRef(onSessionExpired);
@@ -78,6 +84,15 @@ export function useSocket({
         attempt.current = 0;
         setStatus("open");
 
+        const heartbeat = createSocketHeartbeat({
+          timeoutMs: SOCKET_FRAME_WATCHDOG_MS,
+          intervalMs: SOCKET_PING_INTERVAL_MS,
+          sendPing: () => sendPingFrame(socket),
+          onTimeout: () => socket.close(),
+        });
+        heartbeatRef.current = heartbeat;
+        heartbeat.open();
+
         for (const roomId of desiredRooms.current) {
           socket.send(JSON.stringify(inboundFrame("room.subscribe", roomId)));
         }
@@ -93,6 +108,10 @@ export function useSocket({
       };
 
       socket.onmessage = (raw) => {
+        heartbeatRef.current?.frame();
+
+        if (isPongFrame(raw)) return;
+
         try {
           const event = parseFrame(raw);
           if (!event) return;
@@ -108,6 +127,8 @@ export function useSocket({
       };
 
       socket.onclose = (event) => {
+        heartbeatRef.current?.close();
+        heartbeatRef.current = null;
         setStatus("closed");
         socketRef.current = null;
 
@@ -169,6 +190,8 @@ export function useSocket({
       }
       retryTimer.current = null;
 
+      heartbeatRef.current?.close();
+      heartbeatRef.current = null;
       socketRef.current?.close();
       socketRef.current = null;
       desiredRoomIds.clear();

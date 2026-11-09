@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChangelogLoadError,
   changelogSchema,
-  readSeenRelease,
-  unseenReleases,
+  syncSeenRelease,
+  unseenReleasesSince,
   writeSeenRelease,
 } from "@/lib/vozzera/changelog";
 import type { Changelog } from "@/lib/vozzera/changelog";
@@ -40,13 +40,14 @@ export function useChangelogQuery(enabled: boolean) {
 }
 
 export function useChangelog(enabled: boolean) {
-  const [seen, setSeen] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSeen(readSeenRelease(changelogStorage()));
-  }, []);
+  const [seen, setSeen] = useState<string | null | undefined>(undefined);
 
   const query = useChangelogQuery(enabled);
+
+  useEffect(() => {
+    if (query.data === undefined) return;
+    setSeen(syncSeenRelease(changelogStorage(), query.data));
+  }, [query.data]);
 
   const dismiss = useCallback(() => {
     const changelog = query.data ?? null;
@@ -57,7 +58,7 @@ export function useChangelog(enabled: boolean) {
     setSeen(changelog.version);
   }, [query.data]);
 
-  const releases = useMemo(() => unseenReleases(query.data ?? null, seen), [query.data, seen]);
+  const releases = useMemo(() => unseenReleasesSince(query.data ?? null, seen), [query.data, seen]);
 
   return {
     changelog: query.data ?? null,

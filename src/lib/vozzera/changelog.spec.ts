@@ -7,10 +7,12 @@ import {
   formatReleaseDate,
   readSeenRelease,
   releasesOf,
+  syncSeenRelease,
+  unseenReleases,
+  unseenReleasesSince,
   visibleItems,
   SEEN_RELEASE_KEY,
   shouldShowChangelog,
-  unseenReleases,
   MAX_UNSEEN_RELEASES,
   writeSeenRelease,
 } from "./changelog";
@@ -188,6 +190,81 @@ describe("unseenReleases", () => {
     expect(versionsOf(unseenReleases(many, oldest))).toEqual(
       versions.slice(0, MAX_UNSEEN_RELEASES),
     );
+  });
+});
+
+describe("syncSeenRelease", () => {
+  const raw = withReleases(["v1.4.0", "v1.3.0", "v1.2.0"]);
+
+  it("records the latest release silently on a first visit", () => {
+    const storage = memoryStorage();
+    const seen = syncSeenRelease(storage, raw);
+
+    expect(seen).toBe("v1.4.0");
+    expect(storage.getItem(SEEN_RELEASE_KEY)).toBe("v1.4.0");
+    expect(unseenReleases(raw, seen)).toEqual([]);
+  });
+
+  it("keeps the version a returning user already saw and still shows the newer ones", () => {
+    const storage = memoryStorage();
+    writeSeenRelease(storage, "v1.3.0");
+
+    const seen = syncSeenRelease(storage, raw);
+
+    expect(seen).toBe("v1.3.0");
+    expect(storage.getItem(SEEN_RELEASE_KEY)).toBe("v1.3.0");
+    expect(versionsOf(unseenReleases(raw, seen))).toEqual(["v1.4.0"]);
+  });
+
+  it("records nothing without a changelog", () => {
+    const storage = memoryStorage();
+
+    expect(syncSeenRelease(storage, null)).toBeNull();
+    expect(storage.getItem(SEEN_RELEASE_KEY)).toBeNull();
+  });
+
+  it("records nothing when no release has a summary", () => {
+    const storage = memoryStorage();
+
+    expect(syncSeenRelease(storage, changelog("v1.0.0", 0))).toBeNull();
+    expect(storage.getItem(SEEN_RELEASE_KEY)).toBeNull();
+  });
+
+  it("suppresses the dialog without storage", () => {
+    expect(syncSeenRelease(null, raw)).toBe("v1.4.0");
+    expect(unseenReleases(raw, "v1.4.0")).toEqual([]);
+  });
+});
+
+describe("unseenReleasesSince", () => {
+  const raw = withReleases(["v1.4.0", "v1.3.0", "v1.2.0"]);
+
+  it("shows nothing while the seen version is not established", () => {
+    expect(unseenReleasesSince(raw, undefined)).toEqual([]);
+  });
+
+  it("shows nothing with a null stored version", () => {
+    expect(unseenReleasesSince(raw, null)).toEqual([]);
+  });
+
+  it("suppresses a first visit even when the storage is empty", () => {
+    const storage = memoryStorage();
+    const seen = syncSeenRelease(storage, raw);
+
+    expect(unseenReleasesSince(raw, seen)).toEqual([]);
+  });
+
+  it("shows every release newer than the one a returning user saw", () => {
+    const storage = memoryStorage();
+    writeSeenRelease(storage, "v1.2.0");
+
+    const seen = syncSeenRelease(storage, raw);
+
+    expect(versionsOf(unseenReleasesSince(raw, seen))).toEqual(["v1.4.0", "v1.3.0"]);
+  });
+
+  it("shows nothing without a changelog", () => {
+    expect(unseenReleasesSince(null, "v1.2.0")).toEqual([]);
   });
 });
 
