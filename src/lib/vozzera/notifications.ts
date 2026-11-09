@@ -1,5 +1,6 @@
 export const NOTIFICATIONS_STORAGE_KEY = "vozzera:notifications-enabled";
 export const SOUND_STORAGE_KEY = "vozzera:sound-enabled";
+export const NOTIFICATIONS_NUDGE_STORAGE_KEY = "vozzera:notifications-nudge-asked";
 
 export type NotificationStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -35,6 +36,51 @@ export function writeSoundEnabled(storage: NotificationStorage | null, enabled: 
 
 export function notificationPermissionGranted(): boolean {
   return typeof Notification !== "undefined" && Notification.permission === "granted";
+}
+
+export type NotificationPermissionState = NotificationPermission | "unsupported";
+
+export function notificationPermissionState(): NotificationPermissionState {
+  if (typeof Notification === "undefined") return "unsupported";
+  return Notification.permission;
+}
+
+export type NotificationsNudgeInput = {
+  clientReady: boolean;
+  authenticated: boolean;
+  changelogSettled: boolean;
+  changelogOpen: boolean;
+  notificationsEnabled: boolean;
+  asked: boolean;
+  permission: NotificationPermissionState;
+};
+
+export function shouldShowNotificationsNudge({
+  clientReady,
+  authenticated,
+  changelogSettled,
+  changelogOpen,
+  notificationsEnabled,
+  asked,
+  permission,
+}: NotificationsNudgeInput): boolean {
+  if (!clientReady || !authenticated || !changelogSettled) return false;
+  if (changelogOpen || notificationsEnabled || asked) return false;
+  return permission === "default";
+}
+
+export function readNotificationsNudgeAsked(storage: NotificationStorage | null): boolean {
+  if (storage === null) return false;
+  return storage.getItem(NOTIFICATIONS_NUDGE_STORAGE_KEY) === "1";
+}
+
+export function writeNotificationsNudgeAsked(
+  storage: NotificationStorage | null,
+  asked: boolean,
+): void {
+  if (storage === null) return;
+  if (asked) storage.setItem(NOTIFICATIONS_NUDGE_STORAGE_KEY, "1");
+  else storage.removeItem(NOTIFICATIONS_NUDGE_STORAGE_KEY);
 }
 
 export function initialNotificationsEnabled(storage: NotificationStorage | null): boolean {

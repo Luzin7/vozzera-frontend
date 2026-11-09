@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bell, BellOff, Menu, Settings, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -6,11 +7,13 @@ import { createPortal } from "react-dom";
 
 import { AppViewport } from "@/components/vozzera/AppViewport";
 import { AuthForm } from "@/components/vozzera/AuthForm";
+import { ConnectionStatusBanner } from "@/components/vozzera/ConnectionStatusBanner";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
 import { MemberList } from "@/components/vozzera/MemberList";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
+import { NotificationsNudge } from "@/components/vozzera/NotificationsNudge";
 import { RoomSettingsView } from "@/components/vozzera/RoomSettingsView";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
 import { ServerUnavailableScreen } from "@/components/vozzera/ServerUnavailableScreen";
@@ -22,10 +25,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnline } from "@/hooks/useOnline";
-import { totalUnread, typingIndicatorText } from "@/lib/vozzera/chat";
+import { totalUnread, shouldShowReconnectingBanner, typingIndicatorText } from "@/lib/vozzera/chat";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { callTilesForView } from "@/lib/vozzera/away";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
+import {
+  notificationPermissionState,
+  readNotificationsNudgeAsked,
+  shouldShowNotificationsNudge,
+  writeNotificationsNudgeAsked,
+} from "@/lib/vozzera/notifications";
 import { useEditLastRequest } from "@/lib/vozzera/use-edit-last-request";
 import { useInactivity } from "@/lib/vozzera/use-inactivity";
 import { useAppBadge } from "@/lib/vozzera/use-app-badge";
@@ -135,6 +144,10 @@ function Index() {
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
   const [voiceChatOpen, setVoiceChatOpen] = useState(false);
   const [settingsRoomId, setSettingsRoomId] = useState<string | null>(null);
+  const [nudgeAsked, setNudgeAsked] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
+  const [hasConnected, setHasConnected] = useState(false);
+  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const isOnline = useOnline();
   const voice = useVoice();
@@ -310,6 +323,23 @@ function Index() {
     setSettingsOpen(true);
   }, []);
 
+  const dismissNotificationsNudge = useCallback(() => {
+    writeNotificationsNudgeAsked(typeof localStorage === "undefined" ? null : localStorage, true);
+    setNudgeAsked(true);
+  }, []);
+
+  const enableNotificationsFromNudge = useCallback(() => {
+    dismissNotificationsNudge();
+    void toggleNotifications();
+  }, [dismissNotificationsNudge, toggleNotifications]);
+
+  useEffect(() => {
+    setNudgeAsked(
+      readNotificationsNudgeAsked(typeof localStorage === "undefined" ? null : localStorage),
+    );
+    setClientReady(true);
+  }, []);
+
   useEffect(() => {
     if (!voiceError) return;
     toast.error(voiceError, { id: voiceError });
@@ -387,6 +417,30 @@ function Index() {
     },
     [visibleVoiceRoom, sendMessage],
   );
+
+  const changelogStatus = queryClient.getQueryState(["changelog"])?.status;
+  const changelogSettled = changelogStatus === "success" || changelogStatus === "error";
+
+  const showNotificationsNudge = shouldShowNotificationsNudge({
+    clientReady,
+    authenticated: authed === true,
+    changelogSettled,
+    changelogOpen: shouldShowChangelog,
+    notificationsEnabled,
+    asked: nudgeAsked,
+    permission: notificationPermissionState(),
+  });
+
+  const showReconnectingBanner = shouldShowReconnectingBanner({
+    hasConnected,
+    online: isOnline,
+    socketOpen: socketStatus === "open",
+  });
+
+  useEffect(() => {
+    if (socketStatus !== "open") return;
+    setHasConnected(true);
+  }, [socketStatus]);
 
   const sidebarProps = {
     rooms,
@@ -552,6 +606,8 @@ function Index() {
           )}
         </header>
 
+        <ConnectionStatusBanner visible={showReconnectingBanner} />
+
         {banner && (
           <div
             role="status"
@@ -569,6 +625,12 @@ function Index() {
             </button>
           </div>
         )}
+
+        <NotificationsNudge
+          visible={showNotificationsNudge}
+          onEnable={enableNotificationsFromNudge}
+          onDismiss={dismissNotificationsNudge}
+        />
 
         {settingsRoom ? (
           <RoomSettingsView

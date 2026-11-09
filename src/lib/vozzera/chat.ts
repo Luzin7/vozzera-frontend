@@ -20,6 +20,139 @@ export function backoffDelay(attempt: number): number {
   return Math.min(1000 * 2 ** attempt, 15000);
 }
 
+export const SOCKET_FRAME_WATCHDOG_MS = 120_000;
+export const SOCKET_PING_INTERVAL_MS = 25_000;
+export const PING_FRAME = JSON.stringify({ type: "ping" });
+
+export type FrameWatchdog = {
+  touch: () => void;
+  stop: () => void;
+};
+
+export function createFrameWatchdog({
+  timeoutMs,
+  onTimeout,
+}: {
+  timeoutMs: number;
+  onTimeout: () => void;
+}): FrameWatchdog {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const stop = () => {
+    if (timer === null) return;
+    clearTimeout(timer);
+    timer = null;
+  };
+
+  const touch = () => {
+    stop();
+    timer = setTimeout(() => {
+      timer = null;
+      onTimeout();
+    }, timeoutMs);
+  };
+
+  return { touch, stop };
+}
+
+export type PingScheduler = {
+  start: () => void;
+  stop: () => void;
+};
+
+export function createPingScheduler({
+  intervalMs,
+  send,
+}: {
+  intervalMs: number;
+  send: () => void;
+}): PingScheduler {
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  const stop = () => {
+    if (timer === null) return;
+    clearInterval(timer);
+    timer = null;
+  };
+
+  const start = () => {
+    stop();
+    timer = setInterval(send, intervalMs);
+  };
+
+  return { start, stop };
+}
+
+export function isPongFrame(raw: MessageEvent): boolean {
+  if (typeof raw.data !== "string") return false;
+
+  try {
+    return (JSON.parse(raw.data) as { type?: unknown }).type === "pong";
+  } catch {
+    return false;
+  }
+}
+
+export function sendPingFrame(socket: Pick<WebSocket, "readyState" | "send">): void {
+  if (socket.readyState !== WebSocket.OPEN) return;
+  socket.send(PING_FRAME);
+}
+
+export type SocketHeartbeat = {
+  open: () => void;
+  frame: () => void;
+  close: () => void;
+};
+
+export function createSocketHeartbeat({
+  timeoutMs,
+  intervalMs,
+  sendPing,
+  onTimeout,
+}: {
+  timeoutMs: number;
+  intervalMs: number;
+  sendPing: () => void;
+  onTimeout: () => void;
+}): SocketHeartbeat {
+  let watchdog: FrameWatchdog | null = null;
+  let ping: PingScheduler | null = null;
+
+  const close = () => {
+    watchdog?.stop();
+    watchdog = null;
+    ping?.stop();
+    ping = null;
+  };
+
+  const open = () => {
+    close();
+    watchdog = createFrameWatchdog({ timeoutMs, onTimeout });
+    watchdog.touch();
+    ping = createPingScheduler({ intervalMs, send: sendPing });
+    ping.start();
+  };
+
+  const frame = () => watchdog?.touch();
+
+  return { open, frame, close };
+}
+
+export type ReconnectingBannerInput = {
+  hasConnected: boolean;
+  online: boolean;
+  socketOpen: boolean;
+};
+
+export function shouldShowReconnectingBanner({
+  hasConnected,
+  online,
+  socketOpen,
+}: ReconnectingBannerInput): boolean {
+  if (!hasConnected || !online || socketOpen) return false;
+  return true;
+}
+
 const SESSION_REVOKED_CLOSE_CODE = 4001;
 
 export function isSessionRevokedClose(code: number): boolean {

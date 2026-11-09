@@ -251,6 +251,8 @@ O front rejeita frames sem `v: 1`, tipos desconhecidos e payloads incompatíveis
 
 `room.subscribe` é autorizado pelo backend pela política de acesso da sala: salas `staff_only` exigem `mod`/`admin`. A ausência de erro depois do envio não confirma a inscrição; uma inscrição negada é silenciosa na versão atual.
 
+**Heartbeat**: o front envia `{"type":"ping"}` a cada 25 s e reinicia um watchdog de 120 s a cada frame recebido; se nenhum `{"type":"pong"}` chegar dentro da janela, fecha a conexão e reconecta com backoff. Esse contrato exige o heartbeat do backend `vozzera` (`internal/chat`, `CmdPing`/`EventPong`) **implantado antes** deste front; sem ele, o watchdog derruba e reconecta a conexão a cada 2 minutos.
+
 ### Outbound (server → front)
 
 Os eventos de uma sala usam o tópico `room:<uuid>`. A lista de salas usa `app:rooms:members` (quem não é staff) e `app:rooms:staff` (mod/admin), assinados pelo servidor na conexão. Sala `staff_only` nunca é anunciada em `app:rooms:members`: quando vira restrita, quem não é staff recebe `room.deleted`. O `topic` do envelope de `room.deleted` é sempre `room:<uuid>`, mesmo quando entregue pela lista.

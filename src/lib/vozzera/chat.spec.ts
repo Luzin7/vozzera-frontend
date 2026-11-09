@@ -6,6 +6,9 @@ import {
   appendMessage,
   backoffDelay,
   clearActiveRoomId,
+  createFrameWatchdog,
+  createPingScheduler,
+  createSocketHeartbeat,
   createTypingAnnouncer,
   dateGroupLabelFor,
   expireTypingUsers,
@@ -14,14 +17,20 @@ import {
   isNearBottom,
   anchoredScrollTop,
   isPrepend,
+  isPongFrame,
   isSessionRevokedClose,
   nextRoomIndex,
   parseFrame,
+  PING_FRAME,
   readActiveRoomId,
   removeOnlineUser,
   removeRoom,
   removeTypingUser,
   replaceOnlineUsers,
+  sendPingFrame,
+  shouldShowReconnectingBanner,
+  SOCKET_FRAME_WATCHDOG_MS,
+  SOCKET_PING_INTERVAL_MS,
   typingIndicatorText,
   updateTypingUsers,
   updateVoicePresence,
@@ -938,5 +947,187 @@ describe("isPrepend", () => {
     expect(
       isPrepend({ firstId: "a", lastId: "z" }, { firstId: undefined, lastId: undefined }),
     ).toBe(false);
+  });
+});
+
+describe("createFrameWatchdog", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("fires after the silence window", () => {
+    const onTimeout = vi.fn();
+    const watchdog = createFrameWatchdog({ timeoutMs: SOCKET_FRAME_WATCHDOG_MS, onTimeout });
+
+    watchdog.touch();
+    vi.advanceTimersByTime(SOCKET_FRAME_WATCHDOG_MS - 1);
+    expect(onTimeout).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire while frames keep arriving", () => {
+    const onTimeout = vi.fn();
+    const watchdog = createFrameWatchdog({ timeoutMs: SOCKET_FRAME_WATCHDOG_MS, onTimeout });
+
+    for (let step = 0; step < 5; step += 1) {
+      watchdog.touch();
+      vi.advanceTimersByTime(SOCKET_FRAME_WATCHDOG_MS - 1);
+    }
+
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+
+  it("does not fire after stop", () => {
+    const onTimeout = vi.fn();
+    const watchdog = createFrameWatchdog({ timeoutMs: SOCKET_FRAME_WATCHDOG_MS, onTimeout });
+
+    watchdog.touch();
+    watchdog.stop();
+    vi.advanceTimersByTime(SOCKET_FRAME_WATCHDOG_MS * 2);
+
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+});
+
+describe("createPingScheduler", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("sends on every interval and stops on stop", () => {
+    const send = vi.fn();
+    const scheduler = createPingScheduler({ intervalMs: SOCKET_PING_INTERVAL_MS, send });
+
+    scheduler.start();
+    vi.advanceTimersByTime(SOCKET_PING_INTERVAL_MS - 1);
+    expect(send).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(SOCKET_PING_INTERVAL_MS);
+    expect(send).toHaveBeenCalledTimes(2);
+
+    scheduler.stop();
+    vi.advanceTimersByTime(SOCKET_PING_INTERVAL_MS * 2);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("sendPingFrame", () => {
+  it("sends a bare ping envelope only while the socket is open", () => {
+    const send = vi.fn();
+    const socket = { readyState: WebSocket.OPEN, send };
+
+    sendPingFrame(socket);
+
+    expect(send).toHaveBeenCalledWith(PING_FRAME);
+    expect(PING_FRAME).toBe('{"type":"ping"}');
+  });
+
+  it("does nothing before the socket opens or after it closes", () => {
+    const send = vi.fn();
+
+    sendPingFrame({ readyState: WebSocket.CONNECTING, send });
+    sendPingFrame({ readyState: WebSocket.CLOSING, send });
+    sendPingFrame({ readyState: WebSocket.CLOSED, send });
+
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("isPongFrame", () => {
+  it("recognizes the pong envelope", () => {
+    expect(isPongFrame({ data: '{"type":"pong"}' } as MessageEvent)).toBe(true);
+  });
+
+  it("ignores frames that are not a pong", () => {
+    expect(isPongFrame({ data: '{"type":"message"}' } as MessageEvent)).toBe(false);
+    expect(isPongFrame({ data: "não é json" } as MessageEvent)).toBe(false);
+    expect(isPongFrame({ data: new ArrayBuffer(0) } as MessageEvent)).toBe(false);
+  });
+});
+
+describe("shouldShowReconnectingBanner", () => {
+  it("stays hidden before the first connection", () => {
+    expect(
+      shouldShowReconnectingBanner({ hasConnected: false, online: true, socketOpen: false }),
+    ).toBe(false);
+  });
+
+  it("stays hidden while the socket is open", () => {
+    expect(
+      shouldShowReconnectingBanner({ hasConnected: true, online: true, socketOpen: true }),
+    ).toBe(false);
+  });
+
+  it("stays hidden while the browser is offline", () => {
+    expect(
+      shouldShowReconnectingBanner({ hasConnected: true, online: false, socketOpen: false }),
+    ).toBe(false);
+  });
+
+  it("shows after a real drop once the socket has connected", () => {
+    expect(
+      shouldShowReconnectingBanner({ hasConnected: true, online: true, socketOpen: false }),
+    ).toBe(true);
+  });
+});
+
+describe("createSocketHeartbeat", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const heartbeatWith = () => {
+    const sendPing = vi.fn();
+    const onTimeout = vi.fn();
+    const heartbeat = createSocketHeartbeat({
+      timeoutMs: SOCKET_FRAME_WATCHDOG_MS,
+      intervalMs: SOCKET_PING_INTERVAL_MS,
+      sendPing,
+      onTimeout,
+    });
+
+    return { heartbeat, sendPing, onTimeout };
+  };
+
+  it("leaves no timer behind when the socket closes before open", () => {
+    const { heartbeat, sendPing, onTimeout } = heartbeatWith();
+
+    heartbeat.close();
+
+    expect(vi.getTimerCount()).toBe(0);
+
+    vi.advanceTimersByTime(SOCKET_FRAME_WATCHDOG_MS * 2);
+    expect(sendPing).not.toHaveBeenCalled();
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+
+  it("stops the ping and the watchdog when an open socket closes", () => {
+    const { heartbeat, sendPing, onTimeout } = heartbeatWith();
+
+    heartbeat.open();
+    vi.advanceTimersByTime(SOCKET_PING_INTERVAL_MS);
+    expect(sendPing).toHaveBeenCalledTimes(1);
+
+    heartbeat.close();
+    expect(vi.getTimerCount()).toBe(0);
+
+    vi.advanceTimersByTime(SOCKET_FRAME_WATCHDOG_MS * 2);
+    expect(sendPing).toHaveBeenCalledTimes(1);
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+
+  it("keeps the watchdog alive while frames arrive", () => {
+    const { heartbeat, onTimeout } = heartbeatWith();
+
+    heartbeat.open();
+
+    for (let step = 0; step < 5; step += 1) {
+      heartbeat.frame();
+      vi.advanceTimersByTime(SOCKET_FRAME_WATCHDOG_MS - 1);
+    }
+
+    expect(onTimeout).not.toHaveBeenCalled();
   });
 });

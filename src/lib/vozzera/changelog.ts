@@ -128,6 +128,30 @@ export function unseenReleases(
     .slice(0, MAX_UNSEEN_RELEASES);
 }
 
+export function syncSeenRelease(
+  storage: ChangelogStorage | null,
+  changelog: Changelog | null,
+): string | null {
+  const seen = readSeenRelease(storage);
+
+  if (changelog === null || seen !== null) return seen;
+
+  const [latest] = unseenReleases(changelog, null);
+
+  if (latest === undefined) return seen;
+
+  writeSeenRelease(storage, latest.version);
+  return latest.version;
+}
+
+export function unseenReleasesSince(
+  changelog: Changelog | null,
+  seen: string | null | undefined,
+): ChangelogRelease[] {
+  if (seen === null || seen === undefined) return [];
+  return unseenReleases(changelog, seen);
+}
+
 export function shouldShowChangelog(changelog: Changelog | null, seen: string | null): boolean {
   return unseenReleases(changelog, seen).length > 0;
 }
