@@ -50,6 +50,7 @@ function message(id: string, roomId = "r1"): ChatMessage {
     content: "oi",
     createdAt: "2026-08-13T00:00:00Z",
     updatedAt: "",
+    replyTo: null,
   };
 }
 
@@ -259,6 +260,7 @@ describe("parseFrame", () => {
         username: "luan",
         content: "oi",
         created_at: wsTimestamp,
+        reply_to: null,
       },
     });
     expect(parseFrame(raw)?.type).toBe("message");
@@ -461,6 +463,7 @@ describe("parseFrame", () => {
           username: "luan",
           content: "oi",
           created_at: wsTimestamp,
+          reply_to: null,
         },
       },
       "message.updated": { topic: room, data: { ...messageRef, content: "oi" } },

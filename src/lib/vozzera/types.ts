@@ -22,6 +22,12 @@ export type UpdateEmailResponse = {
   email: string;
 };
 
+export type ReplyPreview = {
+  id: string;
+  username: string;
+  content: string;
+};
+
 export type HistoryMessage = {
   id: string;
   content: string;
@@ -29,6 +35,7 @@ export type HistoryMessage = {
   updated_at?: string;
   user_id: string;
   username: string;
+  reply_to?: ReplyPreview | null;
 };
 
 export type LoginResponse = {
@@ -66,6 +73,7 @@ export type InboundEvent = {
   data: {
     room_id?: string;
     content?: string;
+    reply_to_message_id?: string;
     reason?: "idle" | "connection";
   };
 };
@@ -105,6 +113,7 @@ export type OutboundEvent =
       content: string;
       created_at: string;
       updated_at?: string;
+      reply_to?: ReplyPreview | null;
     }
   | {
       type: "message";
@@ -202,6 +211,7 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   updatedAt: string;
+  replyTo: ReplyPreview | null;
 };
 
 export const fromHistory = (m: HistoryMessage, roomId: string): ChatMessage => ({
@@ -212,6 +222,7 @@ export const fromHistory = (m: HistoryMessage, roomId: string): ChatMessage => (
   content: m.content,
   createdAt: m.created_at,
   updatedAt: m.updated_at ?? "",
+  replyTo: m.reply_to ?? null,
 });
 
 export const fromEvent = (
@@ -224,6 +235,7 @@ export const fromEvent = (
   content: e.content,
   createdAt: e.created_at,
   updatedAt: e.updated_at ?? "",
+  replyTo: e.reply_to ?? null,
 });
 
 export const MAX_MESSAGE_LENGTH = 2000;

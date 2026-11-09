@@ -152,6 +152,7 @@ function Index() {
   const [nudgeAsked, setNudgeAsked] = useState(false);
   const [clientReady, setClientReady] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingSearchFocusRef = useRef(false);
   const queryClient = useQueryClient();
@@ -183,10 +184,15 @@ function Index() {
   const handleSendMessage = useCallback(
     (content: string) => {
       if (!activeRoom) return;
-      sendMessage(activeRoom.id, content);
+      sendMessage(activeRoom.id, content, replyingTo?.id);
+      setReplyingTo(null);
     },
-    [activeRoom, sendMessage],
+    [activeRoom, sendMessage, replyingTo],
   );
+
+  const handleReplyMessage = useCallback((message: ChatMessage) => setReplyingTo(message), []);
+
+  const handleCancelReply = useCallback(() => setReplyingTo(null), []);
 
   const handleSelectRoom = useCallback(
     (room: Room) => {
@@ -194,6 +200,8 @@ function Index() {
       setVisibleVoiceRoomId(null);
       setVoiceChatOpen(false);
       setSettingsRoomId(null);
+      setSearchQuery("");
+      setReplyingTo(null);
       void openRoom(room);
     },
     [openRoom],
@@ -383,6 +391,7 @@ function Index() {
 
   useEffect(() => {
     setSearchQuery("");
+    setReplyingTo(null);
   }, [activeRoom?.id]);
 
   useEffect(() => {
@@ -428,6 +437,12 @@ function Index() {
     [activeMessages, searchQuery],
   );
   const textRooms = useMemo(() => rooms.filter((room) => !room.has_voice), [rooms]);
+
+  useEffect(() => {
+    if (!replyingTo) return;
+    const targetExists = activeMessages.some((message) => message.id === replyingTo.id);
+    if (!targetExists) setReplyingTo(null);
+  }, [activeMessages, replyingTo]);
   const typingText = activeRoom
     ? typingIndicatorText(Object.values(typingUsers[activeRoom.id] ?? {}))
     : null;
@@ -786,6 +801,7 @@ function Index() {
               typingText={typingText}
               canModerateMessages={canModerateMessages}
               onDelete={handleDeleteMessage}
+              onReply={handleReplyMessage}
               onRoomClick={handleRoomMention}
               unreadMarkerMessageId={
                 unreadMarker?.roomId === activeRoom.id ? unreadMarker.messageId : null
@@ -804,7 +820,9 @@ function Index() {
               roomName={activeRoom.name}
               drafts={drafts}
               disabled={socketStatus !== "open"}
+              replyingTo={replyingTo}
               onSend={handleSendMessage}
+              onCancelReply={handleCancelReply}
               onTypingChange={setTyping}
               onEditLast={requestEditLast}
             />

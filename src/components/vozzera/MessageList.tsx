@@ -37,6 +37,7 @@ export const MessageList = memo(function MessageList({
   typingText,
   canModerateMessages,
   onDelete,
+  onReply,
   onRoomClick,
   unreadMarkerMessageId,
   onUnreadMarkerRead,
@@ -54,6 +55,7 @@ export const MessageList = memo(function MessageList({
   typingText: string | null;
   canModerateMessages: boolean;
   onDelete: (message: ChatMessage) => void;
+  onReply?: (message: ChatMessage) => void;
   onRoomClick: ((roomName: string) => void) | undefined;
   unreadMarkerMessageId?: string | null;
   onUnreadMarkerRead?: (roomId: string) => void;
@@ -439,6 +441,7 @@ export const MessageList = memo(function MessageList({
                   editContent={isEditing ? editContent : ""}
                   onStartEdit={startEditing}
                   onRequestDelete={setDeleteTarget}
+                  onReply={onReply}
                   onEditContentChange={handleEditContentChange}
                   onSaveEdit={handleSaveEdit}
                   onCancelEdit={cancelEditing}

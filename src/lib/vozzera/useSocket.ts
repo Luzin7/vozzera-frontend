@@ -228,8 +228,8 @@ export function useSocket({
   );
 
   const sendMessage = useCallback(
-    (roomId: string, content: string) => {
-      rawSend(inboundFrame("message", roomId, content));
+    (roomId: string, content: string, replyToMessageId?: string) => {
+      rawSend(inboundFrame("message", roomId, content, replyToMessageId));
     },
     [rawSend],
   );

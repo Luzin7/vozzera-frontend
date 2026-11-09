@@ -200,12 +200,15 @@ O frontend solicita áudio estéreo ao LiveKit sem processamento de voz. A publi
     "created_at": "string",
     "user_id": "string",
     "username": "string",
+    "reply_to": { "id": "uuid", "username": "string", "content": "string" } | null,
     "reactions": [
       { "emoji": "string", "count": 2, "user_ids": ["string"] },
     ],
   },
 ]
 ```
+
+`reply_to` é `null` quando a mensagem não responde a outra; quando presente, é o retrato da mensagem original no momento em que a resposta foi criada.
 
 - `reactions` é sempre um array, nunca `null`; sem reações, `[]`.
 - A ordem dos emojis é a da primeira reação de cada um (`created_at`), não a ordem de chegada na resposta.
@@ -278,7 +281,7 @@ O front rejeita frames sem `v: 1`, tipos desconhecidos e payloads incompatíveis
 ```jsonc
 { "v": 1, "type": "room.subscribe", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
 { "v": 1, "type": "room.unsubscribe", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
-{ "v": 1, "type": "message", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid", "content": "string" } }
+{ "v": 1, "type": "message", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid", "content": "string", "reply_to_message_id": "uuid (opcional)" } }
 { "v": 1, "type": "typing.start", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
 { "v": 1, "type": "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
 ```
@@ -294,7 +297,7 @@ Os eventos de uma sala usam o tópico `room:<uuid>`. A lista de salas usa `app:r
 Eventos de mensagem:
 
 ```jsonc
-{ "v": 1, "type": "message.created", "topic": "room:<uuid>", "ts": "string", "data": { "id": "uuid", "room_id": "uuid", "user_id": "uuid", "username": "string", "content": "string", "created_at": "string", "reactions": [{ "emoji": "🎉", "count": 2, "user_ids": ["..."] }] } }
+{ "v": 1, "type": "message.created", "topic": "room:<uuid>", "ts": "string", "data": { "id": "uuid", "room_id": "uuid", "user_id": "uuid", "username": "string", "content": "string", "created_at": "string", "reply_to": { "id": "uuid", "username": "string", "content": "string" } | null, "reactions": [{ "emoji": "🎉", "count": 2, "user_ids": ["..."] }] } }
 { "v": 1, "type": "message.updated", "topic": "room:<uuid>", "ts": "string", "data": { "content_id": "uuid", "room_id": "uuid", "user_id": "uuid", "content": "string" } }
 { "v": 1, "type": "message.deleted", "topic": "room:<uuid>", "ts": "string", "data": { "content_id": "uuid", "room_id": "uuid", "user_id": "uuid", "is_mod": true } }
 ```

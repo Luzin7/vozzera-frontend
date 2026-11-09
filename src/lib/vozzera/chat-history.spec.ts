@@ -24,7 +24,16 @@ import type { HistoryStatuses, OlderHistories, OlderHistory } from "@/lib/vozzer
 import type { ChatMessage } from "@/lib/vozzera/types";
 
 function message(id: string, createdAt: string, content = "oi"): ChatMessage {
-  return { id, roomId: "r1", userId: "u1", username: "luan", content, createdAt, updatedAt: "" };
+  return {
+    id,
+    roomId: "r1",
+    userId: "u1",
+    username: "luan",
+    content,
+    createdAt,
+    updatedAt: "",
+    replyTo: null,
+  };
 }
 
 describe("mergeHistory", () => {

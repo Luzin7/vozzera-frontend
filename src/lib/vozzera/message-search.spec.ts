@@ -12,6 +12,7 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     content: "oi",
     createdAt: "2026-11-05T10:00:00.000Z",
     updatedAt: "",
+    replyTo: null,
     ...overrides,
   };
 }
