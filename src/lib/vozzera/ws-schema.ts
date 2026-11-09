@@ -92,7 +92,7 @@ const messageCreatedData = z.object({
   username: z.string(),
   content: z.string(),
   created_at: timestamp,
-  reply_to: replyPreview.nullable(),
+  reply_to: replyPreview.nullable().default(null),
 });
 
 const messageUpdatedData = z.object({

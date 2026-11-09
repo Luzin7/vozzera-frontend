@@ -35,6 +35,7 @@ export const MessageComposer = memo(function MessageComposer({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const trimmed = value.trim();
   const canSend = !disabled && trimmed.length > 0 && trimmed.length <= MAX_MESSAGE_LENGTH;
+  const canCancelReply = onCancelReply !== undefined;
 
   useEffect(() => {
     onTypingChange(false);
@@ -67,16 +68,18 @@ export const MessageComposer = memo(function MessageComposer({
             </p>
             <p className="truncate text-muted-foreground">{replyPreviewText(replyingTo.content)}</p>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-11 w-11 shrink-0 text-muted-foreground md:h-8 md:w-8"
-            onClick={onCancelReply}
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Cancelar resposta</span>
-          </Button>
+          {canCancelReply && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 shrink-0 text-muted-foreground md:h-8 md:w-8"
+              onClick={onCancelReply}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Cancelar resposta</span>
+            </Button>
+          )}
         </div>
       )}
       <div className="flex min-h-11 min-w-0 items-end gap-2 rounded-lg border border-input bg-card px-2 py-1">
