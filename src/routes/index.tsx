@@ -1,18 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, BellOff, Menu, Settings, Volume2, X } from "lucide-react";
+import { Bell, BellOff, Command as CommandIcon, Menu, Settings, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { AppViewport } from "@/components/vozzera/AppViewport";
 import { AuthForm } from "@/components/vozzera/AuthForm";
+import { CommandPalette } from "@/components/vozzera/CommandPalette";
 import { ConnectionStatusBanner } from "@/components/vozzera/ConnectionStatusBanner";
 import { CreateRoomDialog } from "@/components/vozzera/CreateRoomDialog";
 import { EmailRequiredScreen } from "@/components/vozzera/EmailRequiredScreen";
 import { MemberList } from "@/components/vozzera/MemberList";
 import { MessageComposer } from "@/components/vozzera/MessageComposer";
 import { MessageList } from "@/components/vozzera/MessageList";
+import { MessageSearchField } from "@/components/vozzera/MessageSearchField";
 import { NotificationsNudge } from "@/components/vozzera/NotificationsNudge";
 import { RoomSettingsView } from "@/components/vozzera/RoomSettingsView";
 import { RoomSidebar } from "@/components/vozzera/RoomSidebar";
@@ -26,6 +28,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useOnline } from "@/hooks/useOnline";
 import { totalUnread, shouldShowReconnectingBanner, typingIndicatorText } from "@/lib/vozzera/chat";
+import { filterMessagesByQuery } from "@/lib/vozzera/message-search";
 import type { ChatMessage, Room } from "@/lib/vozzera/types";
 import { callTilesForView } from "@/lib/vozzera/away";
 import { requiresEmailSetup } from "@/lib/vozzera/auth-validation";
@@ -140,6 +143,8 @@ function Index() {
   const [roomDialogOpen, setRoomDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [visibleVoiceRoomId, setVisibleVoiceRoomId] = useState<string | null>(null);
   const [voiceChatOpen, setVoiceChatOpen] = useState(false);
@@ -148,6 +153,8 @@ function Index() {
   const [clientReady, setClientReady] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const pendingSearchFocusRef = useRef(false);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const isOnline = useOnline();
@@ -193,6 +200,8 @@ function Index() {
       setVisibleVoiceRoomId(null);
       setVoiceChatOpen(false);
       setSettingsRoomId(null);
+      setSearchQuery("");
+      setReplyingTo(null);
       void openRoom(room);
     },
     [openRoom],
@@ -241,6 +250,16 @@ function Index() {
   const handleCreateRoom = useCallback(() => {
     setSidebarOpen(false);
     setRoomDialogOpen(true);
+  }, []);
+
+  const focusMessageSearch = useCallback(() => {
+    pendingSearchFocusRef.current = true;
+    setPaletteOpen(false);
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    searchInputRef.current?.focus();
   }, []);
 
   const handleSaveRoom = useCallback(
@@ -371,6 +390,19 @@ function Index() {
   }, [isMobile]);
 
   useEffect(() => {
+    setSearchQuery("");
+    setReplyingTo(null);
+  }, [activeRoom?.id]);
+
+  useEffect(() => {
+    if (paletteOpen || !pendingSearchFocusRef.current) return;
+
+    pendingSearchFocusRef.current = false;
+    const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [paletteOpen]);
+
+  useEffect(() => {
     if (!voiceActiveRoomId) return;
     if (rooms.some((room) => room.id === voiceActiveRoomId)) return;
 
@@ -396,21 +428,21 @@ function Index() {
     void openRoom(fallback);
   }, [voice.status, activeRoom, rooms, openRoom]);
 
-  const activeMessages = useMemo(
-    () => (activeRoom ? (messages[activeRoom.id] ?? []) : []),
-    [activeRoom, messages],
+  const activeMessages = useMemo(() => {
+    if (!activeRoom) return [];
+    return messages[activeRoom.id] ?? [];
+  }, [messages, activeRoom]);
+  const filteredMessages = useMemo(
+    () => filterMessagesByQuery(activeMessages, searchQuery),
+    [activeMessages, searchQuery],
   );
-
-  useEffect(() => {
-    setReplyingTo(null);
-  }, [activeRoom?.id]);
+  const textRooms = useMemo(() => rooms.filter((room) => !room.has_voice), [rooms]);
 
   useEffect(() => {
     if (!replyingTo) return;
     const targetExists = activeMessages.some((message) => message.id === replyingTo.id);
     if (!targetExists) setReplyingTo(null);
   }, [activeMessages, replyingTo]);
-
   const typingText = activeRoom
     ? typingIndicatorText(Object.values(typingUsers[activeRoom.id] ?? {}))
     : null;
@@ -423,6 +455,7 @@ function Index() {
   const settingsRoom = settingsRoomId
     ? (rooms.find((room) => room.id === settingsRoomId) ?? null)
     : null;
+  const searchVisible = Boolean(activeRoom) && visibleVoiceRoom === null && settingsRoom === null;
   const voiceChatMessages = visibleVoiceRoom ? (messages[visibleVoiceRoom.id] ?? []) : [];
   const voiceChatTypingText = visibleVoiceRoom
     ? typingIndicatorText(Object.values(typingUsers[visibleVoiceRoom.id] ?? {}))
@@ -607,23 +640,44 @@ function Index() {
                 : "· todos os membros do servidor leem esta sala"}
             </span>
           )}
-          {activeRoom && !visibleVoiceRoom && !settingsRoom && (
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {searchVisible && (
+              <MessageSearchField
+                value={searchQuery}
+                matchCount={filteredMessages.length}
+                totalCount={activeMessages.length}
+                inputRef={searchInputRef}
+                onChange={setSearchQuery}
+                onClear={clearSearch}
+              />
+            )}
             <button
-              className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => void toggleNotifications()}
-              aria-label={
-                notificationsEnabled
-                  ? "Desativar notificações de desktop"
-                  : "Ativar notificações de desktop"
-              }
+              type="button"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Abrir paleta de comandos"
+              aria-keyshortcuts="Control+K Meta+K"
             >
-              {notificationsEnabled ? (
-                <Bell className="h-4 w-4" />
-              ) : (
-                <BellOff className="h-4 w-4" />
-              )}
+              <CommandIcon className="h-4 w-4" />
             </button>
-          )}
+            {activeRoom && !visibleVoiceRoom && !settingsRoom && (
+              <button
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                onClick={() => void toggleNotifications()}
+                aria-label={
+                  notificationsEnabled
+                    ? "Desativar notificações de desktop"
+                    : "Ativar notificações de desktop"
+                }
+              >
+                {notificationsEnabled ? (
+                  <Bell className="h-4 w-4" />
+                ) : (
+                  <BellOff className="h-4 w-4" />
+                )}
+              </button>
+            )}
+          </div>
         </header>
 
         <ConnectionStatusBanner visible={showReconnectingBanner} />
@@ -740,7 +794,7 @@ function Index() {
         ) : activeRoom ? (
           <>
             <MessageList
-              messages={activeMessages}
+              messages={filteredMessages}
               loading={loadingHistory && activeMessages.length === 0}
               roomId={activeRoom.id}
               roomName={activeRoom.name}
@@ -758,6 +812,7 @@ function Index() {
               olderHistory={olderHistory[activeRoom.id]}
               onLoadOlder={loadOlder}
               editLastRequest={editLastRequest}
+              searchQuery={searchQuery}
             />
             <MessageComposer
               key={activeRoom.id}
@@ -815,6 +870,20 @@ function Index() {
           className="hidden md:flex"
         />
       )}
+
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        rooms={textRooms}
+        canCreateRoom={canManageRooms}
+        canFocusSearch={searchVisible}
+        notificationsEnabled={notificationsEnabled}
+        onSelectRoom={handleSelectRoom}
+        onFocusSearch={focusMessageSearch}
+        onCreateRoom={handleCreateRoom}
+        onOpenSettings={handleOpenSettings}
+        onToggleNotifications={() => void toggleNotifications()}
+      />
 
       <CreateRoomDialog
         open={roomDialogOpen}

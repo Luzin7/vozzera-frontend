@@ -201,11 +201,45 @@ O frontend solicita áudio estéreo ao LiveKit sem processamento de voz. A publi
     "user_id": "string",
     "username": "string",
     "reply_to": { "id": "uuid", "username": "string", "content": "string" } | null,
+    "reactions": [
+      { "emoji": "string", "count": 2, "user_ids": ["string"] },
+    ],
   },
 ]
 ```
 
 `reply_to` é `null` quando a mensagem não responde a outra; quando presente, é o retrato da mensagem original no momento em que a resposta foi criada.
+
+- `reactions` é sempre um array, nunca `null`; sem reações, `[]`.
+- A ordem dos emojis é a da primeira reação de cada um (`created_at`), não a ordem de chegada na resposta.
+- Nenhuma UI consome `reactions` ainda.
+
+### `POST /api/rooms/{room_id}/messages/{message_id}/reactions`
+
+```jsonc
+// request
+{ "emoji": "string" }
+// response 200
+{ "emoji": "string", "count": 2, "user_ids": ["string"] }
+```
+
+- Adiciona a reação do usuário autenticado ao emoji informado. Idempotente: repetir a mesma reação não duplica nem publica evento; devolve o estado atual.
+- `400` para emoji vazio ou com mais de 10 runes.
+- `400` quando a mensagem já tem 20 emojis distintos e o emoji é novo. Reenviar um emoji que já existe na mensagem é permitido mesmo com 20 distintos.
+- `404` se a mensagem não existe na sala.
+
+### `DELETE /api/rooms/{room_id}/messages/{message_id}/reactions`
+
+```jsonc
+// request
+{ "emoji": "string" }
+// response 200
+{ "emoji": "string", "count": 1, "user_ids": ["string"] }
+```
+
+- Remove a reação do usuário autenticado. Idempotente: remover uma reação inexistente devolve `200` com o estado atual (`count` pode ser `0` e `user_ids` `[]`).
+- `400` para emoji vazio ou com mais de 10 runes; `404` se a mensagem não existe na sala.
+- Nenhuma UI consome estas rotas ainda.
 
 ### `GET /api/presence`
 
@@ -263,10 +297,12 @@ Os eventos de uma sala usam o tópico `room:<uuid>`. A lista de salas usa `app:r
 Eventos de mensagem:
 
 ```jsonc
-{ "v": 1, "type": "message.created", "topic": "room:<uuid>", "ts": "string", "data": { "id": "uuid", "room_id": "uuid", "user_id": "uuid", "username": "string", "content": "string", "created_at": "string", "reply_to": { "id": "uuid", "username": "string", "content": "string" } | null } }
+{ "v": 1, "type": "message.created", "topic": "room:<uuid>", "ts": "string", "data": { "id": "uuid", "room_id": "uuid", "user_id": "uuid", "username": "string", "content": "string", "created_at": "string", "reply_to": { "id": "uuid", "username": "string", "content": "string" } | null, "reactions": [{ "emoji": "🎉", "count": 2, "user_ids": ["..."] }] } }
 { "v": 1, "type": "message.updated", "topic": "room:<uuid>", "ts": "string", "data": { "content_id": "uuid", "room_id": "uuid", "user_id": "uuid", "content": "string" } }
 { "v": 1, "type": "message.deleted", "topic": "room:<uuid>", "ts": "string", "data": { "content_id": "uuid", "room_id": "uuid", "user_id": "uuid", "is_mod": true } }
 ```
+
+`message.created` carrega `reactions` como um campo novo e aditivo: é sempre um array (nunca `null`), ordenado pelo `created_at` da primeira reação de cada emoji, e um cliente antigo que o ignore continua funcionando. Nenhuma UI consome `reactions` ainda.
 
 Eventos de sala:
 
