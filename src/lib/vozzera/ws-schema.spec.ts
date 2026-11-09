@@ -32,6 +32,16 @@ describe("inboundFrame", () => {
       content: "oi",
     });
   });
+
+  it("carries the replied message id when present", () => {
+    expect(
+      inboundFrame("message", roomId, "oi", "00000000-0000-4000-8000-000000000002").data,
+    ).toEqual({
+      room_id: roomId,
+      content: "oi",
+      reply_to_message_id: "00000000-0000-4000-8000-000000000002",
+    });
+  });
 });
 
 describe("awayFrame", () => {

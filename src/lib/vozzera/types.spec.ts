@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { fromEvent, fromHistory } from "./types";
-import type { HistoryMessage } from "./types";
+import type { HistoryMessage, ReplyPreview } from "./types";
+
+const reply: ReplyPreview = {
+  id: "m0",
+  username: "bia",
+  content: "mensagem original",
+};
 
 describe("fromHistory", () => {
   const history: HistoryMessage = {
@@ -21,7 +27,12 @@ describe("fromHistory", () => {
       content: "oi",
       createdAt: "2026-08-13T00:00:00Z",
       updatedAt: "",
+      replyTo: null,
     });
+  });
+
+  it("maps reply_to into replyTo", () => {
+    expect(fromHistory({ ...history, reply_to: reply }, "r1").replyTo).toEqual(reply);
   });
 });
 
@@ -46,6 +57,11 @@ describe("fromEvent", () => {
       content: "oi",
       createdAt: "2026-08-13T00:00:00Z",
       updatedAt: "",
+      replyTo: null,
     });
+  });
+
+  it("maps reply_to into replyTo", () => {
+    expect(fromEvent({ ...base, reply_to: reply }).replyTo).toEqual(reply);
   });
 });

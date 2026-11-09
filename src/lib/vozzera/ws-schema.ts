@@ -14,13 +14,18 @@ export function inboundFrame(
   type: InboundEventType,
   roomId: string,
   content?: string,
+  replyToMessageId?: string,
 ): InboundEvent {
+  const data: InboundEvent["data"] = { room_id: roomId };
+  if (content !== undefined) data.content = content;
+  if (replyToMessageId) data.reply_to_message_id = replyToMessageId;
+
   return {
     v: 1,
     type,
     topic: `room:${roomId}`,
     ts: new Date().toISOString(),
-    data: content === undefined ? { room_id: roomId } : { room_id: roomId, content },
+    data,
   };
 }
 
@@ -74,6 +79,12 @@ const roomData = z.object({
 
 const roomDeletedData = z.object({ id: uuid, is_mod: z.boolean() });
 
+const replyPreview = z.object({
+  id: uuid,
+  username: z.string(),
+  content: z.string(),
+});
+
 const messageCreatedData = z.object({
   id: uuid,
   room_id: uuid,
@@ -81,6 +92,7 @@ const messageCreatedData = z.object({
   username: z.string(),
   content: z.string(),
   created_at: timestamp,
+  reply_to: replyPreview.nullable(),
 });
 
 const messageUpdatedData = z.object({
