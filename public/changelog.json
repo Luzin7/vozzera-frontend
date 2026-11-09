@@ -10,7 +10,20 @@
     }
   ],
   "next": {
-    "items": []
+    "items": [
+      {
+        "title": "feat: search loaded room history and add command palette",
+        "kind": "feat",
+        "pr": 203,
+        "summary": ""
+      },
+      {
+        "title": "feat(chat): reply to a message from the frozen snapshot",
+        "kind": "feat",
+        "pr": 202,
+        "summary": ""
+      }
+    ]
   },
   "releases": [
     {
