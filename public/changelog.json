@@ -15,13 +15,13 @@
         "title": "feat: search loaded room history and add command palette",
         "kind": "feat",
         "pr": 203,
-        "summary": ""
+        "summary": "Achou rapidinho! Agora tem busca dentro do chat e um menu de atalhos: Ctrl/Cmd+K pra pular de sala, abrir os ajustes, ligar ou desligar as notificações e cair direto na busca."
       },
       {
         "title": "feat(chat): reply to a message from the frozen snapshot",
         "kind": "feat",
         "pr": 202,
-        "summary": ""
+        "summary": "Respondeu, ficou claro! Agora dá pra apontar a mensagem que você quer responder: ela aparece citada em cima do campo de texto, com quem falou e um pedaço do que foi dito, e dá pra cancelar antes de enviar."
       }
     ]
   },
