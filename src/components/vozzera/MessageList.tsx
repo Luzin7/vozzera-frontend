@@ -45,6 +45,7 @@ export const MessageList = memo(function MessageList({
   editLastRequest = 0,
   olderHistory,
   onLoadOlder,
+  searchQuery = "",
 }: Readonly<{
   messages: ChatMessage[];
   loading: boolean;
@@ -61,6 +62,7 @@ export const MessageList = memo(function MessageList({
   editLastRequest?: number;
   olderHistory?: OlderHistory | undefined;
   onLoadOlder?: ((roomId: string) => void) | undefined;
+  searchQuery?: string;
 }>) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -274,6 +276,8 @@ export const MessageList = memo(function MessageList({
     [editMessage],
   );
 
+  const searchTerm = searchQuery.trim();
+
   if (loading) {
     return (
       <div className="min-w-0 flex-1 overflow-hidden px-2 py-4 sm:px-4">
@@ -308,6 +312,26 @@ export const MessageList = memo(function MessageList({
             </Button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (messages.length === 0 && searchTerm.length > 0) {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 items-center justify-center px-6 text-center">
+          <div>
+            <p className="text-sm font-medium text-foreground">Nenhuma mensagem encontrada</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Nada no histórico carregado combina com “{searchTerm}”.
+            </p>
+          </div>
+        </div>
+        {typingText && (
+          <p className="px-4 pb-2 text-xs text-muted-foreground" aria-live="polite">
+            {typingText}
+          </p>
+        )}
       </div>
     );
   }
