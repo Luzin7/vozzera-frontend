@@ -1,18 +1,22 @@
-import { SendHorizonal } from "lucide-react";
+import { Reply, SendHorizonal, X } from "lucide-react";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { shouldShowCharCounter, shouldShowSendHint } from "@/lib/vozzera/composer-hints";
 import type { DraftStore } from "@/lib/vozzera/message-display";
+import { replyPreviewText } from "@/lib/vozzera/reply-preview";
 import { MAX_MESSAGE_LENGTH } from "@/lib/vozzera/types";
+import type { ChatMessage } from "@/lib/vozzera/types";
 
 export const MessageComposer = memo(function MessageComposer({
   roomId,
   roomName,
   drafts,
   disabled,
+  replyingTo,
   onSend,
+  onCancelReply,
   onTypingChange,
   onEditLast,
 }: Readonly<{
@@ -20,7 +24,9 @@ export const MessageComposer = memo(function MessageComposer({
   roomName: string;
   drafts: DraftStore;
   disabled: boolean;
+  replyingTo?: ChatMessage | null;
   onSend: (content: string) => void;
+  onCancelReply?: () => void;
   onTypingChange: (typing: boolean) => void;
   onEditLast?: () => void;
 }>) {
@@ -29,6 +35,7 @@ export const MessageComposer = memo(function MessageComposer({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const trimmed = value.trim();
   const canSend = !disabled && trimmed.length > 0 && trimmed.length <= MAX_MESSAGE_LENGTH;
+  const canCancelReply = onCancelReply !== undefined;
 
   useEffect(() => {
     onTypingChange(false);
@@ -52,6 +59,29 @@ export const MessageComposer = memo(function MessageComposer({
 
   return (
     <div className="w-full border-t border-border bg-background px-2 py-1.5 sm:px-4 sm:py-2">
+      {replyingTo && (
+        <div className="mb-1 flex min-w-0 items-center gap-2 border-l-2 border-primary/60 bg-muted/40 px-2 py-1">
+          <Reply className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1 text-xs">
+            <p className="truncate font-medium text-foreground">
+              Respondendo a @{replyingTo.username}
+            </p>
+            <p className="truncate text-muted-foreground">{replyPreviewText(replyingTo.content)}</p>
+          </div>
+          {canCancelReply && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 shrink-0 text-muted-foreground md:h-8 md:w-8"
+              onClick={onCancelReply}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Cancelar resposta</span>
+            </Button>
+          )}
+        </div>
+      )}
       <div className="flex min-h-11 min-w-0 items-end gap-2 rounded-lg border border-input bg-card px-2 py-1">
         <Textarea
           ref={inputRef}

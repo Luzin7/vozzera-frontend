@@ -1,18 +1,42 @@
 {
-  "version": "v1.24.0",
-  "releasedAt": "2026-11-05",
+  "version": "v1.25.0",
+  "releasedAt": "2026-11-09",
   "items": [
     {
-      "title": "feat(voz): contador global da call",
+      "title": "feat: search loaded room history and add command palette",
       "kind": "feat",
-      "pr": 199,
-      "summary": "Contador da call agora é global! Todo mundo, dentro ou fora da call, vê há quanto tempo a resenha tá rolando, desde o primeiro que entrou."
+      "pr": 203,
+      "summary": "Achou rapidinho! Agora tem busca dentro do chat e um menu de atalhos: Ctrl/Cmd+K pra pular de sala, abrir os ajustes, ligar ou desligar as notificações e cair direto na busca."
+    },
+    {
+      "title": "feat(chat): reply to a message from the frozen snapshot",
+      "kind": "feat",
+      "pr": 202,
+      "summary": "Respondeu, ficou claro! Agora dá pra apontar a mensagem que você quer responder: ela aparece citada em cima do campo de texto, com quem falou e um pedaço do que foi dito, e dá pra cancelar antes de enviar."
     }
   ],
   "next": {
     "items": []
   },
   "releases": [
+    {
+      "version": "v1.25.0",
+      "releasedAt": "2026-11-09",
+      "items": [
+        {
+          "title": "feat: search loaded room history and add command palette",
+          "kind": "feat",
+          "pr": 203,
+          "summary": "Achou rapidinho! Agora tem busca dentro do chat e um menu de atalhos: Ctrl/Cmd+K pra pular de sala, abrir os ajustes, ligar ou desligar as notificações e cair direto na busca."
+        },
+        {
+          "title": "feat(chat): reply to a message from the frozen snapshot",
+          "kind": "feat",
+          "pr": 202,
+          "summary": "Respondeu, ficou claro! Agora dá pra apontar a mensagem que você quer responder: ela aparece citada em cima do campo de texto, com quem falou e um pedaço do que foi dito, e dá pra cancelar antes de enviar."
+        }
+      ]
+    },
     {
       "version": "v1.24.0",
       "releasedAt": "2026-11-05",

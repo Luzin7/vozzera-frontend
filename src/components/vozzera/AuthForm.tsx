@@ -5,8 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ForgotPasswordForm } from "@/components/vozzera/ForgotPasswordForm";
 import { login, register } from "@/lib/vozzera/api";
-import { authErrorMessageFor } from "@/lib/vozzera/auth-errors";
-import { registrationEmailErrorFor } from "@/lib/vozzera/auth-validation";
+import { authFormErrorMessageFor } from "@/lib/vozzera/auth-errors";
+import {
+  passwordConfirmationErrorFor,
+  registrationEmailErrorFor,
+  submitAuthCredentials,
+  switchAuthMode,
+} from "@/lib/vozzera/auth-validation";
 import {
   MAX_LOGIN_IDENTIFIER_LENGTH,
   MAX_USERNAME_LENGTH,
@@ -34,10 +39,20 @@ export function AuthForm({ notice, onAuthenticated }: Readonly<Props>) {
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [email, setEmail] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [registeredNotice, setRegisteredNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const changeMode = (next: Mode) => {
+    const draft = switchAuthMode({ mode, error, registeredNotice, confirmation }, next);
+    setMode(draft.mode);
+    setError(draft.error);
+    setRegisteredNotice(draft.registeredNotice);
+    setConfirmation(draft.confirmation);
+  };
 
   const validate = () => {
     const name = username.trim();
@@ -50,15 +65,18 @@ export function AuthForm({ notice, onAuthenticated }: Readonly<Props>) {
     if (password.length < MIN_PASSWORD_LENGTH)
       return `Senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`;
     if (mode === "register") {
+      const confirmationProblem = passwordConfirmationErrorFor(password, confirmation);
+      if (confirmationProblem) return authFormErrorMessageFor(confirmationProblem);
       const emailProblem = registrationEmailErrorFor(email);
       if (emailProblem) return emailProblem;
+      if (!inviteCode.trim()) return "Informe o código de convite.";
     }
-    if (mode === "register" && !inviteCode.trim()) return "Informe o código de convite.";
     return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mode === "forgot") return;
     const problem = validate();
     if (problem) {
       setError(problem);
@@ -67,25 +85,32 @@ export function AuthForm({ notice, onAuthenticated }: Readonly<Props>) {
 
     setBusy(true);
     setError(null);
+    setRegisteredNotice(null);
     const name = username.trim();
 
     try {
-      if (mode === "register") {
-        await register({
-          username: name,
-          password,
-          email: email.trim(),
-          inviteCode: inviteCode.trim(),
-        });
+      const result = await submitAuthCredentials(
+        mode,
+        { username: name, password, email: email.trim(), inviteCode: inviteCode.trim() },
+        { register, login },
+      );
+      if (result.status === "failed") {
+        setError(result.message);
+        return;
       }
-      const session = await login(name, password);
-      onAuthenticated(session.username);
-    } catch (err) {
-      setError(authErrorMessageFor(err, mode));
+      if (result.status === "registered") {
+        setMode("login");
+        setRegisteredNotice(result.notice);
+        setPassword("");
+        return;
+      }
+      onAuthenticated(result.username);
     } finally {
       setBusy(false);
     }
   };
+
+  const displayNotice = notice ?? registeredNotice;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -100,18 +125,18 @@ export function AuthForm({ notice, onAuthenticated }: Readonly<Props>) {
           </p>
         </div>
 
-        {notice && (
+        {displayNotice && (
           <p
             role="status"
             className="mb-4 rounded-md bg-muted px-3 py-2 text-center text-sm text-muted-foreground"
           >
-            {notice}
+            {displayNotice}
           </p>
         )}
 
         <div className="rounded-xl border border-border bg-card p-6">
           {mode === "forgot" ? (
-            <ForgotPasswordForm onBack={() => setMode("login")} />
+            <ForgotPasswordForm onBack={() => changeMode("login")} />
           ) : (
             <>
               <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
@@ -119,10 +144,7 @@ export function AuthForm({ notice, onAuthenticated }: Readonly<Props>) {
                   <button
                     key={m}
                     type="button"
-                    onClick={() => {
-                      setMode(m);
-                      setError(null);
-                    }}
+                    onClick={() => changeMode(m)}
                     className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                       mode === m
                         ? "bg-background text-foreground"
@@ -172,6 +194,20 @@ export function AuthForm({ notice, onAuthenticated }: Readonly<Props>) {
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </div>
+
+                {mode === "register" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">Confirmar senha</Label>
+                    <Input
+                      id="confirm-password"
+                      name="confirmPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmation}
+                      onChange={(e) => setConfirmation(e.target.value)}
+                    />
+                  </div>
+                )}
 
                 {mode === "register" && (
                   <div className="space-y-2">

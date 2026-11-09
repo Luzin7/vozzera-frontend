@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { InboundEventType } from "@/lib/vozzera/types";
+import { fromEvent, type InboundEventType, type OutboundEvent } from "@/lib/vozzera/types";
 import {
   KNOWN_OUTBOUND_TYPES,
   awayFrame,
@@ -30,6 +30,16 @@ describe("inboundFrame", () => {
     expect(inboundFrame("message", roomId, "oi").data).toEqual({
       room_id: roomId,
       content: "oi",
+    });
+  });
+
+  it("carries the replied message id when present", () => {
+    expect(
+      inboundFrame("message", roomId, "oi", "00000000-0000-4000-8000-000000000002").data,
+    ).toEqual({
+      room_id: roomId,
+      content: "oi",
+      reply_to_message_id: "00000000-0000-4000-8000-000000000002",
     });
   });
 });
@@ -98,5 +108,32 @@ describe("voice.session.snapshot frame", () => {
 
   it("is a known outbound type", () => {
     expect(KNOWN_OUTBOUND_TYPES.has("voice.session.snapshot")).toBe(true);
+  });
+});
+
+describe("message.created frame without reply_to", () => {
+  const roomId = "00000000-0000-4000-8000-000000000001";
+  const serverTs = "2026-11-05T12:00:00.000Z";
+  const frame = {
+    v: 1,
+    type: "message.created",
+    topic: `room:${roomId}`,
+    ts: serverTs,
+    data: {
+      id: "00000000-0000-4000-8000-000000000002",
+      room_id: roomId,
+      user_id: "00000000-0000-4000-8000-000000000003",
+      username: "luan",
+      content: "oi",
+      created_at: serverTs,
+    },
+  };
+
+  it("parses and yields replyTo null", () => {
+    const event = outboundFrameSchema.parse(frame);
+    expect(event).toMatchObject({ type: "message", action: "created", reply_to: null });
+    expect(
+      fromEvent(event as Extract<OutboundEvent, { type: "message"; action: "created" }>).replyTo,
+    ).toBeNull();
   });
 });

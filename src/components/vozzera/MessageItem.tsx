@@ -9,7 +9,7 @@ import {
   wasEdited,
 } from "@/lib/vozzera/message-display";
 import type { ChatMessage } from "@/lib/vozzera/types";
-import { Check, MoreHorizontal, Pen, Trash2, X } from "lucide-react";
+import { Check, MoreHorizontal, Pen, Reply, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/vozzera/Markdown";
+import { replyPreviewText } from "@/lib/vozzera/reply-preview";
 
 function EditedLabel({ message }: Readonly<{ message: ChatMessage }>) {
   if (!wasEdited(message)) return null;
@@ -112,10 +113,16 @@ function MessageEditor({
 
 function MessageActions({
   isOwnMessage,
+  canReply,
+  canDeleteMessage,
+  onReply,
   onEdit,
   onDelete,
 }: Readonly<{
   isOwnMessage: boolean;
+  canReply: boolean;
+  canDeleteMessage: boolean;
+  onReply: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }>) {
@@ -135,16 +142,27 @@ function MessageActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {canReply && (
+            <DropdownMenuItem onClick={onReply}>
+              <Reply className="h-4 w-4" />
+              Responder
+            </DropdownMenuItem>
+          )}
           {isOwnMessage && (
             <DropdownMenuItem onClick={onEdit}>
               <Pen className="h-4 w-4" />
               Editar mensagem
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
-            <Trash2 className="h-4 w-4" />
-            Excluir mensagem
-          </DropdownMenuItem>
+          {canDeleteMessage && (
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={onDelete}
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir mensagem
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -153,15 +171,31 @@ function MessageActions({
 
 function DesktopMessageActions({
   isOwnMessage,
+  canReply,
+  canDeleteMessage,
+  onReply,
   onEdit,
   onDelete,
 }: Readonly<{
   isOwnMessage: boolean;
+  canReply: boolean;
+  canDeleteMessage: boolean;
+  onReply: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }>) {
   return (
     <div className="pointer-events-none absolute right-0 top-0 z-20 hidden select-none gap-1 opacity-0 transition-opacity md:flex md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:focus-within:opacity-100">
+      {canReply && (
+        <Button
+          variant="secondary"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground [&_svg]:size-4"
+          onClick={onReply}
+        >
+          <Reply />
+          <span className="sr-only">Responder mensagem</span>
+        </Button>
+      )}
       {isOwnMessage && (
         <Button
           variant="secondary"
@@ -172,14 +206,16 @@ function DesktopMessageActions({
           <span className="sr-only">Editar mensagem</span>
         </Button>
       )}
-      <Button
-        variant="secondary"
-        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-4"
-        onClick={onDelete}
-      >
-        <Trash2 />
-        <span className="sr-only">Excluir mensagem</span>
-      </Button>
+      {canDeleteMessage && (
+        <Button
+          variant="secondary"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive [&_svg]:size-4"
+          onClick={onDelete}
+        >
+          <Trash2 />
+          <span className="sr-only">Excluir mensagem</span>
+        </Button>
+      )}
     </div>
   );
 }
@@ -194,6 +230,7 @@ type MessageItemProps = Readonly<{
   editContent: string;
   onStartEdit: (message: ChatMessage) => void;
   onRequestDelete: (message: ChatMessage) => void;
+  onReply?: ((message: ChatMessage) => void) | undefined;
   onEditContentChange: (content: string) => void;
   onSaveEdit: (messageId: string) => void;
   onCancelEdit: () => void;
@@ -210,11 +247,15 @@ export const MessageItem = memo(function MessageItem({
   editContent,
   onStartEdit,
   onRequestDelete,
+  onReply,
   onEditContentChange,
   onSaveEdit,
   onCancelEdit,
   onRoomClick,
 }: MessageItemProps) {
+  const canReply = onReply !== undefined;
+  const hasActions = !isEditing && (canReply || canDeleteMessage);
+
   return (
     <li
       data-message-id={message.id}
@@ -256,12 +297,26 @@ export const MessageItem = memo(function MessageItem({
             </div>
           )}
 
-          {canDeleteMessage && !isEditing && (
+          {hasActions && (
             <DesktopMessageActions
               isOwnMessage={isOwnMessage}
+              canReply={canReply}
+              canDeleteMessage={canDeleteMessage}
+              onReply={() => onReply?.(message)}
               onEdit={() => onStartEdit(message)}
               onDelete={() => onRequestDelete(message)}
             />
+          )}
+
+          {message.replyTo && (
+            <div className="mb-1 flex min-w-0 max-w-full items-center gap-1.5 border-l-2 border-primary/60 bg-muted/40 px-2 py-0.5 text-xs">
+              <span className="shrink-0 font-medium text-foreground/80">
+                @{message.replyTo.username}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {replyPreviewText(message.replyTo.content)}
+              </span>
+            </div>
           )}
 
           {isEditing ? (
@@ -274,13 +329,16 @@ export const MessageItem = memo(function MessageItem({
             />
           ) : (
             <div
-              className={`relative text-sm leading-relaxed text-foreground/90 ${canDeleteMessage ? "pr-12 md:pr-0" : ""}`}
+              className={`relative text-sm leading-relaxed text-foreground/90 ${hasActions ? "pr-12 md:pr-0" : ""}`}
             >
               <Markdown content={message.content} onRoomClick={onRoomClick} />
               {grouped && <EditedLabel message={message} />}
-              {canDeleteMessage && (
+              {hasActions && (
                 <MessageActions
                   isOwnMessage={isOwnMessage}
+                  canReply={canReply}
+                  canDeleteMessage={canDeleteMessage}
+                  onReply={() => onReply?.(message)}
                   onEdit={() => onStartEdit(message)}
                   onDelete={() => onRequestDelete(message)}
                 />
