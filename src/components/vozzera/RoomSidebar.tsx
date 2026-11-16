@@ -387,10 +387,12 @@ export const RoomSidebar = memo(function RoomSidebar({
                       </span>
                     )}
                     <span className="ml-auto flex shrink-0 items-center gap-1">
-                      <CallDuration
-                        startedAt={callSessions[room.id] ?? null}
-                        className="min-w-[7ch] text-right text-[10px] tabular-nums text-muted-foreground"
-                      />
+                      {onlineParticipants.length > 0 && (
+                        <CallDuration
+                          startedAt={callSessions[room.id] ?? null}
+                          className="min-w-[7ch] text-right text-[10px] tabular-nums text-muted-foreground"
+                        />
+                      )}
                       {unread[room.id] ? (
                         <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
                           {unread[room.id]}
