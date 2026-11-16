@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { formatCallDuration } from "@/lib/vozzera/call-duration";
-import { applySessionSnapshot, type CallSessions } from "@/lib/vozzera/call-session";
+import {
+  applySessionSnapshot,
+  dropSessionWithoutPresence,
+  type CallSessions,
+} from "@/lib/vozzera/call-session";
 import type { OutboundEvent } from "@/lib/vozzera/types";
 
 type SessionSnapshotEvent = Extract<OutboundEvent, { type: "voice.session.snapshot" }>;
@@ -53,5 +57,23 @@ describe("applySessionSnapshot", () => {
 
     expect(["1:59:59", "2:00:00"]).toContain(shown);
     expect(serverNow + 40 - sessions[ROOM_ID]!).toBe(2 * HOUR_MS);
+  });
+});
+
+describe("dropSessionWithoutPresence", () => {
+  const participant = { sid: "PA_1", user_id: "u1", username: "Luan" };
+
+  it("keeps the session while the room still has participants", () => {
+    const sessions: CallSessions = { [ROOM_ID]: 1 };
+
+    expect(dropSessionWithoutPresence(sessions, { [ROOM_ID]: [participant] }, ROOM_ID)).toBe(
+      sessions,
+    );
+  });
+
+  it("drops the session when the room has no participants left", () => {
+    const sessions: CallSessions = { [ROOM_ID]: 1, other: 2 };
+
+    expect(dropSessionWithoutPresence(sessions, {}, ROOM_ID)).toEqual({ other: 2 });
   });
 });

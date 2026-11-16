@@ -47,6 +47,8 @@ const props = {
   onToggleDeafen: noop,
 };
 const sidebar = () => h(RoomSidebar, props as never);
+const sidebarWith = (overrides: Record<string, unknown>) =>
+  h(RoomSidebar, { ...props, ...overrides } as never);
 
 describe("AppProviders", () => {
   it("connected voice panel crashes without the root provider", () => {
@@ -55,5 +57,30 @@ describe("AppProviders", () => {
 
   it("connected voice panel renders inside AppProviders", () => {
     expect(() => renderToString(h(AppProviders, null, sidebar()))).not.toThrow();
+  });
+});
+
+describe("RoomSidebar call timer", () => {
+  const startedAt = Date.parse("2026-11-15T10:00:00.000Z");
+  const participant = { sid: "PA_1", user_id: "u1", username: "Luan" };
+
+  it("hides the timer when the room has no participants", () => {
+    const html = renderToString(
+      h(AppProviders, null, sidebarWith({ callSessions: { r1: startedAt }, voicePresence: {} })),
+    );
+
+    expect(html).not.toContain("Duração da chamada");
+  });
+
+  it("shows the timer while the room has participants", () => {
+    const html = renderToString(
+      h(
+        AppProviders,
+        null,
+        sidebarWith({ callSessions: { r1: startedAt }, voicePresence: { r1: [participant] } }),
+      ),
+    );
+
+    expect(html).toContain("Duração da chamada");
   });
 });

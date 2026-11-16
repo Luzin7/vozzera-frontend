@@ -41,7 +41,7 @@ import {
   upsertRoom,
   writeActiveRoomId,
 } from "@/lib/vozzera/chat";
-import { applySessionSnapshot } from "@/lib/vozzera/call-session";
+import { applySessionSnapshot, dropSessionWithoutPresence } from "@/lib/vozzera/call-session";
 import type { CallSessions } from "@/lib/vozzera/call-session";
 import { applyAwaySnapshot, createAwayConfirmation } from "@/lib/vozzera/away";
 import type { AwayPresence } from "@/lib/vozzera/away";
@@ -419,7 +419,9 @@ export function useChat(options?: ChatOptions) {
         event.type === "voice.presence.left" ||
         event.type === "voice.presence.snapshot"
       ) {
-        commitVoicePresence(updateVoicePresence(voicePresenceRef.current, event));
+        const nextPresence = updateVoicePresence(voicePresenceRef.current, event);
+        commitVoicePresence(nextPresence);
+        setCallSessions((prev) => dropSessionWithoutPresence(prev, nextPresence, event.room_id));
         return;
       }
 
