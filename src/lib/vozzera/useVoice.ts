@@ -58,7 +58,15 @@ import {
 import type { MicDevice, ScreenShareIntent } from "./voice";
 import { screenShareErrorMessageFor } from "./screen-share-errors";
 import { canNotify, initialNotificationsEnabled } from "./notifications";
-import { playVoiceActionSound } from "./voice-sounds";
+import {
+  createIdlePermissionGate,
+  isIdleDetectionSupported,
+  requestIdleDetectionPermission,
+  startIdleDetection,
+  stopIdleDetection,
+} from "./idle-detection";
+import type { IdlePermissionGate } from "./idle-detection";
+import { playVoiceActionSound, primeVoiceSounds } from "./voice-sounds";
 
 export type VoiceStatus = "idle" | "connecting" | "connected" | "away";
 
@@ -449,6 +457,7 @@ export function useVoice(options?: UseVoiceOptions) {
   const connectionAttemptRef = useRef(0);
   const hardMutedRef = useRef(hardMuted);
   const micPermissionRef = useRef(false);
+  const idlePermissionGateRef = useRef<IdlePermissionGate | null>(null);
   const selectedDeviceIdRef = useRef(selectedMic);
   const deafenRef = useRef(deafen);
   deafenRef.current = deafen;
@@ -474,6 +483,7 @@ export function useVoice(options?: UseVoiceOptions) {
   );
 
   selectedDeviceIdRef.current = selectedMic;
+  idlePermissionGateRef.current ??= createIdlePermissionGate(requestIdleDetectionPermission);
   pushToTalkEnabledRef.current = pushToTalkEnabled;
   pushToTalkBindingRef.current = pushToTalkBinding;
 
@@ -634,6 +644,7 @@ export function useVoice(options?: UseVoiceOptions) {
 
   const disconnect = useCallback(async () => {
     const wasConnected = roomRef.current !== null;
+    stopIdleDetection();
     connectionAttemptRef.current += 1;
     await roomRef.current?.disconnect();
     await closeVoiceAudioContext();
@@ -661,6 +672,7 @@ export function useVoice(options?: UseVoiceOptions) {
   );
 
   const leaveRoomQuietly = useCallback(async () => {
+    stopIdleDetection();
     const room = roomRef.current;
     connectionAttemptRef.current += 1;
     roomRef.current = null;
@@ -673,6 +685,7 @@ export function useVoice(options?: UseVoiceOptions) {
 
   const parkSession = useCallback(
     async (park: (snapshot: SessionSnapshot) => void) => {
+      stopIdleDetection();
       const roomId = activeRoomIdRef.current;
       if (statusRef.current !== "connected" || roomId === null) return;
 
@@ -722,6 +735,7 @@ export function useVoice(options?: UseVoiceOptions) {
 
   const handleDisconnected = useCallback(
     (reason: import("livekit-client").DisconnectReason | undefined) => {
+      stopIdleDetection();
       const roomId = activeRoomIdRef.current;
       const snapshot = roomId === null ? null : captureSession(roomId);
       const route = disconnectRouteFor(reason, lastRemoteCountRef.current);
@@ -832,8 +846,15 @@ export function useVoice(options?: UseVoiceOptions) {
     [updateDeafenState],
   );
 
+  const requestIdlePermission = useCallback(() => {
+    if (!isIdleDetectionSupported()) return;
+    idlePermissionGateRef.current?.request();
+  }, []);
+
   const connect = useCallback(
     async (roomId: string, connectOptions?: ConnectOptions): Promise<boolean> => {
+      primeVoiceSounds();
+      requestIdlePermission();
       if (roomRef.current) await disconnect();
       const attemptId = connectionAttemptRef.current + 1;
       connectionAttemptRef.current = attemptId;
@@ -967,6 +988,7 @@ export function useVoice(options?: UseVoiceOptions) {
         micPermissionRef.current = true;
         setStatus("connected");
         setConnectedAt(Date.now());
+        startIdleDetection();
         setConnectionState("connected");
         setActiveRoomId(roomId);
         syncParticipants(room);
@@ -1001,6 +1023,7 @@ export function useVoice(options?: UseVoiceOptions) {
     },
     [
       disconnect,
+      requestIdlePermission,
       handleDisconnected,
       onLocalSpeech,
       queueDeafenState,
@@ -1210,6 +1233,7 @@ export function useVoice(options?: UseVoiceOptions) {
   useEffect(() => {
     return () => {
       connectionAttemptRef.current += 1;
+      stopIdleDetection();
       void roomRef.current?.disconnect();
       void closeVoiceAudioContext();
       roomRef.current = null;

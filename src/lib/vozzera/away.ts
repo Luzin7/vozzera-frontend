@@ -7,9 +7,10 @@ import { voiceDisconnectMessageFor } from "@/lib/vozzera/voice-errors";
 
 export type { AwayEntry } from "@/lib/vozzera/types";
 
-export const ALONE_LEAVE_MS = 150_000;
+export const ALONE_LEAVE_MS = 600_000;
 export const WITH_OTHERS_AWAY_MS = 300_000;
-export const INACTIVITY_WARNING_MS = 30_000;
+export const INACTIVITY_WARNING_MS = 60_000;
+export const INACTIVITY_URGENT_WARNING_MS = 30_000;
 
 export type InactivityInputs = {
   connected: boolean;
@@ -19,7 +20,9 @@ export type InactivityInputs = {
   aloneSince: number | null;
 };
 
-export type InactivityAction = "warn" | "away" | "leave" | null;
+export type InactivityWarningTier = "warn" | "warn-urgent";
+
+export type InactivityAction = InactivityWarningTier | "away" | "leave" | null;
 
 function deadlineFor(inputs: InactivityInputs): number {
   if (!inputs.alone) return inputs.lastActivityAt + WITH_OTHERS_AWAY_MS;
@@ -37,6 +40,7 @@ export function inactivityActionAt(inputs: InactivityInputs, now: number): Inact
 
   const deadline = deadlineFor(inputs);
   if (now >= deadline) return inputs.alone ? "leave" : "away";
+  if (now >= deadline - INACTIVITY_URGENT_WARNING_MS) return "warn-urgent";
   if (now >= deadline - INACTIVITY_WARNING_MS) return "warn";
   return null;
 }
@@ -46,7 +50,8 @@ export function nextInactivityCheckAt(inputs: InactivityInputs, now: number): nu
 
   const deadline = deadlineFor(inputs);
   if (now >= deadline) return null;
-  if (now >= deadline - INACTIVITY_WARNING_MS) return deadline;
+  if (now >= deadline - INACTIVITY_URGENT_WARNING_MS) return deadline;
+  if (now >= deadline - INACTIVITY_WARNING_MS) return deadline - INACTIVITY_URGENT_WARNING_MS;
   return deadline - INACTIVITY_WARNING_MS;
 }
 
@@ -222,10 +227,12 @@ export function exitNoticeTextFor(reason: ExitNoticeReason): string {
   return reason === "connection" ? CONNECTION_LOST_TEXT : INACTIVITY_EXIT_TEXT;
 }
 
-export function inactivityWarningTextFor(alone: boolean): string {
+export function inactivityWarningTextFor(alone: boolean, tier: InactivityWarningTier): string {
+  const seconds =
+    (tier === "warn-urgent" ? INACTIVITY_URGENT_WARNING_MS : INACTIVITY_WARNING_MS) / 1000;
   return alone
-    ? "Você vai sair da call em 30 segundos por inatividade."
-    : "Você vai ficar ausente em 30 segundos por inatividade.";
+    ? `Você vai sair da call em ${seconds} segundos por inatividade.`
+    : `Você vai ficar ausente em ${seconds} segundos por inatividade.`;
 }
 
 export const OWN_AWAY_TEXT = "Você está ausente";

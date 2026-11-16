@@ -1,5 +1,15 @@
+import type { InactivityWarningTier } from "@/lib/vozzera/away";
+
 export type VoiceActionSound =
-  "join" | "leave" | "mute" | "unmute" | "screen-share-start" | "screen-share-stop";
+  | "join"
+  | "leave"
+  | "mute"
+  | "unmute"
+  | "screen-share-start"
+  | "screen-share-stop"
+  | "inactivity-warn"
+  | "inactivity-warn-urgent"
+  | "inactivity-away";
 
 export type VoiceActionNote = {
   frequency: number;
@@ -31,10 +41,28 @@ const SOUND_PROFILES: Record<VoiceActionSound, VoiceActionNote[]> = {
     { frequency: 340, startsAt: 0, duration: 0.14, gain: 0.11 },
     { frequency: 210, startsAt: 0.09, duration: 0.22, gain: 0.12 },
   ],
+  "inactivity-warn": [
+    { frequency: 290, startsAt: 0, duration: 0.16, gain: 0.12 },
+    { frequency: 230, startsAt: 0.16, duration: 0.2, gain: 0.11 },
+  ],
+  "inactivity-warn-urgent": [
+    { frequency: 350, startsAt: 0, duration: 0.13, gain: 0.12 },
+    { frequency: 350, startsAt: 0.18, duration: 0.13, gain: 0.12 },
+    { frequency: 290, startsAt: 0.36, duration: 0.22, gain: 0.11 },
+  ],
+  "inactivity-away": [
+    { frequency: 300, startsAt: 0, duration: 0.14, gain: 0.12 },
+    { frequency: 220, startsAt: 0.13, duration: 0.18, gain: 0.11 },
+    { frequency: 160, startsAt: 0.28, duration: 0.26, gain: 0.12 },
+  ],
 };
 
 export function voiceActionNotesFor(action: VoiceActionSound): VoiceActionNote[] {
   return SOUND_PROFILES[action].map((note) => ({ ...note }));
+}
+
+export function soundForWarningTier(tier: InactivityWarningTier): VoiceActionSound {
+  return tier === "warn-urgent" ? "inactivity-warn-urgent" : "inactivity-warn";
 }
 
 let sharedAudioContext: AudioContext | null = null;
@@ -46,6 +74,18 @@ function sharedContext(): AudioContext {
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   sharedAudioContext = new AudioContextConstructor();
   return sharedAudioContext;
+}
+
+export function primeVoiceSounds(): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    const audioContext = sharedContext();
+    if (audioContext.state !== "suspended") return;
+    audioContext.resume().catch(() => undefined);
+  } catch {
+    // WebAudio pode falhar em ambientes sem suporte
+  }
 }
 
 export function playVoiceActionSound(action: VoiceActionSound): void {

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   playVoiceActionSound,
   SILENT_GAIN,
+  soundForWarningTier,
   VOICE_SOUND_ATTACK_SECONDS,
   VOICE_SOUND_RELEASE_SECONDS,
   voiceActionNotesFor,
@@ -22,6 +23,9 @@ const ACTIONS: VoiceActionSound[] = [
   "unmute",
   "screen-share-start",
   "screen-share-stop",
+  "inactivity-warn",
+  "inactivity-warn-urgent",
+  "inactivity-away",
 ];
 
 const frequenciesOf = (action: VoiceActionSound) =>
@@ -45,6 +49,20 @@ const EXPECTED_PROFILES: Record<VoiceActionSound, VoiceActionNote[]> = {
   "screen-share-stop": [
     { frequency: 340, startsAt: 0, duration: 0.14, gain: 0.11 },
     { frequency: 210, startsAt: 0.09, duration: 0.22, gain: 0.12 },
+  ],
+  "inactivity-warn": [
+    { frequency: 290, startsAt: 0, duration: 0.16, gain: 0.12 },
+    { frequency: 230, startsAt: 0.16, duration: 0.2, gain: 0.11 },
+  ],
+  "inactivity-warn-urgent": [
+    { frequency: 350, startsAt: 0, duration: 0.13, gain: 0.12 },
+    { frequency: 350, startsAt: 0.18, duration: 0.13, gain: 0.12 },
+    { frequency: 290, startsAt: 0.36, duration: 0.22, gain: 0.11 },
+  ],
+  "inactivity-away": [
+    { frequency: 300, startsAt: 0, duration: 0.14, gain: 0.12 },
+    { frequency: 220, startsAt: 0.13, duration: 0.18, gain: 0.11 },
+    { frequency: 160, startsAt: 0.28, duration: 0.26, gain: 0.12 },
   ],
 };
 
@@ -99,7 +117,7 @@ describe("voiceActionNotesFor", () => {
     expect(second).toBeGreaterThan(first);
   });
 
-  it.each(["leave", "screen-share-stop"] as const)("falls for %s", (action) => {
+  it.each(["leave", "screen-share-stop", "inactivity-away"] as const)("falls for %s", (action) => {
     const [first = 0, second = 0] = frequenciesOf(action);
 
     expect(second).toBeLessThan(first);
@@ -107,6 +125,13 @@ describe("voiceActionNotesFor", () => {
 
   it("keeps unmute above mute", () => {
     expect(frequenciesOf("unmute")[0]).toBeGreaterThan(frequenciesOf("mute")[0] ?? 0);
+  });
+});
+
+describe("soundForWarningTier", () => {
+  it("plays a distinct cue per warning tier", () => {
+    expect(soundForWarningTier("warn")).toBe("inactivity-warn");
+    expect(soundForWarningTier("warn-urgent")).toBe("inactivity-warn-urgent");
   });
 });
 
@@ -210,5 +235,46 @@ describe("playVoiceActionSound", () => {
     await Promise.resolve();
 
     expect(createOscillator).not.toHaveBeenCalled();
+  });
+});
+
+describe("primeVoiceSounds", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("resumes the shared context synchronously", async () => {
+    vi.resetModules();
+    const { primeVoiceSounds: prime } = await import("./voice-sounds");
+    const resume = vi.fn(() => Promise.resolve());
+    class SuspendedAudioContext {
+      currentTime = 0;
+      destination = {};
+      state = "suspended";
+      resume = resume;
+    }
+    vi.stubGlobal("window", { AudioContext: SuspendedAudioContext });
+
+    prime();
+
+    expect(resume).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a running context untouched", async () => {
+    vi.resetModules();
+    const { primeVoiceSounds: prime } = await import("./voice-sounds");
+    const resume = vi.fn(() => Promise.resolve());
+    class RunningAudioContext {
+      currentTime = 0;
+      destination = {};
+      state = "running";
+      resume = resume;
+    }
+    vi.stubGlobal("window", { AudioContext: RunningAudioContext });
+
+    prime();
+
+    expect(resume).not.toHaveBeenCalled();
   });
 });

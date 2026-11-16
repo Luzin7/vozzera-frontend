@@ -14,9 +14,17 @@ import {
   shouldRecordActivity,
 } from "@/lib/vozzera/away";
 import type { AwayPresence } from "@/lib/vozzera/away";
+import type { InactivityWarningTier } from "@/lib/vozzera/away";
 import type { AwayIntent, AwayReason } from "@/lib/vozzera/away-intent";
 import type { CallParticipant } from "@/lib/vozzera/call-participants";
+import {
+  getIdleSnapshot,
+  lockDecisionAt,
+  onIdleChange,
+  refreshedActivityAt,
+} from "@/lib/vozzera/idle-detection";
 import { canNotify } from "@/lib/vozzera/notifications";
+import { playVoiceActionSound, soundForWarningTier } from "@/lib/vozzera/voice-sounds";
 import type { VoicePresence } from "@/lib/vozzera/chat";
 import type { AwayEndedEvent } from "@/lib/vozzera/useChat";
 import type { AwayInfo, VoiceStatus } from "@/lib/vozzera/useVoice";
@@ -56,10 +64,15 @@ type InactivityOptions = {
 
 export type InactivityWarning = { alone: boolean; text: string };
 
-function notifyWhenHidden(enabled: boolean, body: string): void {
+function notifyWhenHidden(enabled: boolean, body: string, onContinue?: () => void): void {
   if (typeof document === "undefined" || !canNotify(enabled, document.hidden)) return;
   try {
-    new Notification(NOTIFICATION_TITLE, { body });
+    const notification = new Notification(NOTIFICATION_TITLE, { body });
+    if (onContinue === undefined) return;
+    notification.onclick = () => {
+      notification.close();
+      onContinue();
+    };
   } catch {
     // some mobile browsers throw "Illegal constructor"; the in-page warning still shows
   }
@@ -108,7 +121,9 @@ export function useInactivity({
   const continuedAtRef = useRef(0);
   const liveEndedAtRef = useRef(0);
   const aloneSinceRef = useRef<number | null>(null);
+  const lockedSinceRef = useRef<number | null>(null);
   const warnedRef = useRef(false);
+  const warnedTierRef = useRef<InactivityWarningTier | null>(null);
   const actingRef = useRef(false);
   const resendTimesRef = useRef<number[]>([]);
   const lastPointerMoveAtRef = useRef<number | null>(null);
@@ -122,39 +137,71 @@ export function useInactivity({
     timerRef.current = null;
   }, []);
 
-  const act = useCallback((action: "away" | "leave") => {
-    const { voice: current, notificationsEnabled: notify } = latestRef.current;
-    actingRef.current = true;
+  const resetWarnings = useCallback(() => {
+    warnedRef.current = false;
+    warnedTierRef.current = null;
     setWarning(null);
-    const parking = action === "away" ? current.goAway("idle") : current.leaveForInactivity();
-    notifyWhenHidden(notify, action === "away" ? OWN_AWAY_TEXT : exitNoticeTextFor("inactivity"));
-    void parking
-      .catch(() => undefined)
-      .finally(() => {
-        actingRef.current = false;
-        if (!stateRef.current.connected) return;
-        timerRef.current = setTimeout(() => evaluateRef.current(), ACT_RETRY_MS);
-      });
   }, []);
 
-  const showWarning = useCallback((isAlone: boolean) => {
-    const text = inactivityWarningTextFor(isAlone);
-    setWarning((previous) => (previous?.text === text ? previous : { alone: isAlone, text }));
-    if (warnedRef.current) return;
-    warnedRef.current = true;
-    notifyWhenHidden(latestRef.current.notificationsEnabled, text);
-  }, []);
+  const continueHere = useCallback(() => {
+    continuedAtRef.current = Date.now();
+    interactionAtRef.current = continuedAtRef.current;
+    resetWarnings();
+    evaluateRef.current();
+  }, [resetWarnings]);
+
+  const act = useCallback(
+    (action: "away" | "leave") => {
+      const { voice: current, notificationsEnabled: notify } = latestRef.current;
+      actingRef.current = true;
+      resetWarnings();
+      playVoiceActionSound("inactivity-away");
+      const parking = action === "away" ? current.goAway("idle") : current.leaveForInactivity();
+      notifyWhenHidden(notify, action === "away" ? OWN_AWAY_TEXT : exitNoticeTextFor("inactivity"));
+      void parking
+        .catch(() => undefined)
+        .finally(() => {
+          actingRef.current = false;
+          if (!stateRef.current.connected) return;
+          timerRef.current = setTimeout(() => evaluateRef.current(), ACT_RETRY_MS);
+        });
+    },
+    [resetWarnings],
+  );
+
+  const showWarning = useCallback(
+    (isAlone: boolean, tier: InactivityWarningTier) => {
+      const text = inactivityWarningTextFor(isAlone, tier);
+      setWarning((previous) => (previous?.text === text ? previous : { alone: isAlone, text }));
+      if (warnedTierRef.current !== tier) {
+        warnedTierRef.current = tier;
+        playVoiceActionSound(soundForWarningTier(tier));
+      }
+      if (warnedRef.current) return;
+      warnedRef.current = true;
+      notifyWhenHidden(latestRef.current.notificationsEnabled, text, continueHere);
+    },
+    [continueHere],
+  );
 
   const evaluate = useCallback(() => {
     clearTimer();
     const state = stateRef.current;
     if (!state.connected || actingRef.current) {
-      warnedRef.current = false;
-      setWarning(null);
+      resetWarnings();
       return;
     }
 
     const now = Date.now();
+    const idleSnapshot = getIdleSnapshot();
+    interactionAtRef.current = refreshedActivityAt(interactionAtRef.current, idleSnapshot, now);
+    const lock = lockDecisionAt(lockedSinceRef.current, idleSnapshot, state, now);
+    lockedSinceRef.current = lock.lockedSince;
+    if (lock.action !== null) {
+      act(lock.action);
+      return;
+    }
+
     const { voice: current } = latestRef.current;
     const inputs = {
       ...state,
@@ -173,17 +220,21 @@ export function useInactivity({
       act(action);
       return;
     }
-    if (action === "warn") {
-      showWarning(state.alone);
+    if (action === null) {
+      resetWarnings();
     } else {
-      warnedRef.current = false;
-      setWarning(null);
+      showWarning(state.alone, action);
     }
 
-    const next = nextInactivityCheckAt(inputs, now);
-    if (next === null) return;
-    timerRef.current = setTimeout(() => evaluateRef.current(), Math.max(next - now, 0));
-  }, [act, clearTimer, showWarning]);
+    const candidates = [nextInactivityCheckAt(inputs, now), lock.checkAt].filter(
+      (at): at is number => at !== null,
+    );
+    if (candidates.length === 0) return;
+    timerRef.current = setTimeout(
+      () => evaluateRef.current(),
+      Math.max(Math.min(...candidates) - now, 0),
+    );
+  }, [act, clearTimer, resetWarnings, showWarning]);
   evaluateRef.current = evaluate;
 
   const recordInteraction = useCallback(() => {
@@ -194,12 +245,6 @@ export function useInactivity({
       channelRef.current?.postMessage({ at: now });
     }
     if (warnedRef.current) evaluateRef.current();
-  }, []);
-
-  const continueHere = useCallback(() => {
-    continuedAtRef.current = Date.now();
-    interactionAtRef.current = continuedAtRef.current;
-    evaluateRef.current();
   }, []);
 
   useEffect(() => {
@@ -247,6 +292,8 @@ export function useInactivity({
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [enabled, recordInteraction]);
+
+  useEffect(() => onIdleChange(() => evaluateRef.current()), []);
 
   useEffect(() => {
     const miniDocument = miniWindowContainer?.ownerDocument;

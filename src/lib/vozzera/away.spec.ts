@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ALONE_LEAVE_MS,
+  INACTIVITY_URGENT_WARNING_MS,
   INACTIVITY_WARNING_MS,
   WITH_OTHERS_AWAY_MS,
   ACTIVITY_THROTTLE_MS,
@@ -48,24 +49,26 @@ function alone(overrides: Partial<InactivityInputs> = {}): InactivityInputs {
 
 describe("inactivityActionAt alone", () => {
   it.each([
-    [119_900, null],
-    [120_000, "warn"],
-    [149_900, "warn"],
-    [150_000, "leave"],
+    [539_900, null],
+    [540_000, "warn"],
+    [569_900, "warn"],
+    [570_000, "warn-urgent"],
+    [599_900, "warn-urgent"],
+    [600_000, "leave"],
   ])("at %i ms after the last activity returns %s", (elapsed, expected) => {
     expect(inactivityActionAt(alone(), T0 + elapsed)).toBe(expected);
   });
 
   it("counts from the moment the user became alone when that is later", () => {
     const state = alone({ aloneSince: T0 + 100_000 });
-    expect(inactivityActionAt(state, T0 + 249_900)).toBe("warn");
-    expect(inactivityActionAt(state, T0 + 250_000)).toBe("leave");
+    expect(inactivityActionAt(state, T0 + 699_900)).toBe("warn-urgent");
+    expect(inactivityActionAt(state, T0 + 700_000)).toBe("leave");
   });
 
   it("counts from the last activity when that is later than aloneSince", () => {
     const state = alone({ lastActivityAt: T0 + 60_000 });
-    expect(inactivityActionAt(state, T0 + 209_900)).toBe("warn");
-    expect(inactivityActionAt(state, T0 + 210_000)).toBe("leave");
+    expect(inactivityActionAt(state, T0 + 659_900)).toBe("warn-urgent");
+    expect(inactivityActionAt(state, T0 + 660_000)).toBe("leave");
   });
 
   it("falls back to the last activity when aloneSince is unknown", () => {
@@ -75,9 +78,11 @@ describe("inactivityActionAt alone", () => {
 
 describe("inactivityActionAt with others", () => {
   it.each([
-    [269_900, null],
-    [270_000, "warn"],
-    [299_900, "warn"],
+    [239_900, null],
+    [240_000, "warn"],
+    [269_900, "warn"],
+    [270_000, "warn-urgent"],
+    [299_900, "warn-urgent"],
     [300_000, "away"],
   ])("at %i ms after the last activity returns %s", (elapsed, expected) => {
     expect(inactivityActionAt(inputs(), T0 + elapsed)).toBe(expected);
@@ -113,13 +118,22 @@ describe("nextInactivityCheckAt", () => {
     expect(nextInactivityCheckAt(alone(), T0)).toBe(T0 + ALONE_LEAVE_MS - INACTIVITY_WARNING_MS);
   });
 
+  it("points at the urgent warning inside the first tier", () => {
+    expect(nextInactivityCheckAt(alone(), T0 + 550_000)).toBe(
+      T0 + ALONE_LEAVE_MS - INACTIVITY_URGENT_WARNING_MS,
+    );
+    expect(nextInactivityCheckAt(inputs(), T0 + 250_000)).toBe(
+      T0 + WITH_OTHERS_AWAY_MS - INACTIVITY_URGENT_WARNING_MS,
+    );
+  });
+
   it("points at the deadline while warning", () => {
-    expect(nextInactivityCheckAt(alone(), T0 + 130_000)).toBe(T0 + ALONE_LEAVE_MS);
-    expect(nextInactivityCheckAt(inputs(), T0 + 280_000)).toBe(T0 + WITH_OTHERS_AWAY_MS);
+    expect(nextInactivityCheckAt(alone(), T0 + 580_000)).toBe(T0 + ALONE_LEAVE_MS);
+    expect(nextInactivityCheckAt(inputs(), T0 + 290_000)).toBe(T0 + WITH_OTHERS_AWAY_MS);
   });
 
   it("returns null once the action is due", () => {
-    expect(nextInactivityCheckAt(alone(), T0 + 150_000)).toBe(null);
+    expect(nextInactivityCheckAt(alone(), T0 + 600_000)).toBe(null);
     expect(nextInactivityCheckAt(inputs(), T0 + 300_000)).toBe(null);
   });
 
@@ -447,10 +461,19 @@ describe("shouldRecordActivity", () => {
 
 describe("copy", () => {
   it("warns about leaving when alone and about being away otherwise", () => {
-    expect(inactivityWarningTextFor(true)).toBe(
+    expect(inactivityWarningTextFor(true, "warn")).toBe(
+      "Você vai sair da call em 60 segundos por inatividade.",
+    );
+    expect(inactivityWarningTextFor(false, "warn")).toBe(
+      "Você vai ficar ausente em 60 segundos por inatividade.",
+    );
+  });
+
+  it("shortens the countdown on the urgent tier", () => {
+    expect(inactivityWarningTextFor(true, "warn-urgent")).toBe(
       "Você vai sair da call em 30 segundos por inatividade.",
     );
-    expect(inactivityWarningTextFor(false)).toBe(
+    expect(inactivityWarningTextFor(false, "warn-urgent")).toBe(
       "Você vai ficar ausente em 30 segundos por inatividade.",
     );
   });
