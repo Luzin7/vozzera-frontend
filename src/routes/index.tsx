@@ -715,29 +715,7 @@ function Index() {
             onDelete={handleDeleteRoomForSettings}
           />
         ) : visibleVoiceRoom ? (
-          isMobile && voiceChatOpen ? (
-            <VoiceChatDock
-              className="flex-1 md:hidden"
-              roomId={visibleVoiceRoom.id}
-              roomName={visibleVoiceRoom.name}
-              drafts={drafts}
-              messages={voiceChatMessages}
-              loading={voiceChatLoading}
-              typingText={voiceChatTypingText}
-              canModerateMessages={canModerateMessages}
-              disabled={socketStatus !== "open"}
-              onDelete={handleDeleteMessage}
-              onSend={handleSendVoiceMessage}
-              onTypingChange={setTyping}
-              onClose={() => setVoiceChatOpen(false)}
-              historyFailed={historyStatus[visibleVoiceRoom.id] === "failed"}
-              onRetryHistory={retryHistory}
-              olderHistory={olderHistory[visibleVoiceRoom.id]}
-              onLoadOlder={loadOlder}
-              editLastRequest={editLastRequest}
-              onEditLast={requestEditLast}
-            />
-          ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
             <Suspense
               fallback={
                 <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3">
@@ -760,6 +738,9 @@ function Index() {
                     : null
                 }
                 micEnabled={voice.micEnabled}
+                cameraOn={voice.cameraOn}
+                cameraAvailable={voice.cameraAvailable}
+                cameraMessage={voice.cameraMessage}
                 deafen={voice.deafen}
                 volumes={voice.volumes}
                 screenShareVolumes={voice.screenShareVolumes}
@@ -781,7 +762,10 @@ function Index() {
                 sessionStartedAt={callSessions[visibleVoiceRoom.id] ?? null}
                 miniWindowSupported={miniWindow.supported}
                 miniWindowOpen={miniWindow.isOpen}
+                mobileChatOpen={isMobile && voiceChatOpen}
                 onToggleMic={handleToggleMic}
+                onToggleCamera={() => void voice.toggleCamera()}
+                onSwitchCameraFacing={() => void voice.switchCameraFacing()}
                 onToggleDeafen={handleToggleDeafen}
                 onToggleScreenShare={handleToggleScreenShare}
                 onReduceLocalQuality={reduceScreenQuality}
@@ -790,7 +774,32 @@ function Index() {
                 onReturn={() => void returnToRoom()}
               />
             </Suspense>
-          )
+            {isMobile && voiceChatOpen && (
+              <VoiceChatDock
+                className="min-h-0 flex-1 md:hidden"
+                roomId={visibleVoiceRoom.id}
+                roomName={visibleVoiceRoom.name}
+                drafts={drafts}
+                messages={voiceChatMessages}
+                loading={voiceChatLoading}
+                typingText={voiceChatTypingText}
+                canModerateMessages={canModerateMessages}
+                disabled={socketStatus !== "open"}
+                onDelete={handleDeleteMessage}
+                onSend={handleSendVoiceMessage}
+                onTypingChange={setTyping}
+                onClose={() => setVoiceChatOpen(false)}
+                historyFailed={historyStatus[visibleVoiceRoom.id] === "failed"}
+                onRetryHistory={retryHistory}
+                olderHistory={olderHistory[visibleVoiceRoom.id]}
+                onLoadOlder={loadOlder}
+                editLastRequest={editLastRequest}
+                onEditLast={requestEditLast}
+                cameraOn={voice.cameraOn}
+                onDisableCamera={() => void voice.disableCamera()}
+              />
+            )}
+          </div>
         ) : activeRoom ? (
           <>
             <MessageList
