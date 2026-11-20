@@ -4,8 +4,10 @@ import { HeadphoneOff, MicOff, VolumeX } from "lucide-react";
 import { ConnectionQualityBadge } from "@/components/vozzera/ConnectionQualityBadge";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
 import { LiveShareTileControls } from "@/components/vozzera/LiveShareControls";
+import { CameraTileVideo } from "@/components/vozzera/CameraTileVideo";
 import { AWAY_TOOLTIP_TEXT } from "@/lib/vozzera/away";
 import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
+import { useCameraState } from "@/lib/vozzera/camera-store";
 
 type ParticipantTileProps = {
   identity: string;
@@ -29,10 +31,13 @@ type ParticipantTileProps = {
   onToggleLocalScreenShareMute: (identity: string) => void;
   onWatchShare: (identity: string) => void;
   onStopWatchingShare: (identity: string) => void;
+  onCameraActivate?: (identity: string, trigger: HTMLButtonElement) => void;
 };
 
 const TILE_MENU_TRIGGER_CLASS =
   "group/volume absolute inset-0 cursor-pointer rounded-xl transition-colors hover:bg-foreground/5 focus-visible:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none";
+const VIDEO_TILE_MENU_TRIGGER_CLASS =
+  "group/volume absolute right-1 top-1 z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-md bg-background/70 transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none";
 
 export const ParticipantTile = memo(function ParticipantTile({
   identity,
@@ -56,7 +61,10 @@ export const ParticipantTile = memo(function ParticipantTile({
   onToggleLocalScreenShareMute,
   onWatchShare,
   onStopWatchingShare,
+  onCameraActivate,
 }: Readonly<ParticipantTileProps>) {
+  const camera = useCameraState(identity);
+  const showsCamera = camera.on && camera.track !== null;
   if (isAway) {
     return (
       <article
@@ -85,8 +93,18 @@ export const ParticipantTile = memo(function ParticipantTile({
 
   return (
     <article
-      className={`relative flex aspect-video w-full items-center justify-center rounded-xl border bg-card p-6 border-border ${layoutClassName}`}
+      className={`relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border bg-card p-6 ring-offset-background transition-[box-shadow,border-color] duration-150 motion-reduce:transition-none border-border ${
+        showsCamera && isSpeaking ? "ring-2 ring-primary ring-offset-2" : ""
+      } ${layoutClassName}`}
     >
+      {showsCamera && (
+        <CameraTileVideo
+          identity={identity}
+          name={name}
+          camera={camera}
+          {...(onCameraActivate ? { onActivate: onCameraActivate } : {})}
+        />
+      )}
       {!isLocal && (
         <ParticipantMenu
           name={name}
@@ -101,8 +119,8 @@ export const ParticipantTile = memo(function ParticipantTile({
           onSetScreenShareVolume={(next) => onSetScreenShareVolume(identity, next)}
           onToggleLocalMute={() => onToggleLocalMute(identity)}
           onToggleLocalScreenShareMute={() => onToggleLocalScreenShareMute(identity)}
-          triggerClassName={TILE_MENU_TRIGGER_CLASS}
-          iconClassName="absolute bottom-3 right-3 h-4 w-4"
+          triggerClassName={showsCamera ? VIDEO_TILE_MENU_TRIGGER_CLASS : TILE_MENU_TRIGGER_CLASS}
+          iconClassName={showsCamera ? "h-4 w-4" : "absolute bottom-3 right-3 h-4 w-4"}
         >
           {null}
         </ParticipantMenu>
@@ -116,15 +134,17 @@ export const ParticipantTile = memo(function ParticipantTile({
           onStopWatching={onStopWatchingShare}
         />
       )}
-      <div
-        className={`flex h-20 w-20 items-center justify-center rounded-full font-mono text-xl font-semibold ring-offset-card transition-[box-shadow,border-color] duration-150 motion-reduce:transition-none ${avatarColorClass(name)} ${
-          isSpeaking ? "ring-2 ring-primary ring-offset-2" : "ring-0 ring-offset-0"
-        }`}
-      >
-        {initials(name)}
-      </div>
+      {!showsCamera && (
+        <div
+          className={`flex h-20 w-20 items-center justify-center rounded-full font-mono text-xl font-semibold ring-offset-card transition-[box-shadow,border-color] duration-150 motion-reduce:transition-none ${avatarColorClass(name)} ${
+            isSpeaking ? "ring-2 ring-primary ring-offset-2" : "ring-0 ring-offset-0"
+          }`}
+        >
+          {initials(name)}
+        </div>
+      )}
 
-      <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
+      <div className="absolute bottom-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
         <span className="truncate">{name}</span>
         <ConnectionQualityBadge quality={quality} />
         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
