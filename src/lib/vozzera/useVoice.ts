@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ConnectionQuality } from "livekit-client";
+import { ConnectionQuality, Track } from "livekit-client";
 import { api } from "./api";
 import {
   callParticipantFrom,
@@ -67,6 +67,8 @@ import {
 } from "./idle-detection";
 import type { IdlePermissionGate } from "./idle-detection";
 import { playVoiceActionSound, primeVoiceSounds } from "./voice-sounds";
+import { cameraErrorMessageFor } from "@/lib/vozzera/camera-errors";
+import { useCamera } from "@/lib/vozzera/use-camera";
 
 export type VoiceStatus = "idle" | "connecting" | "connected" | "away";
 
@@ -192,6 +194,16 @@ type RoomEventHandlerCtx = {
     | "applyInitialShares"
     | "hasWatchIntent"
   >;
+  camera: Pick<
+    ReturnType<typeof useCamera>,
+    | "applySubscriptionCap"
+    | "onTrackSubscribed"
+    | "onTrackUnsubscribed"
+    | "onPublicationChanged"
+    | "onLocalTrackPublished"
+    | "onLocalTrackUnpublished"
+    | "removeParticipant"
+  >;
   syncLocalMicTrack: (room: LiveKitRoom) => void;
   onLocalSpeech: () => void;
   onDisconnected: (reason: import("livekit-client").DisconnectReason | undefined) => void;
@@ -223,6 +235,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
     onTrackUnsubscribed,
     onLocalTrackUnpublished,
     liveShare,
+    camera,
     syncLocalMicTrack,
     setConnectionState,
     setQualities,
@@ -234,14 +247,17 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   } = ctx;
 
   room.on(RoomEvent.TrackPublished, (publication, participant) => {
+    if (camera.onPublicationChanged(room, publication, participant)) syncParticipants(room);
     liveShare.onShareTrackPublished(room, publication, participant);
   });
 
-  room.on(RoomEvent.TrackUnpublished, (_publication, participant) =>
-    liveShare.onShareTrackUnpublished(room, participant),
-  );
+  room.on(RoomEvent.TrackUnpublished, (publication, participant) => {
+    if (camera.onPublicationChanged(room, publication, participant)) syncParticipants(room);
+    liveShare.onShareTrackUnpublished(room, participant);
+  });
 
   room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+    camera.onTrackSubscribed(room, track);
     const isShare =
       publication.source === Track.Source.ScreenShare ||
       publication.source === Track.Source.ScreenShareAudio;
@@ -286,6 +302,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   });
 
   room.on(RoomEvent.TrackUnsubscribed, (track, _publication, participant) => {
+    if (camera.onTrackUnsubscribed(track, participant)) return;
     if (track.source === Track.Source.Microphone)
       speaking.removeRemote(participant.identity, track);
     if (track.source !== Track.Source.ScreenShare) {
@@ -296,6 +313,10 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   });
 
   room.on(RoomEvent.TrackMuted, (publication, participant) => {
+    if (camera.onPublicationChanged(room, publication, participant)) {
+      syncParticipants(room);
+      return;
+    }
     if (publication.source !== Track.Source.Microphone) return;
 
     if (participant.isLocal) {
@@ -307,6 +328,10 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   });
 
   room.on(RoomEvent.TrackUnmuted, (publication, participant) => {
+    if (camera.onPublicationChanged(room, publication, participant)) {
+      syncParticipants(room);
+      return;
+    }
     if (publication.source !== Track.Source.Microphone) return;
 
     if (participant.isLocal) {
@@ -350,12 +375,17 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   });
 
   room.on(RoomEvent.LocalTrackPublished, (publication) => {
+    if (camera.onLocalTrackPublished(publication)) {
+      syncParticipants(room);
+      return;
+    }
     if (publication.track?.source !== Track.Source.ScreenShare) return;
 
     playVoiceActionSound("screen-share-start");
   });
 
   room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
+    if (camera.onLocalTrackUnpublished(publication)) syncParticipants(room);
     onLocalTrackUnpublished(publication);
     if (publication.track?.source !== Track.Source.ScreenShare) return;
 
@@ -367,11 +397,13 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   room.on(RoomEvent.Reconnected, () => {
     setConnectionState("connected");
     liveShare.applyInitialShares(room);
+    camera.applySubscriptionCap(room);
   });
 
   room.on(RoomEvent.ParticipantConnected, (participant) => {
     syncParticipants(room);
     liveShare.applyInitialShares(room);
+    camera.applySubscriptionCap(room);
 
     const name = participant.name || participant.identity;
     if (participant.identity === room.localParticipant.identity) return;
@@ -391,6 +423,7 @@ function setupRoomHandlers(ctx: RoomEventHandlerCtx): void {
   room.on(RoomEvent.ParticipantDisconnected, (participant) => {
     const name = participant.name || participant.identity;
     removeParticipant(participant.identity);
+    camera.removeParticipant(participant.identity);
     syncParticipants(room);
     liveShare.onParticipantDisconnected(room, participant.identity);
     playVoiceActionSound("leave");
@@ -420,6 +453,7 @@ export function useVoice(options?: UseVoiceOptions) {
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [micOn, setMicOn] = useState(true);
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
+  const [cameraDeviceCount, setCameraDeviceCount] = useState<number | null>(null);
   const [selectedMic, setSelectedMic] = useState<string | null>(() => {
     if (typeof localStorage === "undefined") return null;
     return readMicDeviceId(localStorage);
@@ -486,6 +520,8 @@ export function useVoice(options?: UseVoiceOptions) {
   idlePermissionGateRef.current ??= createIdlePermissionGate(requestIdleDetectionPermission);
   pushToTalkEnabledRef.current = pushToTalkEnabled;
   pushToTalkBindingRef.current = pushToTalkBinding;
+
+  const camera = useCamera({ roomRef, deviceCount: cameraDeviceCount });
 
   const {
     volumes,
@@ -573,7 +609,16 @@ export function useVoice(options?: UseVoiceOptions) {
       lastRemoteCountRef.current = remoteParticipants.length;
       const localIdentity = room.localParticipant.identity;
       const next = [room.localParticipant, ...remoteParticipants].map((participant) =>
-        callParticipantFrom(participant, localIdentity),
+        callParticipantFrom(
+          {
+            identity: participant.identity,
+            name: participant.name || participant.identity,
+            cameraOn:
+              participant.getTrackPublication(Track.Source.Camera) !== undefined &&
+              participant.getTrackPublication(Track.Source.Camera)?.isMuted !== true,
+          },
+          localIdentity,
+        ),
       );
       setParticipants((prev) => reuseCallParticipants(prev, next));
       for (const participant of remoteParticipants) applyParticipantVolumes(participant);
@@ -614,19 +659,31 @@ export function useVoice(options?: UseVoiceOptions) {
     resetScreenShareState();
     resetLiveShareState();
     resetKrispFilterState();
+    camera.resetState();
   }, [
     resetSpeaking,
     resetParticipantVolumeState,
     resetScreenShareState,
     resetLiveShareState,
     resetKrispFilterState,
+    camera,
   ]);
 
-  const refreshMicDevices = useCallback(async () => {
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
+  const refreshMediaDevices = useCallback(async () => {
+    if (typeof navigator === "undefined") return;
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setCameraDeviceCount(null);
+      return;
+    }
 
-    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => null);
+    if (!devices) {
+      setMicDevices([]);
+      setCameraDeviceCount(null);
+      return;
+    }
     setMicDevices(audioInputDevices(devices));
+    setCameraDeviceCount(devices.filter((device) => device.kind === "videoinput").length);
   }, []);
 
   const syncLocalMicTrack = useCallback((room: LiveKitRoom) => {
@@ -934,6 +991,15 @@ export function useVoice(options?: UseVoiceOptions) {
             applyInitialShares,
             hasWatchIntent,
           },
+          camera: {
+            applySubscriptionCap: camera.applySubscriptionCap,
+            onTrackSubscribed: camera.onTrackSubscribed,
+            onTrackUnsubscribed: camera.onTrackUnsubscribed,
+            onPublicationChanged: camera.onPublicationChanged,
+            onLocalTrackPublished: camera.onLocalTrackPublished,
+            onLocalTrackUnpublished: camera.onLocalTrackUnpublished,
+            removeParticipant: camera.removeParticipant,
+          },
           syncLocalMicTrack,
           onLocalSpeech,
           onDisconnected: handleDisconnected,
@@ -1047,6 +1113,7 @@ export function useVoice(options?: UseVoiceOptions) {
       refreshLiveShares,
       applyInitialShares,
       hasWatchIntent,
+      camera,
       resetRoomState,
     ],
   );
@@ -1207,13 +1274,13 @@ export function useVoice(options?: UseVoiceOptions) {
   useEffect(() => {
     if (status !== "connected" && !micPermissionRef.current) return;
 
-    void refreshMicDevices();
-    navigator.mediaDevices?.addEventListener("devicechange", refreshMicDevices);
+    void refreshMediaDevices();
+    navigator.mediaDevices?.addEventListener("devicechange", refreshMediaDevices);
 
     return () => {
-      navigator.mediaDevices?.removeEventListener("devicechange", refreshMicDevices);
+      navigator.mediaDevices?.removeEventListener("devicechange", refreshMediaDevices);
     };
-  }, [status, refreshMicDevices]);
+  }, [status, refreshMediaDevices]);
 
   useEffect(() => {
     if (!selfMonitor || !localMicTrack) return;
@@ -1245,6 +1312,8 @@ export function useVoice(options?: UseVoiceOptions) {
     [mutedParticipants, pushToTalkIdleParticipants],
   );
   const micEnabled = pushToTalkEnabled ? !hardMuted : micOn;
+  const cameraMessage =
+    camera.notice ?? (camera.error ? cameraErrorMessageFor(camera.error) : null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -1279,6 +1348,10 @@ export function useVoice(options?: UseVoiceOptions) {
     activeRoomId,
     participants,
     micEnabled,
+    cameraOn: camera.cameraOn,
+    cameraAvailable: cameraDeviceCount !== 0,
+    cameraFacingMode: camera.facingMode,
+    cameraMessage,
     volumes,
     screenShareVolumes,
     screenShareEnabled,
@@ -1331,5 +1404,8 @@ export function useVoice(options?: UseVoiceOptions) {
     reduceScreenQuality,
     toggleDeafen,
     toggleMic,
+    toggleCamera: camera.toggle,
+    disableCamera: camera.disable,
+    switchCameraFacing: camera.switchFacing,
   };
 }
