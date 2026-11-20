@@ -7,9 +7,10 @@ export type CallParticipant = {
   identity: string;
   name: string;
   isLocal: boolean;
+  cameraOn?: boolean;
 };
 
-type ParticipantContract = { identity: string; name?: string };
+type ParticipantContract = { identity: string; name?: string; cameraOn?: boolean };
 type ParticipantKeys = { identity: string; name: string };
 
 export function callParticipantFrom(
@@ -20,6 +21,7 @@ export function callParticipantFrom(
     identity: participant.identity,
     name: participant.name || participant.identity,
     isLocal: participant.identity === localIdentity,
+    cameraOn: participant.cameraOn === true,
   };
 }
 
@@ -33,7 +35,8 @@ export function reuseCallParticipants(
     const unchanged =
       previous !== undefined &&
       previous.name === participant.name &&
-      previous.isLocal === participant.isLocal;
+      previous.isLocal === participant.isLocal &&
+      previous.cameraOn === participant.cameraOn;
     return unchanged ? previous : participant;
   });
   const sameList =
