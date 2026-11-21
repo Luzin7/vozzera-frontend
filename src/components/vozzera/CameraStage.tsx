@@ -1,9 +1,11 @@
-import { Camera, SwitchCamera } from "lucide-react";
+import { Camera, SwitchCamera, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CameraTileVideo } from "@/components/vozzera/CameraTileVideo";
 import { avatarColorClass, initials } from "@/lib/vozzera/avatar";
+import { nextCameraDeviceId, type CameraDevice } from "@/lib/vozzera/camera";
+import { CAMERA_SWITCH_TEXT } from "@/lib/vozzera/camera-errors";
 import { useCameraState } from "@/lib/vozzera/camera-store";
 
 type StageParticipant = {
@@ -47,7 +49,7 @@ function RailParticipant({
   return (
     <button
       type="button"
-      className={`relative flex h-20 aspect-video shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-card ${selected ? "border-primary" : "border-border"}`}
+      className={`relative flex h-20 aspect-video shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border bg-card ${selected ? "border-primary" : "border-border"}`}
       onClick={onSelect}
       aria-pressed={selected}
     >
@@ -68,6 +70,16 @@ function RailParticipant({
       <span className="absolute bottom-1 left-1 z-20 max-w-[calc(100%-0.5rem)] truncate rounded bg-background/80 px-1 text-xs">
         {participant.name}
       </span>
+      {participant.cameraOn && (
+        <Video
+          aria-label={
+            participant.isLocal
+              ? "Sua câmera está ligada"
+              : `${participant.name} está com a câmera ligada`
+          }
+          className="absolute right-1 top-1 z-20 h-4 w-4 rounded bg-background/80 p-0.5 text-primary"
+        />
+      )}
     </button>
   );
 }
@@ -75,11 +87,15 @@ function RailParticipant({
 export function CameraStage({
   participants,
   cameraOn,
-  onSwitchFacing,
+  cameraDevices,
+  activeCameraDeviceId,
+  onSwitchCamera,
 }: Readonly<{
   participants: StageParticipant[];
   cameraOn: boolean;
-  onSwitchFacing: () => void;
+  cameraDevices: CameraDevice[];
+  activeCameraDeviceId: string | null;
+  onSwitchCamera: (deviceId: string) => void;
 }>) {
   const initialIdentity = useMemo(
     () =>
@@ -95,6 +111,7 @@ export function CameraStage({
   const selected =
     participants.find((participant) => participant.identity === selectedIdentity) ??
     participants[0];
+  const nextDeviceId = nextCameraDeviceId(cameraDevices, activeCameraDeviceId);
 
   useEffect(() => {
     const previous = previousSelectionRef.current;
@@ -120,19 +137,29 @@ export function CameraStage({
     <div className="flex min-h-0 shrink-0 flex-col md:hidden">
       <div className="relative mx-3 mt-3 flex aspect-[4/3] max-h-[38dvh] items-center justify-center overflow-hidden rounded-xl border border-border bg-card">
         <StageSurface participant={selected} />
-        <span className="absolute bottom-2 left-2 z-20 rounded bg-background/80 px-2 py-1 text-xs">
+        <span className="absolute bottom-2 left-2 z-20 flex items-center gap-1 rounded bg-background/80 px-2 py-1 text-xs">
           {selected.name}
+          {selected.cameraOn && (
+            <Video
+              aria-label={
+                selected.isLocal
+                  ? "Sua câmera está ligada"
+                  : `${selected.name} está com a câmera ligada`
+              }
+              className="h-3.5 w-3.5 text-primary"
+            />
+          )}
         </span>
-        {cameraOn && selected.isLocal && (
+        {cameraOn && selected.isLocal && nextDeviceId && (
           <Button
             size="icon"
             variant="secondary"
             className="absolute right-2 top-2 z-20 h-11 w-11"
-            onClick={onSwitchFacing}
-            title="Trocar câmera"
+            onClick={() => onSwitchCamera(nextDeviceId)}
+            title={CAMERA_SWITCH_TEXT}
           >
             <SwitchCamera className="h-4 w-4" />
-            <span className="sr-only">Trocar câmera frontal ou traseira</span>
+            <span className="sr-only">{CAMERA_SWITCH_TEXT}</span>
           </Button>
         )}
         {!cameraOn && selected.isLocal && (
@@ -141,9 +168,7 @@ export function CameraStage({
       </div>
       <div className="flex h-24 shrink-0 gap-2 overflow-x-auto px-3 py-2">
         {participants
-          .filter(
-            (participant) => !participant.isLocal && participant.identity !== selected.identity,
-          )
+          .filter((participant) => participant.identity !== selected.identity)
           .map((participant) => (
             <RailParticipant
               key={participant.identity}
