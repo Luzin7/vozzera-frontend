@@ -1,6 +1,7 @@
 export type CameraErrorKind = "denied" | "no-device" | "busy" | "unsupported" | "publish-failed";
 
 export const CAMERA_UNSUPPORTED_TEXT = "Texto pendente para câmera não suportada.";
+export const CAMERA_SWITCH_TEXT = "Trocar câmera";
 
 const CAMERA_ERROR_MESSAGES: Record<CameraErrorKind, string> = {
   denied: "Permita o acesso à câmera no navegador para aparecer no vídeo.",
