@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Check,
+  ChevronDown,
   HeadphoneOff,
   Headphones,
   Mic,
@@ -14,6 +16,12 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CallDuration } from "@/components/vozzera/CallDuration";
 import { CameraSpotlight } from "@/components/vozzera/CameraSpotlight";
@@ -22,6 +30,8 @@ import { ParticipantStrip } from "@/components/vozzera/ParticipantStrip";
 import { SpeakingParticipantTile } from "@/components/vozzera/SpeakingParticipantTile";
 import { ScreenShareStage, LocalScreenPreview } from "@/components/vozzera/ScreenShareStage";
 import type { LiveShare, WatchIntents } from "@/lib/vozzera/screen-share-watch";
+import type { CameraDevice } from "@/lib/vozzera/camera";
+import { CAMERA_SWITCH_TEXT } from "@/lib/vozzera/camera-errors";
 import { exitNoticeTextFor, OWN_AWAY_TEXT } from "@/lib/vozzera/away";
 import type { CallTile, ExitNoticeReason } from "@/lib/vozzera/away";
 import type { AwayReason } from "@/lib/vozzera/away-intent";
@@ -49,6 +59,8 @@ type Props = {
   cameraOn: boolean;
   cameraAvailable: boolean;
   cameraMessage: string | null;
+  cameraDevices: CameraDevice[];
+  activeCameraDeviceId: string | null;
   deafen: boolean;
   volumes: Record<string, number>;
   screenShareVolumes: Record<string, number>;
@@ -67,7 +79,7 @@ type Props = {
   mobileChatOpen: boolean;
   onToggleMic: () => void;
   onToggleCamera: () => void;
-  onSwitchCameraFacing: () => void;
+  onSelectCameraDevice: (deviceId: string) => void;
   onSetVolume: (identity: string, volume: number) => void;
   onSetScreenShareVolume: (identity: string, volume: number) => void;
   onToggleLocalMute: (identity: string) => void;
@@ -108,6 +120,8 @@ export function VoiceCallView({
   cameraOn,
   cameraAvailable,
   cameraMessage,
+  cameraDevices,
+  activeCameraDeviceId,
   deafen,
   volumes,
   screenShareVolumes,
@@ -126,7 +140,7 @@ export function VoiceCallView({
   mobileChatOpen,
   onToggleMic,
   onToggleCamera,
-  onSwitchCameraFacing,
+  onSelectCameraDevice,
   onSetVolume,
   onSetScreenShareVolume,
   onToggleLocalMute,
@@ -264,7 +278,9 @@ export function VoiceCallView({
                     }),
                   )}
                   cameraOn={cameraOn}
-                  onSwitchFacing={onSwitchCameraFacing}
+                  cameraDevices={cameraDevices}
+                  activeCameraDeviceId={activeCameraDeviceId}
+                  onSwitchCamera={onSelectCameraDevice}
                 />
               )}
               <div
@@ -297,6 +313,7 @@ export function VoiceCallView({
                         name={name}
                         isLocal={isLocal}
                         isAway={isTileAway}
+                        cameraOn={tiles[index]?.cameraOn === true}
                         layoutClassName={tileLayoutFor(isSolo, tiles.length === 3 && index === 2)}
                         isMuted={isParticipantMuted({
                           identity,
@@ -412,18 +429,47 @@ export function VoiceCallView({
               <span className="sr-only">{deafenLabel}</span>
             </Button>
 
-            <Button
-              size="icon"
-              variant={cameraOn ? "default" : "secondary"}
-              className="h-11 w-11"
-              onClick={onToggleCamera}
-              disabled={!isConnected || !cameraAvailable}
-              aria-pressed={cameraOn}
-              title={cameraLabel}
-            >
-              {cameraOn ? <VideoOff className="h-4 w-4" /> : <Video className="h-4 w-4" />}
-              <span className="sr-only">{cameraLabel}</span>
-            </Button>
+            <div className="flex items-center">
+              <Button
+                size="icon"
+                variant={cameraOn ? "default" : "secondary"}
+                className={`h-11 w-11 ${cameraOn && cameraDevices.length > 1 ? "md:rounded-r-none" : ""}`}
+                onClick={onToggleCamera}
+                disabled={!isConnected || !cameraAvailable}
+                aria-pressed={cameraOn}
+                title={cameraLabel}
+              >
+                {cameraOn ? <VideoOff className="h-4 w-4" /> : <Video className="h-4 w-4" />}
+                <span className="sr-only">{cameraLabel}</span>
+              </Button>
+              {cameraOn && cameraDevices.length > 1 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      className="hidden h-11 w-8 rounded-l-none border-l border-primary-foreground/20 md:inline-flex"
+                      title={CAMERA_SWITCH_TEXT}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                      <span className="sr-only">{CAMERA_SWITCH_TEXT}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="center">
+                    {cameraDevices.map((device) => (
+                      <DropdownMenuItem
+                        key={device.deviceId}
+                        onSelect={() => onSelectCameraDevice(device.deviceId)}
+                      >
+                        <Check
+                          className={`h-4 w-4 ${device.deviceId === activeCameraDeviceId ? "opacity-100" : "opacity-0"}`}
+                        />
+                        <span>{device.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
 
             <Tooltip>
               <TooltipTrigger asChild>
