@@ -68,6 +68,7 @@ import {
 import type { IdlePermissionGate } from "./idle-detection";
 import { playVoiceActionSound, primeVoiceSounds } from "./voice-sounds";
 import { cameraErrorMessageFor } from "@/lib/vozzera/camera-errors";
+import { videoInputDevices, type CameraDevice } from "@/lib/vozzera/camera";
 import { useCamera } from "@/lib/vozzera/use-camera";
 
 export type VoiceStatus = "idle" | "connecting" | "connected" | "away";
@@ -453,6 +454,7 @@ export function useVoice(options?: UseVoiceOptions) {
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [micOn, setMicOn] = useState(true);
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
+  const [cameraDevices, setCameraDevices] = useState<CameraDevice[]>([]);
   const [cameraDeviceCount, setCameraDeviceCount] = useState<number | null>(null);
   const [selectedMic, setSelectedMic] = useState<string | null>(() => {
     if (typeof localStorage === "undefined") return null;
@@ -672,6 +674,7 @@ export function useVoice(options?: UseVoiceOptions) {
   const refreshMediaDevices = useCallback(async () => {
     if (typeof navigator === "undefined") return;
     if (!navigator.mediaDevices?.enumerateDevices) {
+      setCameraDevices([]);
       setCameraDeviceCount(null);
       return;
     }
@@ -679,11 +682,14 @@ export function useVoice(options?: UseVoiceOptions) {
     const devices = await navigator.mediaDevices.enumerateDevices().catch(() => null);
     if (!devices) {
       setMicDevices([]);
+      setCameraDevices([]);
       setCameraDeviceCount(null);
       return;
     }
     setMicDevices(audioInputDevices(devices));
-    setCameraDeviceCount(devices.filter((device) => device.kind === "videoinput").length);
+    const nextCameraDevices = videoInputDevices(devices);
+    setCameraDevices(nextCameraDevices);
+    setCameraDeviceCount(nextCameraDevices.length);
   }, []);
 
   const syncLocalMicTrack = useCallback((room: LiveKitRoom) => {
@@ -1351,6 +1357,8 @@ export function useVoice(options?: UseVoiceOptions) {
     cameraOn: camera.cameraOn,
     cameraAvailable: cameraDeviceCount !== 0,
     cameraFacingMode: camera.facingMode,
+    cameraDevices,
+    activeCameraDeviceId: camera.activeDeviceId,
     cameraMessage,
     volumes,
     screenShareVolumes,
@@ -1406,6 +1414,6 @@ export function useVoice(options?: UseVoiceOptions) {
     toggleMic,
     toggleCamera: camera.toggle,
     disableCamera: camera.disable,
-    switchCameraFacing: camera.switchFacing,
+    switchCamera: camera.switchCamera,
   };
 }
