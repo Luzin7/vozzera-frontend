@@ -27,12 +27,36 @@ function SpotlightVideo({ participant }: Readonly<{ participant: SpotlightPartic
     );
   }
   return (
-    <CameraTileVideo
-      identity={participant.identity}
-      name={participant.name}
-      camera={camera}
-      className="relative aspect-video max-h-[calc(100dvh-8rem)] w-full cursor-default"
-    />
+    <div className="relative aspect-video max-h-full w-full max-w-6xl overflow-hidden rounded-lg">
+      <CameraTileVideo
+        identity={participant.identity}
+        name={participant.name}
+        camera={camera}
+        objectFit="contain"
+        className="cursor-default"
+      />
+    </div>
+  );
+}
+
+function SpotlightThumbnail({ participant }: Readonly<{ participant: SpotlightParticipant }>) {
+  const camera = useCameraState(participant.identity);
+  if (camera.on && camera.track) {
+    return (
+      <CameraTileVideo
+        identity={participant.identity}
+        name={participant.name}
+        camera={camera}
+        className="cursor-pointer"
+      />
+    );
+  }
+  return (
+    <span
+      className={`flex h-10 w-10 items-center justify-center rounded-full font-mono text-xs font-semibold ${avatarColorClass(participant.name)}`}
+    >
+      {initials(participant.name)}
+    </span>
   );
 }
 
@@ -62,7 +86,7 @@ export function CameraSpotlight({
       role="dialog"
       aria-modal="true"
       aria-label={`Vídeo de ${participant.name}`}
-      className="fixed inset-0 z-40 flex flex-col bg-background/95 p-3 pb-20"
+      className="absolute inset-0 z-40 flex flex-col bg-background/95 p-3"
     >
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-card">
         <SpotlightVideo participant={participant} />
@@ -85,10 +109,14 @@ export function CameraSpotlight({
             <button
               key={item.identity}
               type="button"
-              className="flex aspect-video h-24 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="relative flex aspect-video h-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border bg-card text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => onSelect(item)}
+              title={`Ampliar vídeo de ${item.name}`}
             >
-              {item.name}
+              <SpotlightThumbnail participant={item} />
+              <span className="absolute bottom-1 left-1 z-20 max-w-[calc(100%-0.5rem)] truncate rounded bg-background/80 px-1 text-xs">
+                {item.name}
+              </span>
             </button>
           ))}
       </div>
