@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CAMERA_PUBLISH_OPTIONS,
   cameraErrorFrom,
   canPublishCamera,
   isMirroredPreview,
+  nextCameraDeviceId,
+  switchCameraDevice,
+  videoInputDevices,
   visibleCameraIdentities,
 } from "@/lib/vozzera/camera";
 
@@ -86,5 +89,45 @@ describe("camera presentation", () => {
       videoEncoding: { maxBitrate: 800_000, maxFramerate: 30 },
     });
     expect(CAMERA_PUBLISH_OPTIONS.videoSimulcastLayers).toHaveLength(2);
+  });
+});
+
+describe("camera devices", () => {
+  const devices = [
+    { kind: "audioinput", deviceId: "mic", label: "Microfone" },
+    { kind: "videoinput", deviceId: "front", label: "Câmera frontal" },
+    { kind: "videoinput", deviceId: "rear", label: "" },
+  ] satisfies Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[];
+
+  it("lists only cameras and provides a fallback label", () => {
+    expect(videoInputDevices(devices)).toEqual([
+      { deviceId: "front", label: "Câmera frontal" },
+      { deviceId: "rear", label: "Câmera 2" },
+    ]);
+  });
+
+  it("cycles through available cameras", () => {
+    const cameras = videoInputDevices(devices);
+    expect(nextCameraDeviceId(cameras, "front")).toBe("rear");
+    expect(nextCameraDeviceId(cameras, "rear")).toBe("front");
+    expect(nextCameraDeviceId(cameras, null)).toBe("front");
+  });
+
+  it("does not offer switching with fewer than two cameras", () => {
+    expect(nextCameraDeviceId([], null)).toBeNull();
+    expect(nextCameraDeviceId([{ deviceId: "front", label: "Frontal" }], "front")).toBeNull();
+  });
+
+  it("switches the active video input without republishing", async () => {
+    const switchActiveDevice = vi.fn().mockResolvedValue(true);
+    await switchCameraDevice({ switchActiveDevice }, "rear");
+    expect(switchActiveDevice).toHaveBeenCalledWith("videoinput", "rear");
+  });
+
+  it("rejects a camera switch that LiveKit could not apply", async () => {
+    const switchActiveDevice = vi.fn().mockResolvedValue(false);
+    await expect(switchCameraDevice({ switchActiveDevice }, "rear")).rejects.toThrow(
+      "camera switch failed",
+    );
   });
 });
