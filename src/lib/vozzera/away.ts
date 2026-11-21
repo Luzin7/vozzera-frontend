@@ -99,7 +99,13 @@ export function ownAwayEnded(
   return !(entries ?? []).some((entry) => entry.userId === ownUserId);
 }
 
-export type CallTile = { identity: string; name: string; isLocal: boolean; isAway: boolean };
+export type CallTile = {
+  identity: string;
+  name: string;
+  isLocal: boolean;
+  isAway: boolean;
+  cameraOn?: boolean;
+};
 
 export function callTilesFor(
   liveKit: CallParticipant[],

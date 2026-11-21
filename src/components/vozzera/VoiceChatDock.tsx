@@ -1,4 +1,4 @@
-import { MessageSquare, X } from "lucide-react";
+import { MessageSquare, Video, X } from "lucide-react";
 import { memo } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,8 @@ type Props = {
   onLoadOlder?: ((roomId: string) => void) | undefined;
   editLastRequest: number;
   onEditLast: () => void;
+  cameraOn?: boolean;
+  onDisableCamera?: () => void;
 };
 
 export const VoiceChatDock = memo(function VoiceChatDock({
@@ -51,6 +53,8 @@ export const VoiceChatDock = memo(function VoiceChatDock({
   onLoadOlder,
   editLastRequest,
   onEditLast,
+  cameraOn = false,
+  onDisableCamera,
 }: Readonly<Props>) {
   return (
     <aside
@@ -74,6 +78,18 @@ export const VoiceChatDock = memo(function VoiceChatDock({
           <span className="sr-only">Fechar chat da call</span>
         </Button>
       </header>
+
+      {cameraOn && onDisableCamera && (
+        <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-card px-3 md:hidden">
+          <Video className="h-4 w-4 text-muted-foreground" />
+          <span className="min-w-0 flex-1 text-xs text-foreground">
+            Você está transmitindo sua câmera.
+          </span>
+          <Button className="h-11 shrink-0" variant="secondary" onClick={onDisableCamera}>
+            Desligar câmera
+          </Button>
+        </div>
+      )}
 
       <MessageList
         messages={messages}

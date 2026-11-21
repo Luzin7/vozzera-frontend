@@ -40,13 +40,14 @@ export const ParticipantStrip = memo(function ParticipantStrip({
       aria-label="Participantes"
       className="flex shrink-0 flex-row gap-2 overflow-x-auto overflow-y-hidden border-t border-border bg-muted/30 p-2 lg:w-52 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:border-l lg:border-t-0"
     >
-      {orderStripTiles(tiles).map(({ identity, name, isLocal, isAway }) => (
+      {orderStripTiles(tiles).map(({ identity, name, isLocal, isAway, cameraOn }) => (
         <CompactParticipant
           key={identity}
           identity={identity}
           name={name}
           isLocal={isLocal}
           isAway={isAway}
+          cameraOn={cameraOn === true}
           isMuted={isParticipantMuted({ identity, isLocal, micEnabled, mutedParticipants })}
           isDeafened={(isLocal && deafen) || deafenedParticipants[identity] === true}
           isLocallyInaudible={isParticipantLocallyInaudible(isLocal, volumes[identity])}
