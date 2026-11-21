@@ -21,6 +21,39 @@ export type CameraParticipant = {
 
 export type CameraFacingMode = "user" | "environment";
 
+export type CameraDevice = {
+  deviceId: string;
+  label: string;
+};
+
+export function videoInputDevices(
+  devices: readonly Pick<MediaDeviceInfo, "deviceId" | "kind" | "label">[],
+): CameraDevice[] {
+  return devices
+    .filter((device) => device.kind === "videoinput")
+    .map((device, index) => ({
+      deviceId: device.deviceId,
+      label: device.label || `Câmera ${index + 1}`,
+    }));
+}
+
+export function nextCameraDeviceId(
+  devices: readonly CameraDevice[],
+  activeDeviceId: string | null,
+): string | null {
+  if (devices.length < 2) return null;
+  const activeIndex = devices.findIndex((device) => device.deviceId === activeDeviceId);
+  return devices[(activeIndex + 1) % devices.length]?.deviceId ?? null;
+}
+
+export async function switchCameraDevice(
+  room: { switchActiveDevice: (kind: MediaDeviceKind, deviceId: string) => Promise<boolean> },
+  deviceId: string,
+): Promise<void> {
+  const switched = await room.switchActiveDevice("videoinput", deviceId);
+  if (!switched) throw new Error("camera switch failed");
+}
+
 export function canPublishCamera(
   mediaDevices: Pick<MediaDevices, "getUserMedia"> | undefined,
 ): boolean {
