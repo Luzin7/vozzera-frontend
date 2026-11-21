@@ -34,6 +34,7 @@ type UseCameraOptions = {
 };
 
 type CameraOperation = "enable" | "disable" | null;
+type CameraPageAction = "keep" | "resume" | "disable";
 
 export function cameraOperationFor(targetOn: boolean, cameraOn: boolean): CameraOperation {
   if (targetOn === cameraOn) return null;
@@ -44,18 +45,18 @@ export function nextCameraTarget(targetOn: boolean): boolean {
   return !targetOn;
 }
 
+export function cameraPageAction(hidden: boolean, pageExiting: boolean): CameraPageAction {
+  if (pageExiting) return "disable";
+  if (hidden) return "keep";
+  return "resume";
+}
+
 function cameraPublicationFor(participant: Participant): TrackPublication | undefined {
   return participant.getTrackPublication(Track.Source.Camera);
 }
 
 function currentFacingMode(track: LocalVideoTrack): CameraFacingMode {
   return track.mediaStreamTrack.getSettings().facingMode === "environment" ? "environment" : "user";
-}
-
-function miniWindowIsOpen(): boolean {
-  const api = (window as Window & { documentPictureInPicture?: { window?: Window | null } })
-    .documentPictureInPicture;
-  return api?.window != null;
 }
 
 async function cameraPermissionDenied(): Promise<boolean> {
@@ -228,6 +229,16 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
     return queueReconcile();
   }, [queueReconcile]);
 
+  const disableForPageExit = useCallback(() => {
+    targetOnRef.current = false;
+    const track = trackRef.current;
+    if (!track) return;
+    const room = roomRef.current;
+    if (room) void room.localParticipant.unpublishTrack(track, true).catch(() => undefined);
+    track.stop();
+    syncLocalTrack(null);
+  }, [roomRef, syncLocalTrack]);
+
   const toggle = useCallback(() => {
     targetOnRef.current = nextCameraTarget(targetOnRef.current);
     return queueReconcile();
@@ -357,13 +368,7 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
 
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.hidden) {
-        if (!trackRef.current) return;
-        if (!mobileRef.current && miniWindowIsOpen()) return;
-        setNotice("Sua câmera foi desligada quando você saiu da aba.");
-        void disable();
-        return;
-      }
+      if (cameraPageAction(document.hidden, false) === "keep") return;
 
       const track = trackRef.current;
       if (!track?.isMuted) return;
@@ -372,9 +377,19 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
         void disable();
       });
     };
+    const onPageHide = () => {
+      if (cameraPageAction(document.hidden, true) !== "disable") return;
+      if (!trackRef.current) return;
+      setNotice("Sua câmera foi desligada quando você saiu da aba.");
+      disableForPageExit();
+    };
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [disable, facingMode]);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [disable, disableForPageExit, facingMode]);
 
   return {
     cameraOn,
