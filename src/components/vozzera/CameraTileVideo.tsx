@@ -9,6 +9,7 @@ type Props = {
   name: string;
   camera: CameraState;
   className?: string;
+  objectFit?: "cover" | "contain";
   onActivate?: (identity: string, trigger: HTMLButtonElement) => void;
 };
 
@@ -17,6 +18,7 @@ export const CameraTileVideo = memo(function CameraTileVideo({
   name,
   camera,
   className,
+  objectFit = "cover",
   onActivate,
 }: Readonly<Props>) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -39,7 +41,11 @@ export const CameraTileVideo = memo(function CameraTileVideo({
       autoPlay
       playsInline
       muted={camera.isLocal}
-      className={cn("h-full w-full object-cover", mirrored && "-scale-x-100")}
+      className={cn(
+        "h-full w-full",
+        objectFit === "contain" ? "object-contain" : "object-cover",
+        mirrored && "-scale-x-100",
+      )}
     />
   );
 
@@ -55,11 +61,12 @@ export const CameraTileVideo = memo(function CameraTileVideo({
     <button
       type="button"
       className={cn(
-        "absolute inset-0 z-10 overflow-hidden rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        "absolute inset-0 z-10 cursor-zoom-in overflow-hidden rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         className,
       )}
       onClick={(event) => onActivate(identity, event.currentTarget)}
       aria-label={`Ampliar vídeo de ${name}`}
+      title={`Ampliar vídeo de ${name}`}
     >
       {video}
     </button>
