@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cameraOperationFor, nextCameraTarget } from "@/lib/vozzera/use-camera";
+import { cameraOperationFor, cameraPageAction, nextCameraTarget } from "@/lib/vozzera/use-camera";
 
 describe("camera state machine", () => {
   it("enables only while the target is on and no track exists", () => {
@@ -19,5 +19,20 @@ describe("camera state machine", () => {
 
     expect(firstTap).toBe(true);
     expect(secondTap).toBe(false);
+  });
+});
+
+describe("camera page lifecycle", () => {
+  it("keeps publishing while another tab is active", () => {
+    expect(cameraPageAction(true, false)).toBe("keep");
+  });
+
+  it("resumes a browser-muted track after returning to the tab", () => {
+    expect(cameraPageAction(false, false)).toBe("resume");
+  });
+
+  it("disables the camera only when the page is exiting", () => {
+    expect(cameraPageAction(true, true)).toBe("disable");
+    expect(cameraPageAction(false, true)).toBe("disable");
   });
 });
