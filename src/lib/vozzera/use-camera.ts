@@ -15,6 +15,7 @@ import {
   MOBILE_CAMERA_CAP,
   cameraErrorFrom,
   canPublishCamera,
+  switchCameraDevice,
   visibleCameraIdentities,
   type CameraFacingMode,
 } from "@/lib/vozzera/camera";
@@ -45,8 +46,13 @@ export function nextCameraTarget(targetOn: boolean): boolean {
   return !targetOn;
 }
 
-export function cameraPageAction(hidden: boolean, pageExiting: boolean): CameraPageAction {
+export function cameraPageAction(
+  hidden: boolean,
+  pageExiting: boolean,
+  mobile = false,
+): CameraPageAction {
   if (pageExiting) return "disable";
+  if (hidden && mobile) return "disable";
   if (hidden) return "keep";
   return "resume";
 }
@@ -74,10 +80,30 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
   const [error, setError] = useState<CameraErrorKind | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<CameraFacingMode>("user");
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
   const trackRef = useRef<LocalVideoTrack | null>(null);
+  const observedMediaTrackRef = useRef<MediaStreamTrack | null>(null);
   const targetOnRef = useRef(false);
   const transitionRef = useRef<Promise<void>>(Promise.resolve());
   const mobileRef = useRef(false);
+
+  const handleLocalTrackEnded = useCallback(
+    (track: LocalVideoTrack, mediaTrack: MediaStreamTrack) => {
+      if (!targetOnRef.current) return;
+      if (trackRef.current !== track || track.mediaStreamTrack !== mediaTrack) return;
+      targetOnRef.current = false;
+      setError("publish-failed");
+      const room = roomRef.current;
+      if (room) void room.localParticipant.unpublishTrack(track, true).catch(() => undefined);
+      trackRef.current = null;
+      observedMediaTrackRef.current = null;
+      setCameraOn(false);
+      setLocalCameraPublishing(false);
+      const identity = room?.localParticipant.identity;
+      if (identity) clearCameraState(identity);
+    },
+    [roomRef],
+  );
 
   const syncLocalTrack = useCallback(
     (track: LocalVideoTrack | null) => {
@@ -87,10 +113,19 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
       const on = track !== null;
       setCameraOn(on);
       setLocalCameraPublishing(on);
+      setActiveDeviceId(track?.mediaStreamTrack.getSettings().deviceId ?? null);
+      if (!track) observedMediaTrackRef.current = null;
       if (!identity) return;
       if (!track) {
         clearCameraState(identity);
         return;
+      }
+      const mediaTrack = track.mediaStreamTrack;
+      if (observedMediaTrackRef.current !== mediaTrack) {
+        observedMediaTrackRef.current = mediaTrack;
+        mediaTrack.addEventListener("ended", () => handleLocalTrackEnded(track, mediaTrack), {
+          once: true,
+        });
       }
       const nextFacingMode = currentFacingMode(track);
       setFacingMode(nextFacingMode);
@@ -102,7 +137,7 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
         track,
       });
     },
-    [roomRef],
+    [handleLocalTrackEnded, roomRef],
   );
 
   const applySubscriptionCap = useCallback((room: Room) => {
@@ -179,16 +214,6 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
       return;
     }
 
-    track.mediaStreamTrack.addEventListener(
-      "ended",
-      () => {
-        targetOnRef.current = false;
-        setError("publish-failed");
-        void room.localParticipant.unpublishTrack(track, true).catch(() => undefined);
-        syncLocalTrack(null);
-      },
-      { once: true },
-    );
     setError(null);
     setNotice(null);
     syncLocalTrack(track);
@@ -244,22 +269,22 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
     return queueReconcile();
   }, [queueReconcile]);
 
-  const switchFacing = useCallback(async () => {
-    const track = trackRef.current;
-    const next = facingMode === "user" ? "environment" : "user";
-    if (!track) {
-      setFacingMode(next);
-      return;
-    }
-    try {
-      await track.restartTrack({ facingMode: next, resolution: VideoPresets.h720 });
-      setFacingMode(next);
-      const identity = roomRef.current?.localParticipant.identity;
-      if (identity) setCameraState(identity, { facingMode: next, track });
-    } catch {
-      setError("publish-failed");
-    }
-  }, [facingMode, roomRef]);
+  const switchCamera = useCallback(
+    async (deviceId: string) => {
+      const room = roomRef.current;
+      const track = trackRef.current;
+      if (!room || !track) return;
+      try {
+        await switchCameraDevice(room, deviceId);
+        syncLocalTrack(track);
+        setActiveDeviceId(deviceId);
+        setError(null);
+      } catch {
+        setError("publish-failed");
+      }
+    },
+    [roomRef, syncLocalTrack],
+  );
 
   const onTrackSubscribed = useCallback(
     (room: Room, track: import("livekit-client").Track) => {
@@ -332,10 +357,12 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
     targetOnRef.current = false;
     trackRef.current?.stop();
     trackRef.current = null;
+    observedMediaTrackRef.current = null;
     setCameraOn(false);
     setError(null);
     setNotice(null);
     setFacingMode("user");
+    setActiveDeviceId(null);
     resetCameraStore();
   }, []);
 
@@ -368,14 +395,26 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
 
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (cameraPageAction(document.hidden, false) === "keep") return;
+      const action = cameraPageAction(document.hidden, false, mobileRef.current);
+      if (action === "keep") return;
+      if (action === "disable") {
+        if (!trackRef.current) return;
+        setNotice("Sua câmera foi desligada quando você saiu da aba.");
+        void disable();
+        return;
+      }
 
       const track = trackRef.current;
       if (!track?.isMuted) return;
-      void track.restartTrack({ facingMode, resolution: VideoPresets.h720 }).catch(() => {
-        setError("publish-failed");
-        void disable();
-      });
+      void track
+        .restartTrack({ facingMode, resolution: VideoPresets.h720 })
+        .then(() => {
+          if (trackRef.current === track) syncLocalTrack(track);
+        })
+        .catch(() => {
+          setError("publish-failed");
+          void disable();
+        });
     };
     const onPageHide = () => {
       if (cameraPageAction(document.hidden, true) !== "disable") return;
@@ -389,17 +428,18 @@ export function useCamera({ roomRef, deviceCount }: UseCameraOptions) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [disable, disableForPageExit, facingMode]);
+  }, [disable, disableForPageExit, facingMode, syncLocalTrack]);
 
   return {
     cameraOn,
     error,
     notice,
     facingMode,
+    activeDeviceId,
     enable,
     disable,
     toggle,
-    switchFacing,
+    switchCamera,
     applySubscriptionCap,
     onTrackSubscribed,
     onTrackUnsubscribed,
