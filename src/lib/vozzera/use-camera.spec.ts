@@ -27,11 +27,15 @@ describe("camera page lifecycle", () => {
     expect(cameraPageAction(true, false)).toBe("keep");
   });
 
+  it("disables the camera when a mobile browser goes to background", () => {
+    expect(cameraPageAction(true, false, true)).toBe("disable");
+  });
+
   it("resumes a browser-muted track after returning to the tab", () => {
     expect(cameraPageAction(false, false)).toBe("resume");
   });
 
-  it("disables the camera only when the page is exiting", () => {
+  it("disables the camera whenever the page is exiting", () => {
     expect(cameraPageAction(true, true)).toBe("disable");
     expect(cameraPageAction(false, true)).toBe("disable");
   });
