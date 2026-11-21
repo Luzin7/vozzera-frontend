@@ -741,6 +741,8 @@ function Index() {
                 cameraOn={voice.cameraOn}
                 cameraAvailable={voice.cameraAvailable}
                 cameraMessage={voice.cameraMessage}
+                cameraDevices={voice.cameraDevices}
+                activeCameraDeviceId={voice.activeCameraDeviceId}
                 deafen={voice.deafen}
                 volumes={voice.volumes}
                 screenShareVolumes={voice.screenShareVolumes}
@@ -765,7 +767,7 @@ function Index() {
                 mobileChatOpen={isMobile && voiceChatOpen}
                 onToggleMic={handleToggleMic}
                 onToggleCamera={() => void voice.toggleCamera()}
-                onSwitchCameraFacing={() => void voice.switchCameraFacing()}
+                onSelectCameraDevice={(deviceId) => void voice.switchCamera(deviceId)}
                 onToggleDeafen={handleToggleDeafen}
                 onToggleScreenShare={handleToggleScreenShare}
                 onReduceLocalQuality={reduceScreenQuality}
