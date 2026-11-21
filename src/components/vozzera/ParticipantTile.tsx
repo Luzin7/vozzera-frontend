@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { HeadphoneOff, MicOff, VolumeX } from "lucide-react";
+import { HeadphoneOff, MicOff, Video, VolumeX } from "lucide-react";
 
 import { ConnectionQualityBadge } from "@/components/vozzera/ConnectionQualityBadge";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
@@ -16,6 +16,7 @@ type ParticipantTileProps = {
   isAway: boolean;
   layoutClassName: string;
   isSpeaking: boolean;
+  cameraOn: boolean;
   isMuted: boolean;
   isDeafened: boolean;
   isLocallyInaudible: boolean;
@@ -36,8 +37,6 @@ type ParticipantTileProps = {
 
 const TILE_MENU_TRIGGER_CLASS =
   "group/volume absolute inset-0 cursor-pointer rounded-xl transition-colors hover:bg-foreground/5 focus-visible:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none";
-const VIDEO_TILE_MENU_TRIGGER_CLASS =
-  "group/volume absolute right-1 top-1 z-30 flex h-11 w-11 cursor-pointer items-center justify-center rounded-md bg-background/70 transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none";
 
 export const ParticipantTile = memo(function ParticipantTile({
   identity,
@@ -46,6 +45,7 @@ export const ParticipantTile = memo(function ParticipantTile({
   isAway,
   layoutClassName,
   isSpeaking,
+  cameraOn,
   isMuted,
   isDeafened,
   isLocallyInaudible,
@@ -105,7 +105,7 @@ export const ParticipantTile = memo(function ParticipantTile({
           {...(onCameraActivate ? { onActivate: onCameraActivate } : {})}
         />
       )}
-      {!isLocal && (
+      {!isLocal && !showsCamera && (
         <ParticipantMenu
           name={name}
           volume={volume}
@@ -119,8 +119,8 @@ export const ParticipantTile = memo(function ParticipantTile({
           onSetScreenShareVolume={(next) => onSetScreenShareVolume(identity, next)}
           onToggleLocalMute={() => onToggleLocalMute(identity)}
           onToggleLocalScreenShareMute={() => onToggleLocalScreenShareMute(identity)}
-          triggerClassName={showsCamera ? VIDEO_TILE_MENU_TRIGGER_CLASS : TILE_MENU_TRIGGER_CLASS}
-          iconClassName={showsCamera ? "h-4 w-4" : "absolute bottom-3 right-3 h-4 w-4"}
+          triggerClassName={TILE_MENU_TRIGGER_CLASS}
+          iconClassName="absolute bottom-3 right-3 h-4 w-4"
         >
           {null}
         </ParticipantMenu>
@@ -146,6 +146,12 @@ export const ParticipantTile = memo(function ParticipantTile({
 
       <div className="absolute bottom-3 left-3 z-20 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-sm text-foreground">
         <span className="truncate">{name}</span>
+        {cameraOn && (
+          <Video
+            aria-label={isLocal ? "Sua câmera está ligada" : `${name} está com a câmera ligada`}
+            className="h-3.5 w-3.5 shrink-0 text-primary"
+          />
+        )}
         <ConnectionQualityBadge quality={quality} />
         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" />}
         {isDeafened && (
