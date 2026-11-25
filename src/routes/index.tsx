@@ -115,6 +115,7 @@ function Index() {
     setAwayIntent,
     dropAwayIntent,
     resendAwayIntent,
+    sendVoiceLeave,
     onlineUsers,
     socketStatus,
     openRoom,
@@ -158,7 +159,7 @@ function Index() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const isOnline = useOnline();
-  const voice = useVoice();
+  const voice = useVoice({ sendVoiceLeave });
   const { error: voiceError, clearError: clearVoiceError } = voice;
   const { request: editLastRequest, requestEditLast } = useEditLastRequest();
   const {

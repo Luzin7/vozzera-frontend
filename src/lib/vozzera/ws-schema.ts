@@ -6,6 +6,7 @@ import {
   type InboundEvent,
   type InboundEventType,
   type OutboundEvent,
+  type VoiceLeave,
 } from "@/lib/vozzera/types";
 
 export const MAX_FRAME_BYTES = MAX_MESSAGE_LENGTH + 4096;
@@ -26,6 +27,16 @@ export function inboundFrame(
     topic: `room:${roomId}`,
     ts: new Date().toISOString(),
     data,
+  };
+}
+
+export function voiceLeaveFrame({ roomId, sid }: VoiceLeave): InboundEvent {
+  return {
+    v: 1,
+    type: "voice.leave",
+    topic: `room:${roomId}`,
+    ts: new Date().toISOString(),
+    data: { room_id: roomId, sid },
   };
 }
 

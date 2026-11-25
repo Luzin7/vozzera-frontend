@@ -28,7 +28,7 @@ import type { AwayReason } from "./away-intent";
 import { useKrispFilter } from "./use-krisp-filter";
 import { useSpeakingDetection } from "./use-speaking-detection";
 import { getVoicePreferences } from "./voice-preferences";
-import type { VoiceTokenResponse } from "./types";
+import type { VoiceLeave, VoiceTokenResponse } from "./types";
 import {
   applyMicDeviceChoice,
   applyVolumeWithElementMuted,
@@ -83,7 +83,10 @@ export type ExitNotice = SessionSnapshot & { reason: ExitNoticeReason };
 
 export type ConnectOptions = { micEnabled?: boolean; deafen?: boolean; hardMuted?: boolean };
 
-type UseVoiceOptions = { onReturned?: () => void };
+type UseVoiceOptions = {
+  onReturned?: () => void;
+  sendVoiceLeave?: (leave: VoiceLeave) => void;
+};
 
 export type ConnectionState = "connected" | "reconnecting";
 
@@ -453,6 +456,7 @@ export function useVoice(options?: UseVoiceOptions) {
   const lastRemoteCountRef = useRef(0);
   const lastLocalSpeechAtRef = useRef(0);
   const onReturnedRef = useRef(options?.onReturned);
+  const sendVoiceLeaveRef = useRef(options?.sendVoiceLeave);
   const voiceAudioContextRef = useRef<AudioContext | null>(null);
   const connectionAttemptRef = useRef(0);
   const hardMutedRef = useRef(hardMuted);
@@ -468,6 +472,7 @@ export function useVoice(options?: UseVoiceOptions) {
   exitNoticeRef.current = exitNotice;
   micOnRef.current = micOn;
   onReturnedRef.current = options?.onReturned;
+  sendVoiceLeaveRef.current = options?.sendVoiceLeave;
   const screenShareAudioSourceRef = useRef<ScreenShareAudioSource | null>(null);
   const deafenTransitionRef = useRef<Promise<void>>(Promise.resolve());
   const micEnabledBeforeDeafenRef = useRef(true);
@@ -642,10 +647,18 @@ export function useVoice(options?: UseVoiceOptions) {
     await audioContext.close().catch(() => undefined);
   }, []);
 
+  const announceVoiceLeave = useCallback(() => {
+    const roomId = activeRoomIdRef.current;
+    const sid = roomRef.current?.localParticipant.sid;
+    if (!sid || roomId === null) return;
+    sendVoiceLeaveRef.current?.({ roomId, sid });
+  }, []);
+
   const disconnect = useCallback(async () => {
     const wasConnected = roomRef.current !== null;
     stopIdleDetection();
     connectionAttemptRef.current += 1;
+    announceVoiceLeave();
     await roomRef.current?.disconnect();
     await closeVoiceAudioContext();
     roomRef.current = null;
@@ -655,7 +668,7 @@ export function useVoice(options?: UseVoiceOptions) {
     setAwayInfo(null);
     setExitNotice(null);
     if (wasConnected) playVoiceActionSound("leave");
-  }, [closeVoiceAudioContext, resetRoomState]);
+  }, [announceVoiceLeave, closeVoiceAudioContext, resetRoomState]);
 
   const captureSession = useCallback(
     (roomId: string): SessionSnapshot => ({
@@ -893,6 +906,7 @@ export function useVoice(options?: UseVoiceOptions) {
         const room = new Room({
           adaptiveStream: screenShareAdaptiveStreamSettings(),
           dynacast: true,
+          disconnectOnPageLeave: true,
           webAudioMix: { audioContext: voiceAudioContext },
           audioCaptureDefaults: roomAudioCaptureDefaults(),
           publishDefaults: {
@@ -1229,6 +1243,16 @@ export function useVoice(options?: UseVoiceOptions) {
       element.remove();
     };
   }, [selfMonitor, localMicTrack]);
+
+  useEffect(() => {
+    const leaveOnPageHide = () => {
+      announceVoiceLeave();
+      void roomRef.current?.disconnect().catch(() => undefined);
+    };
+
+    window.addEventListener("pagehide", leaveOnPageHide);
+    return () => window.removeEventListener("pagehide", leaveOnPageHide);
+  }, [announceVoiceLeave]);
 
   useEffect(() => {
     return () => {

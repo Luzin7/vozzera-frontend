@@ -284,7 +284,10 @@ O front rejeita frames sem `v: 1`, tipos desconhecidos e payloads incompatíveis
 { "v": 1, "type": "message", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid", "content": "string", "reply_to_message_id": "uuid (opcional)" } }
 { "v": 1, "type": "typing.start", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
 { "v": 1, "type": "typing.stop", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid" } }
+{ "v": 1, "type": "voice.leave", "topic": "room:<uuid>", "ts": "string", "data": { "room_id": "uuid", "sid": "string" } }
 ```
+
+`voice.leave` avisa o servidor que o usuário saiu da call, para a presença de voz cair na hora em vez de esperar o webhook do LiveKit. O front envia ao desligar a chamada e no `pagehide` da página, imediatamente antes de desconectar do LiveKit, com `room_id` e `sid`, o sid do participante LiveKit daquela sessão (a identidade do usuário vem do socket). O `sid` limita a saída àquela sessão, sem derrubar outra aba do mesmo usuário. É best-effort: não é enviado sem `sid` (conexão ainda não estabelecida) nem com o socket fechado, não entra em fila e não espera resposta. Não é enviado no fluxo de ausência (`voice.away.*`). O servidor ignora repetições do mesmo `sid` dentro de 1 s.
 
 `room.subscribe` é autorizado pelo backend pela política de acesso da sala: salas `staff_only` exigem `mod`/`admin`. A ausência de erro depois do envio não confirma a inscrição; uma inscrição negada é silenciosa na versão atual.
 

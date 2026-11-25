@@ -15,8 +15,8 @@ import {
 import type { SocketHeartbeat, TypingAction } from "@/lib/vozzera/chat";
 import { createAwayIntentTracker } from "@/lib/vozzera/away-intent";
 import type { AwayCommand, AwayIntent } from "@/lib/vozzera/away-intent";
-import type { InboundEvent, OutboundEvent } from "@/lib/vozzera/types";
-import { awayFrame, inboundFrame } from "@/lib/vozzera/ws-schema";
+import type { InboundEvent, OutboundEvent, VoiceLeave } from "@/lib/vozzera/types";
+import { awayFrame, inboundFrame, voiceLeaveFrame } from "@/lib/vozzera/ws-schema";
 
 export type SocketStatus = "connecting" | "open" | "closed";
 
@@ -242,6 +242,12 @@ export function useSocket({
     );
   }, []);
 
+  const sendVoiceLeave = useCallback((leave: VoiceLeave) => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify(voiceLeaveFrame(leave)));
+  }, []);
+
   const setAwayIntent = useCallback(
     (intent: AwayIntent | null) => {
       const socket = socketRef.current;
@@ -270,5 +276,6 @@ export function useSocket({
     resubscribeRoom,
     sendMessage,
     sendTyping,
+    sendVoiceLeave,
   };
 }
