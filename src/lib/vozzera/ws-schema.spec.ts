@@ -6,6 +6,7 @@ import {
   awayFrame,
   inboundFrame,
   outboundFrameSchema,
+  voiceLeaveFrame,
 } from "@/lib/vozzera/ws-schema";
 
 describe("inboundFrame", () => {
@@ -23,6 +24,16 @@ describe("inboundFrame", () => {
       type,
       topic: `room:${roomId}`,
       data: { room_id: roomId },
+    });
+  });
+
+  it("builds voice.leave on the room topic with the room id and participant sid", () => {
+    expect(voiceLeaveFrame({ roomId, sid: "PA_local" })).toEqual({
+      v: 1,
+      type: "voice.leave",
+      topic: `room:${roomId}`,
+      ts: expect.any(String),
+      data: { room_id: roomId, sid: "PA_local" },
     });
   });
 

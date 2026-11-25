@@ -63,7 +63,8 @@ export type InboundEventType =
   | "typing.start"
   | "typing.stop"
   | "voice.away.enter"
-  | "voice.away.leave";
+  | "voice.away.leave"
+  | "voice.leave";
 
 export type InboundEvent = {
   v: 1;
@@ -72,11 +73,14 @@ export type InboundEvent = {
   ts: string;
   data: {
     room_id?: string;
+    sid?: string;
     content?: string;
     reply_to_message_id?: string;
     reason?: "idle" | "connection";
   };
 };
+
+export type VoiceLeave = { roomId: string; sid: string };
 
 export type AwayEntry = { userId: string; username: string; since: string };
 
