@@ -31,11 +31,18 @@ describe("callParticipantFrom", () => {
       identity: "id-1",
       name: "id-1",
       isLocal: false,
+      cameraOn: false,
     });
   });
 
   it("flags the local participant by identity", () => {
     expect(callParticipantFrom({ identity: "id-1", name: "Luan" }, "id-1").isLocal).toBe(true);
+  });
+
+  it("keeps camera state separate from microphone and screen share state", () => {
+    expect(
+      callParticipantFrom({ identity: "id-1", name: "Luan", cameraOn: true }, "id-2"),
+    ).toMatchObject({ cameraOn: true, isLocal: false });
   });
 });
 
@@ -152,8 +159,8 @@ describe("setIdentityValue", () => {
 });
 
 describe("reuseCallParticipants", () => {
-  const ana = { identity: "a", name: "Ana", isLocal: true };
-  const bia = { identity: "b", name: "Bia", isLocal: false };
+  const ana = { identity: "a", name: "Ana", isLocal: true, cameraOn: false };
+  const bia = { identity: "b", name: "Bia", isLocal: false, cameraOn: false };
 
   it("returns the previous array when nothing changed", () => {
     const prev = [ana, bia];
@@ -166,7 +173,12 @@ describe("reuseCallParticipants", () => {
     const result = reuseCallParticipants(prev, [{ ...ana }, { ...bia, name: "Bea" }]);
 
     expect(result[0]).toBe(ana);
-    expect(result[1]).toEqual({ identity: "b", name: "Bea", isLocal: false });
+    expect(result[1]).toEqual({
+      identity: "b",
+      name: "Bea",
+      isLocal: false,
+      cameraOn: false,
+    });
   });
 
   it("returns a new array when a participant leaves", () => {

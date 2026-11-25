@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { HeadphoneOff, MicOff, VolumeX } from "lucide-react";
+import { HeadphoneOff, MicOff, Video, VolumeX } from "lucide-react";
 
 import { ConnectionQualityBadge } from "@/components/vozzera/ConnectionQualityBadge";
 import { ParticipantMenu } from "@/components/vozzera/ParticipantMenu";
@@ -12,6 +12,7 @@ export type CompactParticipantProps = {
   name: string;
   isLocal: boolean;
   isAway: boolean;
+  cameraOn: boolean;
   isMuted: boolean;
   isDeafened: boolean;
   isLocallyInaudible: boolean;
@@ -68,6 +69,7 @@ export const CompactParticipant = memo(function CompactParticipant({
   name,
   isLocal,
   isAway,
+  cameraOn,
   isMuted,
   isDeafened,
   isLocallyInaudible,
@@ -113,6 +115,12 @@ export const CompactParticipant = memo(function CompactParticipant({
           <span className="pointer-events-auto flex">
             <ConnectionQualityBadge quality={quality} />
           </span>
+          {cameraOn && (
+            <Video
+              aria-label={isLocal ? "Sua câmera está ligada" : `${name} está com a câmera ligada`}
+              className="h-3.5 w-3.5 text-primary"
+            />
+          )}
           {isMuted && <MicOff aria-label="Mic mutado" className="h-3.5 w-3.5 text-destructive" />}
           {isDeafened && (
             <HeadphoneOff
